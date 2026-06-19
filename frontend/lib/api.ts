@@ -7,6 +7,8 @@ import type {
   Event,
   EventCreateRequest,
   EventUpdateRequest,
+  EventPublicOut,
+  GuestTokenOut,
   Album,
   AlbumCreateRequest,
   AlbumUpdateRequest,
@@ -190,4 +192,35 @@ export async function adminDeleteEvent(eventId: string): Promise<void> {
 
 export async function getDashboardEvents(): Promise<Event[]> {
   return apiFetch<Event[]>('/api/v1/events');
+}
+
+// ---------------------------------------------------------------------------
+// Guest access — public endpoints, no owner token required
+// ---------------------------------------------------------------------------
+
+export async function getEventBySlug(slug: string): Promise<EventPublicOut> {
+  return apiFetch<EventPublicOut>(`/api/v1/events/by-slug/${slug}`);
+}
+
+export async function guestAuth(eventId: string, code: string): Promise<GuestTokenOut> {
+  return apiFetch<GuestTokenOut>(`/api/v1/events/${eventId}/guest-auth`, {
+    method: 'POST',
+    body: { code },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Guest access controls — owner-only endpoints
+// ---------------------------------------------------------------------------
+
+export async function revokeGuestAccess(eventId: string): Promise<{ detail: string }> {
+  return apiFetch<{ detail: string }>(`/api/v1/events/${eventId}/revoke-guest-access`, {
+    method: 'POST',
+  });
+}
+
+export async function enableGuestAccess(eventId: string): Promise<{ detail: string }> {
+  return apiFetch<{ detail: string }>(`/api/v1/events/${eventId}/enable-guest-access`, {
+    method: 'POST',
+  });
 }

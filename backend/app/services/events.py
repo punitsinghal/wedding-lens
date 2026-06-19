@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.event import Event, SlugRedirect
 from app.schemas.event import EventCreate, EventUpdate
+from app.services.guest_auth import generate_otp_code
 
 ACCESS_MODES = ("access-code", "magic-link-otp", "public")
 MONTH_NAMES = (
@@ -101,6 +102,7 @@ async def create_event(
         slug=slug,
         access_mode=data.access_mode,
         access_code=data.access_code,
+        otp_code=generate_otp_code() if data.access_mode == "magic-link-otp" else None,
         status="draft",
     )
     db.add(event)
@@ -149,6 +151,10 @@ async def update_event(
         event.access_mode = data.access_mode
     if data.access_code is not None:
         event.access_code = data.access_code
+
+    # Auto-generate OTP code when switching to magic-link-otp mode if not already set
+    if data.access_mode == "magic-link-otp" and not event.otp_code:
+        event.otp_code = generate_otp_code()
 
     # Validate access_mode / access_code consistency after update
     if event.access_mode == "access-code" and not event.access_code:
@@ -201,6 +207,8 @@ async def publish_event(db: AsyncSession, event: Event) -> Event:
         errors.append("cover_photo_id is required")
     if event.access_mode == "access-code" and not event.access_code:
         errors.append("access_code is required when access_mode is 'access-code'")
+    if event.access_mode == "magic-link-otp" and not event.otp_code:
+        errors.append("otp_code must be present for magic-link-otp events (auto-generated on creation)")
     if errors:
         raise ValueError("; ".join(errors))
 

@@ -3,7 +3,15 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { getEvent, updateEvent, deleteEvent, publishEvent, unpublishEvent } from '@/lib/api';
+import {
+  getEvent,
+  updateEvent,
+  deleteEvent,
+  publishEvent,
+  unpublishEvent,
+  revokeGuestAccess,
+  enableGuestAccess,
+} from '@/lib/api';
 import { isAuthenticated } from '@/lib/auth';
 import { isSlugTakenError } from '@/types/api';
 import type { Event, AccessMode } from '@/types/api';
@@ -46,6 +54,10 @@ export default function EventDetailPage() {
   // Delete
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Guest access revocation
+  const [isRevoking, setIsRevoking] = useState(false);
+  const [revokeError, setRevokeError] = useState('');
 
   useEffect(() => {
     getEvent(eventId)
@@ -139,6 +151,26 @@ export default function EventDetailPage() {
     }
   }
 
+  async function handleGuestAccessToggle() {
+    if (!event) return;
+    setIsRevoking(true);
+    setRevokeError('');
+    try {
+      if (event.guest_access_enabled) {
+        await revokeGuestAccess(eventId);
+        setEvent({ ...event, guest_access_enabled: false });
+      } else {
+        await enableGuestAccess(eventId);
+        setEvent({ ...event, guest_access_enabled: true });
+      }
+    } catch (err: unknown) {
+      const apiErr = err as { detail?: string };
+      setRevokeError(apiErr?.detail ?? 'Failed to update guest access.');
+    } finally {
+      setIsRevoking(false);
+    }
+  }
+
   if (isLoadingEvent) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-16 text-center text-gray-400 text-sm">
@@ -189,35 +221,66 @@ export default function EventDetailPage() {
       </div>
 
       {/* Publish / Unpublish */}
-      <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-gray-700">
-            {event.status === 'published' ? 'Event is published' : 'Event is not published'}
-          </p>
-          <p className="text-xs text-gray-400 mt-0.5">
-            {event.status === 'published'
-              ? 'Guests can access this event via its QR code or URL.'
-              : 'Guests cannot access this event yet.'}
-          </p>
-          {publishError && (
-            <p className="text-xs text-red-600 mt-1">{publishError}</p>
-          )}
+      <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-gray-700">
+              {event.status === 'published' ? 'Event is published' : 'Event is not published'}
+            </p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {event.status === 'published'
+                ? 'Guests can access this event via its QR code or URL.'
+                : 'Guests cannot access this event yet.'}
+            </p>
+            {publishError && (
+              <p className="text-xs text-red-600 mt-1">{publishError}</p>
+            )}
+          </div>
+          <button
+            onClick={handlePublishToggle}
+            disabled={isPublishing || event.status === 'suspended' || event.status === 'deleted'}
+            className={`flex-shrink-0 px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+              event.status === 'published'
+                ? 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-400'
+                : 'bg-green-600 text-white hover:bg-green-700 focus:ring-green-500'
+            }`}
+          >
+            {isPublishing
+              ? 'Updating...'
+              : event.status === 'published'
+              ? 'Unpublish'
+              : 'Publish'}
+          </button>
         </div>
-        <button
-          onClick={handlePublishToggle}
-          disabled={isPublishing || event.status === 'suspended' || event.status === 'deleted'}
-          className={`flex-shrink-0 px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed ${
-            event.status === 'published'
-              ? 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-400'
-              : 'bg-green-600 text-white hover:bg-green-700 focus:ring-green-500'
-          }`}
-        >
-          {isPublishing
-            ? 'Updating...'
-            : event.status === 'published'
-            ? 'Unpublish'
-            : 'Publish'}
-        </button>
+
+        {event.status === 'published' && (
+          <div className="mt-3 pt-3 border-t border-gray-200">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-gray-700">
+                  Guest Access: {event.guest_access_enabled ? 'Active' : 'Revoked'}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {event.guest_access_enabled
+                    ? 'Guests with valid sessions can access the gallery.'
+                    : 'All guest sessions are invalidated. Re-enable to allow access again.'}
+                </p>
+              </div>
+              <button
+                onClick={handleGuestAccessToggle}
+                disabled={isRevoking}
+                className={`flex-shrink-0 px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                  event.guest_access_enabled
+                    ? 'bg-red-50 border border-red-300 text-red-700 hover:bg-red-100 focus:ring-red-400'
+                    : 'bg-green-600 text-white hover:bg-green-700 focus:ring-green-500'
+                }`}
+              >
+                {isRevoking ? 'Updating...' : event.guest_access_enabled ? 'Revoke Access' : 'Enable Access'}
+              </button>
+            </div>
+            {revokeError && <p className="mt-2 text-xs text-red-600">{revokeError}</p>}
+          </div>
+        )}
       </div>
 
       {/* Edit form */}
@@ -324,6 +387,27 @@ export default function EventDetailPage() {
               required
               className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+          </div>
+        )}
+
+        {accessMode === 'magic-link-otp' && event.otp_code && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              OTP Code (share with guests)
+            </label>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm bg-gray-50 font-mono tracking-widest">
+                {event.otp_code}
+              </code>
+              <button
+                type="button"
+                onClick={() => navigator.clipboard.writeText(event.otp_code!)}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Copy
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-gray-400">Share this code with guests via WhatsApp or email.</p>
           </div>
         )}
 
