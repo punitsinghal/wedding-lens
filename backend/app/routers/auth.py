@@ -12,8 +12,8 @@ from app.services.auth import create_access_token, hash_password, verify_passwor
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
-@router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-async def register(data: UserCreate, db: AsyncSession = Depends(get_db)) -> User:
+@router.post("/register", response_model=TokenOut, status_code=status.HTTP_201_CREATED)
+async def register(data: UserCreate, db: AsyncSession = Depends(get_db)) -> TokenOut:
     result = await db.execute(select(User).where(User.email == data.email))
     if result.scalar_one_or_none():
         raise HTTPException(
@@ -28,7 +28,8 @@ async def register(data: UserCreate, db: AsyncSession = Depends(get_db)) -> User
     )
     db.add(user)
     await db.flush()
-    return user
+    token = create_access_token(str(user.id))
+    return TokenOut(access_token=token)
 
 
 @router.post("/login", response_model=TokenOut)
