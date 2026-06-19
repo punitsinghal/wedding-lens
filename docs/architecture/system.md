@@ -6,7 +6,7 @@ Status: declared
 
 | Service | Path / Repo | Stack | Purpose |
 |---------|-------------|-------|---------|
-| backend | `backend/` | Python 3.12, FastAPI | REST API, in-process face processing pipeline (BackgroundTasks), photo and event management |
+| backend | `backend/` | Python 3.12, FastAPI | REST API, in-process face processing pipeline (BackgroundTasks), in-process scheduled jobs (APScheduler), photo and event management |
 | frontend | `frontend/` | TypeScript, Next.js 14 | Guest gallery, QR+PIN access, face search UI, ZIP download |
 
 ## Communication
@@ -47,6 +47,10 @@ graph LR
     Backend -->|similarity search by event_id| Qdrant
     Qdrant -->|matching photo_ids| Backend
     Backend -->|serve photos + ZIP| Guest
+    APSched[APScheduler\ndaily @ 02:00] -->|query expired events| PG
+    APSched -->|delete files| SSD
+    APSched -->|delete vectors by event_id| Qdrant
+    APSched -->|DELETE CASCADE| PG
 ```
 
 ## Open Questions
