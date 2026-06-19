@@ -1,0 +1,383 @@
+'use client';
+
+import { useState, useEffect, FormEvent } from 'react';
+import { useRouter, useParams } from 'next/navigation';
+import Link from 'next/link';
+import { getEvent, updateEvent, deleteEvent, publishEvent, unpublishEvent } from '@/lib/api';
+import { isAuthenticated } from '@/lib/auth';
+import { isSlugTakenError } from '@/types/api';
+import type { Event, AccessMode } from '@/types/api';
+import SlugField from '@/components/SlugField';
+import StatusBadge from '@/components/StatusBadge';
+import ConfirmDialog from '@/components/ConfirmDialog';
+
+export default function EventDetailPage() {
+  const router = useRouter();
+  const params = useParams();
+  const eventId = params.eventId as string;
+
+  // Auth guard
+  useEffect(() => {
+    if (!isAuthenticated()) router.replace('/login');
+  }, [router]);
+
+  const [event, setEvent] = useState<Event | null>(null);
+  const [isLoadingEvent, setIsLoadingEvent] = useState(true);
+  const [loadError, setLoadError] = useState('');
+
+  // Form state
+  const [name, setName] = useState('');
+  const [brideName, setBrideName] = useState('');
+  const [groomName, setGroomName] = useState('');
+  const [eventDate, setEventDate] = useState('');
+  const [accessMode, setAccessMode] = useState<AccessMode>('public');
+  const [accessCode, setAccessCode] = useState('');
+  const [slug, setSlug] = useState('');
+  const [slugSuggestions, setSlugSuggestions] = useState<string[]>([]);
+
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Publish/Unpublish
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishError, setPublishError] = useState('');
+
+  // Delete
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    getEvent(eventId)
+      .then((ev) => {
+        setEvent(ev);
+        setName(ev.name);
+        setBrideName(ev.bride_name);
+        setGroomName(ev.groom_name);
+        setEventDate(ev.event_date);
+        setAccessMode(ev.access_mode);
+        setAccessCode(ev.access_code ?? '');
+        setSlug(ev.slug);
+      })
+      .catch((err: unknown) => {
+        const apiErr = err as { detail?: string };
+        setLoadError(apiErr?.detail ?? 'Failed to load event.');
+      })
+      .finally(() => setIsLoadingEvent(false));
+  }, [eventId]);
+
+  async function handleSave(e: FormEvent) {
+    e.preventDefault();
+    setSaveError('');
+    setSaveSuccess(false);
+    setSlugSuggestions([]);
+    setIsPublishing(false);
+    setPublishError('');
+
+    if (accessMode === 'access-code' && !accessCode.trim()) {
+      setSaveError('Access code is required for access-code mode.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const updated = await updateEvent(eventId, {
+        name: name.trim(),
+        bride_name: brideName.trim(),
+        groom_name: groomName.trim(),
+        event_date: eventDate,
+        access_mode: accessMode,
+        ...(accessMode === 'access-code' ? { access_code: accessCode.trim() } : {}),
+        slug: slug.trim(),
+      });
+      setEvent(updated);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err: unknown) {
+      if (isSlugTakenError(err)) {
+        setSlugSuggestions(err.suggestions);
+        setSaveError('That URL slug is already taken. Choose another or pick a suggestion.');
+      } else {
+        const apiErr = err as { detail?: string };
+        setSaveError(apiErr?.detail ?? 'Failed to save changes.');
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handlePublishToggle() {
+    if (!event) return;
+    setPublishError('');
+    setIsPublishing(true);
+    try {
+      let updated: Event;
+      if (event.status === 'published') {
+        updated = await unpublishEvent(eventId);
+      } else {
+        updated = await publishEvent(eventId);
+      }
+      setEvent(updated);
+    } catch (err: unknown) {
+      const apiErr = err as { detail?: string };
+      setPublishError(apiErr?.detail ?? 'Failed to change publish status.');
+    } finally {
+      setIsPublishing(false);
+    }
+  }
+
+  async function handleDelete() {
+    setIsDeleting(true);
+    try {
+      await deleteEvent(eventId);
+      router.replace('/dashboard');
+    } catch (err: unknown) {
+      const apiErr = err as { detail?: string };
+      setSaveError(apiErr?.detail ?? 'Failed to delete event.');
+      setIsDeleting(false);
+      setShowDeleteDialog(false);
+    }
+  }
+
+  if (isLoadingEvent) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-16 text-center text-gray-400 text-sm">
+        Loading event...
+      </div>
+    );
+  }
+
+  if (loadError || !event) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-8">
+        <div className="p-4 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+          {loadError || 'Event not found.'}
+        </div>
+        <Link href="/dashboard" className="mt-4 inline-block text-sm text-blue-600 hover:underline">
+          Back to Dashboard
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-6">
+        <Link href="/dashboard" className="text-sm text-gray-500 hover:text-gray-700">
+          &larr; Dashboard
+        </Link>
+        <span className="text-gray-300">/</span>
+        <h1 className="text-xl font-bold text-gray-900 truncate">{event.name}</h1>
+        <StatusBadge status={event.status} />
+      </div>
+
+      {/* Quick links */}
+      <div className="flex gap-4 mb-6 text-sm">
+        <Link
+          href={`/events/${eventId}/albums`}
+          className="text-blue-600 hover:underline"
+        >
+          Manage Albums
+        </Link>
+        <Link
+          href={`/events/${eventId}/qr`}
+          className="text-blue-600 hover:underline"
+        >
+          QR Code
+        </Link>
+      </div>
+
+      {/* Publish / Unpublish */}
+      <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-gray-700">
+            {event.status === 'published' ? 'Event is published' : 'Event is not published'}
+          </p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {event.status === 'published'
+              ? 'Guests can access this event via its QR code or URL.'
+              : 'Guests cannot access this event yet.'}
+          </p>
+          {publishError && (
+            <p className="text-xs text-red-600 mt-1">{publishError}</p>
+          )}
+        </div>
+        <button
+          onClick={handlePublishToggle}
+          disabled={isPublishing || event.status === 'suspended' || event.status === 'deleted'}
+          className={`flex-shrink-0 px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+            event.status === 'published'
+              ? 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-400'
+              : 'bg-green-600 text-white hover:bg-green-700 focus:ring-green-500'
+          }`}
+        >
+          {isPublishing
+            ? 'Updating...'
+            : event.status === 'published'
+            ? 'Unpublish'
+            : 'Publish'}
+        </button>
+      </div>
+
+      {/* Edit form */}
+      {saveError && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+          {saveError}
+        </div>
+      )}
+      {saveSuccess && (
+        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md text-sm text-green-700">
+          Changes saved successfully.
+        </div>
+      )}
+
+      <form
+        onSubmit={handleSave}
+        className="space-y-5 bg-white border border-gray-200 rounded-lg p-6"
+      >
+        <h2 className="text-base font-semibold text-gray-800">Event Details</h2>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="name">
+            Event Name <span className="text-red-500">*</span>
+          </label>
+          <input
+            id="name"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="brideName">
+              Bride&apos;s Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="brideName"
+              type="text"
+              value={brideName}
+              onChange={(e) => setBrideName(e.target.value)}
+              required
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="groomName">
+              Groom&apos;s Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="groomName"
+              type="text"
+              value={groomName}
+              onChange={(e) => setGroomName(e.target.value)}
+              required
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="eventDate">
+            Event Date <span className="text-red-500">*</span>
+          </label>
+          <input
+            id="eventDate"
+            type="date"
+            value={eventDate}
+            onChange={(e) => setEventDate(e.target.value)}
+            required
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="accessMode">
+            Guest Access Mode <span className="text-red-500">*</span>
+          </label>
+          <select
+            id="accessMode"
+            value={accessMode}
+            onChange={(e) => setAccessMode(e.target.value as AccessMode)}
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="public">Public — anyone with the link</option>
+            <option value="access-code">Access Code — guests enter a code</option>
+            <option value="magic-link-otp">Magic Link / OTP — guests verify by email</option>
+          </select>
+        </div>
+
+        {accessMode === 'access-code' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="accessCode">
+              Access Code <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="accessCode"
+              type="text"
+              value={accessCode}
+              onChange={(e) => setAccessCode(e.target.value)}
+              required
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        )}
+
+        <SlugField
+          value={slug}
+          onChange={(v) => {
+            setSlug(v);
+            setSlugSuggestions([]);
+          }}
+          suggestions={slugSuggestions}
+          onSelectSuggestion={(s) => {
+            setSlug(s);
+            setSlugSuggestions([]);
+          }}
+        />
+
+        <div className="flex justify-end pt-2">
+          <button
+            type="submit"
+            disabled={isSaving}
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isSaving ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      </form>
+
+      {/* Danger zone */}
+      <div className="mt-8 p-4 border border-red-200 bg-red-50 rounded-lg">
+        <h3 className="text-sm font-semibold text-red-800 mb-1">Danger Zone</h3>
+        <p className="text-xs text-red-700 mb-3">
+          Deleting this event starts a 30-day grace period. During this time the event is
+          inaccessible to guests but data is retained and can be recovered by an admin.
+          After 30 days all photos, face embeddings, and records are permanently deleted.
+        </p>
+        <button
+          onClick={() => setShowDeleteDialog(true)}
+          disabled={isDeleting}
+          className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-60"
+        >
+          Delete Event
+        </button>
+      </div>
+
+      <ConfirmDialog
+        isOpen={showDeleteDialog}
+        title="Delete Event"
+        message={`This will delete "${event.name}". The event will be inaccessible to guests immediately. You have a 30-day window for admin recovery before all data is permanently purged.`}
+        confirmText="DELETE"
+        confirmLabel="Delete Event"
+        onConfirm={handleDelete}
+        onCancel={() => setShowDeleteDialog(false)}
+        destructive
+      />
+    </div>
+  );
+}
