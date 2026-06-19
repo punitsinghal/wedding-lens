@@ -55,8 +55,27 @@ class EventOut(BaseModel):
     cover_photo_id: uuid.UUID | None
     access_mode: str
     access_code: str | None
+    otp_code: str | None
+    guest_access_enabled: bool
+    guest_access_revoked_at: datetime | None
     status: str
     deleted_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class EventPublicOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    bride_name: str
+    groom_name: str
+    event_date: date | None
+    slug: str
+    cover_photo_id: uuid.UUID | None
+    access_mode: str
+    status: str
     created_at: datetime
     updated_at: datetime
 

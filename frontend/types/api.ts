@@ -35,10 +35,32 @@ export interface Event {
   cover_photo_id: string | null;
   access_mode: AccessMode;
   access_code: string | null;
+  otp_code: string | null;
+  guest_access_enabled: boolean;
+  guest_access_revoked_at: string | null;
   status: EventStatus;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface EventPublicOut {
+  id: string;
+  name: string;
+  bride_name: string;
+  groom_name: string;
+  event_date: string | null;
+  slug: string;
+  cover_photo_id: string | null;
+  access_mode: AccessMode;
+  status: EventStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GuestTokenOut {
+  access_token: string;
+  token_type: string;
 }
 
 export interface EventCreateRequest {

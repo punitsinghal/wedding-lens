@@ -63,3 +63,34 @@ export function isAdmin(): boolean {
   const payload = decodeJwtPayload(token);
   return payload?.is_admin === true;
 }
+
+// ---------------------------------------------------------------------------
+// Guest token helpers — stored per-event under key wl_guest_<eventId>
+// ---------------------------------------------------------------------------
+
+export function getGuestToken(eventId: string): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(`wl_guest_${eventId}`);
+}
+
+export function setGuestToken(eventId: string, token: string): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(`wl_guest_${eventId}`, token);
+}
+
+export function clearGuestToken(eventId: string): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(`wl_guest_${eventId}`);
+}
+
+export function isGuestAuthenticated(eventId: string): boolean {
+  const token = getGuestToken(eventId);
+  if (!token) return false;
+  try {
+    const payload = decodeJwtPayload(token);
+    if (!payload || !payload.exp) return true;
+    return payload.exp * 1000 > Date.now();
+  } catch {
+    return false;
+  }
+}

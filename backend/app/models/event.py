@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -38,6 +38,9 @@ class Event(Base):
     # access_code is nullable at DB level; app layer enforces presence when
     # access_mode = "access-code"
     access_code: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    otp_code: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    guest_access_enabled: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=True, server_default="true")
+    guest_access_revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # status: "draft" | "published" | "suspended" | "deleted"
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")

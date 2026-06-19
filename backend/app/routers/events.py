@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_current_user, get_db
 from app.models.event import Event, SlugRedirect
 from app.models.user import User
-from app.schemas.event import EventCreate, EventOut, EventUpdate
+from app.schemas.event import EventCreate, EventOut, EventPublicOut, EventUpdate
 from app.services import events as event_svc
 from app.services import qr as qr_svc
 
@@ -49,7 +49,7 @@ async def _get_owned_event(
 async def get_event_by_slug(
     slug: str,
     db: AsyncSession = Depends(get_db),
-) -> EventOut:
+) -> EventPublicOut:
     result = await event_svc.resolve_by_slug(db, slug)
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
@@ -63,7 +63,7 @@ async def get_event_by_slug(
             detail=f"/api/v1/events/by-slug/{event.slug}",
             headers={"Location": f"/api/v1/events/by-slug/{event.slug}"},
         )
-    return EventOut.model_validate(result)
+    return EventPublicOut.model_validate(result)
 
 
 # ---------------------------------------------------------------------------
