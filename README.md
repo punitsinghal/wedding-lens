@@ -4,6 +4,9 @@ Private wedding photo-sharing platform where guests instantly find and download 
 
 A photographer uploads photos once. The backend indexes them with ArcFace embeddings stored in Qdrant. Guests scan a QR code, upload a selfie, and download a ZIP of every photo they appear in — no accounts required.
 
+<!-- TODO: replace with a real screenshot or demo GIF -->
+![WeddingLens demo](docs/demo.gif)
+
 ## Architecture
 
 ```mermaid
