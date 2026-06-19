@@ -1,12 +1,17 @@
 """FastAPI application entry point."""
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 
+from alembic.config import Config as AlembicConfig
+from alembic.script import ScriptDirectory
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.routers import auth, events, albums, admin, guest_auth
 
@@ -17,10 +22,70 @@ logging.basicConfig(
 logger = logging.getLogger("weddinglens")
 
 
+async def _assert_schema_current() -> None:
+    """Fail fast if the DB migration is behind the Alembic head revision.
+
+    Reads the applied revision from ``alembic_version`` and compares it to the
+    head defined by the scripts on disk.  Raises ``RuntimeError`` if they do
+    not match so the process exits before accepting traffic.
+    """
+    from app.config import settings
+
+    # Locate alembic.ini relative to this file's package root (backend/).
+    _here = os.path.dirname(__file__)
+    alembic_ini = os.path.join(_here, "..", "alembic.ini")
+    alembic_ini = os.path.normpath(alembic_ini)
+
+    cfg = AlembicConfig(alembic_ini)
+    script = ScriptDirectory.from_config(cfg)
+    expected_head: str = script.get_current_head()  # type: ignore[assignment]
+
+    engine = create_async_engine(settings.DATABASE_URL, echo=False)
+    try:
+        async with engine.connect() as conn:
+            try:
+                result = await conn.execute(
+                    text("SELECT version_num FROM alembic_version LIMIT 1")
+                )
+                row = result.fetchone()
+            except Exception:
+                raise RuntimeError(
+                    "alembic_version table does not exist. "
+                    "Run `alembic upgrade head` before starting the server."
+                )
+    finally:
+        await engine.dispose()
+
+    applied: str | None = row[0] if row else None
+
+    if applied != expected_head:
+        # Collect unapplied revisions for a helpful error message.
+        unapplied = []
+        rev = script.get_revision(expected_head)
+        while rev is not None and rev.revision != applied:
+            unapplied.insert(0, rev.revision)
+            rev = script.get_revision(rev.down_revision)  # type: ignore[arg-type]
+
+        unapplied_str = ", ".join(unapplied) if unapplied else "(unknown)"
+        msg = (
+            f"Database schema is out of date. "
+            f"Applied: {applied}. "
+            f"Expected head: {expected_head}. "
+            f"Unapplied migrations: {unapplied_str}. "
+            f"Run `alembic upgrade head` before starting the server."
+        )
+        logger.error(msg)
+        raise RuntimeError(msg)
+
+    logger.info('{"event": "schema_ok", "revision": "%s"}', applied)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Import purge job here to avoid circular imports at module level
     from app.services.purge import purge_expired_events
+
+    await _assert_schema_current()
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
