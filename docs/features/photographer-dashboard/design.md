@@ -1,0 +1,279 @@
+# Photographer Dashboard — Design
+
+**Feature:** photographer-dashboard
+**Status:** Approved
+**Date:** 2026-06-19
+**ADRs:** see references section
+
+---
+
+## Overview
+
+The photographer dashboard introduces six backend capabilities and one new frontend surface:
+
+1. Chunked photo upload with content-hash deduplication and automatic resume
+2. Async face-processing enqueue per photo (existing BackgroundTask pattern)
+3. SSE-based real-time progress stream
+4. Album management with many-to-many photo assignment
+5. Photographer Choice flag per photo
+6. Photographer-to-event assignment and revocation
+
+All capabilities sit strictly within the existing service boundary: frontend → backend REST API → PostgreSQL + SSD. No new services, no new external dependencies.
+
+---
+
+## Data Model
+
+### New tables
+
+```sql
+-- Tracks in-flight chunked uploads; cleaned up on completion or abandonment
+CREATE TABLE upload_sessions (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_id        UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    photographer_id UUID NOT NULL REFERENCES users(id),
+    filename        TEXT NOT NULL,
+    file_size_bytes BIGINT NOT NULL,
+    content_hash    TEXT NOT NULL,          -- SHA-256 hex, computed client-side
+    chunk_size_bytes INT NOT NULL DEFAULT 2097152,  -- 2 MB
+    total_chunks    INT NOT NULL,
+    received_chunks INT[] NOT NULL DEFAULT '{}',
+    status          TEXT NOT NULL DEFAULT 'in_progress',  -- in_progress | complete | abandoned
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX ON upload_sessions(event_id, content_hash);  -- dedup lookup
+
+-- Many-to-many: photos ↔ albums
+CREATE TABLE photo_albums (
+    photo_id UUID NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+    album_id UUID NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+    PRIMARY KEY (photo_id, album_id)
+);
+
+-- Photographer assignment to events (scoped, revocable)
+CREATE TABLE event_photographers (
+    event_id        UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    photographer_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    assigned_by     UUID NOT NULL REFERENCES users(id),
+    assigned_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (event_id, photographer_id)
+);
+```
+
+### Additions to existing tables
+
+```sql
+-- photos table
+ALTER TABLE photos ADD COLUMN content_hash        TEXT;          -- SHA-256 hex; unique per event
+ALTER TABLE photos ADD COLUMN photographer_choice  BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE photos ADD COLUMN face_status          TEXT NOT NULL DEFAULT 'pending';
+    -- pending | indexed | failed
+ALTER TABLE photos ADD COLUMN face_error           TEXT;          -- last error message on failure
+
+CREATE UNIQUE INDEX photos_event_content_hash ON photos(event_id, content_hash);
+```
+
+---
+
+## API Routes
+
+### Upload (Scenario 1 & 2)
+
+```
+POST   /api/v1/events/{event_id}/uploads
+         Body: { filename, file_size_bytes, content_hash }
+         → 201 { session_id, chunk_size_bytes, total_chunks }
+           or 200 { photo_id, status: "duplicate" }   ← dedup hit
+
+GET    /api/v1/events/{event_id}/uploads/{session_id}
+         → 200 { received_chunks: [0,1,…], total_chunks }   ← resume query
+
+PUT    /api/v1/events/{event_id}/uploads/{session_id}/chunks/{chunk_index}
+         Body: raw chunk bytes (Content-Type: application/octet-stream)
+         → 200 { chunk_index, received: true }
+
+POST   /api/v1/events/{event_id}/uploads/{session_id}/complete
+         → 201 { photo_id }   ← assembles file, enqueues BackgroundTask
+```
+
+### Progress (Scenario 3)
+
+```
+GET    /api/v1/events/{event_id}/progress   (SSE)
+         → text/event-stream
+           event: progress
+           data: {"total":100,"indexed":42,"pending":55,"failed":3}
+
+           event: gallery_ready
+           data: {"total":100,"indexed":100}
+```
+
+### Albums (Scenario 4)
+
+```
+POST   /api/v1/events/{event_id}/albums
+         Body: { name, category_tag? }
+         → 201 { album_id }
+
+PATCH  /api/v1/events/{event_id}/albums/{album_id}
+         Body: { name?, category_tag? }
+         → 200
+
+DELETE /api/v1/events/{event_id}/albums/{album_id}
+         → 200  (photos move to uncategorized — rows deleted from photo_albums)
+
+PUT    /api/v1/events/{event_id}/photos/{photo_id}/albums
+         Body: { album_ids: [uuid, …] }   ← replaces all album assignments for this photo
+         → 200
+```
+
+### Photographer Choice (Scenario 5)
+
+```
+PATCH  /api/v1/events/{event_id}/photos/{photo_id}
+         Body: { photographer_choice: bool }
+         → 200
+         Auth: photographer or event owner only; guest JWT → 403
+```
+
+### Photographer Assignment (Scenario 6)
+
+```
+POST   /api/v1/events/{event_id}/photographers
+         Body: { email }
+         → 201 { photographer_id }   ← owner only
+
+DELETE /api/v1/events/{event_id}/photographers/{photographer_id}
+         → 200   ← owner only; immediate revocation
+
+GET    /api/v1/photographers/me/events
+         → 200 { events: […] }   ← photographer's assigned-event list
+```
+
+### Face job retry
+
+```
+POST   /api/v1/events/{event_id}/photos/{photo_id}/reprocess
+         → 202   ← re-enqueues BackgroundTask; resets face_status to 'pending'
+```
+
+---
+
+## Sequence Diagrams
+
+### Upload — first time
+
+```mermaid
+sequenceDiagram
+    participant F as Frontend
+    participant B as Backend
+    participant DB as PostgreSQL
+    participant SSD as Local SSD
+    participant BG as BackgroundTask
+
+    F->>F: SHA-256(file bytes) → content_hash
+    F->>B: POST /uploads {filename, size, content_hash}
+    B->>DB: SELECT photo WHERE event_id AND content_hash
+    alt duplicate
+        B-->>F: 200 {photo_id, status:"duplicate"}
+    else new file
+        B->>DB: INSERT upload_session
+        B-->>F: 201 {session_id, chunk_size:2MB, total_chunks:N}
+        loop 3 files concurrently, each chunk in sequence
+            F->>B: PUT /chunks/{n} [2MB bytes]
+            B->>DB: UPDATE received_chunks = received_chunks || n
+            B-->>F: 200
+        end
+        F->>B: POST /complete
+        B->>SSD: assemble chunks → write file
+        B->>DB: INSERT photo, UPDATE session status=complete
+        B->>BG: enqueue face_processing(photo_id)
+        B-->>F: 201 {photo_id}
+    end
+```
+
+### Upload — resume after disconnect
+
+```mermaid
+sequenceDiagram
+    participant F as Frontend
+    participant B as Backend
+    participant DB as PostgreSQL
+
+    Note over F: reconnect detected
+    F->>B: GET /uploads/{session_id}
+    B->>DB: SELECT received_chunks, total_chunks
+    B-->>F: {received_chunks:[0…19], total_chunks:50}
+    loop only chunks 20–49
+        F->>B: PUT /chunks/{n}
+        B-->>F: 200
+    end
+    F->>B: POST /complete
+    B-->>F: 201 {photo_id}
+```
+
+### Progress — SSE stream
+
+```mermaid
+sequenceDiagram
+    participant F as Frontend
+    participant B as Backend
+    participant DB as PostgreSQL
+
+    F->>B: GET /events/{id}/progress (SSE, keep-alive)
+    loop every 2 seconds
+        B->>DB: SELECT COUNT(*) GROUP BY face_status WHERE event_id=X
+        B-->>F: event:progress data:{total,indexed,pending,failed}
+    end
+    Note over DB: all photos reach face_status=indexed
+    B-->>F: event:gallery_ready data:{total,indexed}
+    B->>B: close SSE stream
+```
+
+---
+
+## Authorization Matrix
+
+| Action | Event owner | Assigned photographer | Guest |
+|--------|------------|----------------------|-------|
+| Initiate upload | ✅ | ✅ | ❌ 403 |
+| Upload chunks | ✅ | ✅ (own sessions) | ❌ 403 |
+| View progress | ✅ | ✅ | ❌ 403 |
+| Create / rename album | ✅ | ✅ | ❌ 403 |
+| Delete album | ✅ | ✅ | ❌ 403 |
+| Assign photos to albums | ✅ | ✅ | ❌ 403 |
+| Set Photographer Choice flag | ✅ | ✅ | ❌ 403 |
+| Assign photographer to event | ✅ | ❌ 403 | ❌ 403 |
+| Remove photographer from event | ✅ | ❌ 403 | ❌ 403 |
+| Reprocess failed photo | ✅ | ✅ | ❌ 403 |
+
+---
+
+## Constraint compliance
+
+| Constraint | How this design satisfies it |
+|------------|------------------------------|
+| Face processing async (C-1) | `POST /complete` enqueues `BackgroundTask` and returns 201 before processing starts |
+| Frontend never writes to stores directly (C-4, C-5) | All file writes go through backend endpoints; frontend sends bytes to `/chunks/{n}` only |
+| Face jobs idempotent (C-6) | Before inserting a face record, the BackgroundTask checks for an existing record by `photo_id`; dedup index on `(event_id, content_hash)` prevents duplicate photo records |
+| No cross-event leakage (C-3) | All routes are scoped under `event_id`; authorization middleware validates the requesting user is owner or assigned photographer for that specific event |
+
+---
+
+## Open Questions
+
+| # | Question | Owner | Blocked? |
+|---|----------|-------|----------|
+| OQ-D1 | Chunk assembly strategy on `/complete` — stream chunks from DB to SSD or buffer all in memory? | Engineering | Blocks build |
+| OQ-D2 | SSE connection timeout — how long should the server hold the SSE connection before the client reconnects? (Suggested: 60s, client reconnects automatically) | Engineering | Low priority |
+| OQ-D3 | Upload session abandonment — how long before an `in_progress` session is marked `abandoned` and temp chunks cleaned up? (Suggested: 24h via APScheduler job) | Engineering | Low priority |
+
+---
+
+## ADR References
+
+- `docs/decisions/2026-06-19-chunked-upload-chunk-size-concurrency.md`
+- `docs/decisions/2026-06-19-upload-progress-sse.md`
+- `docs/decisions/2026-06-19-upload-session-state-postgresql.md`
+- `docs/decisions/2026-06-19-photographer-event-assignment-schema.md`
