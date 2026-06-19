@@ -1,6 +1,6 @@
 # Event Management
 
-**Status:** Draft
+**Status:** In Progress
 **Owner:** Product Team
 **Last Updated:** 2026-06-19
 
@@ -27,12 +27,12 @@ Enable bride/groom and admins to create and manage wedding events with a unique 
 ## Features
 | Feature | Status |
 |---------|--------|
-| Event creation form (name, date, slug, cover photo, access code) | Backlog |
-| Unique slug generation and validation | Backlog |
-| Album management (create, rename, delete, categorise) | Backlog |
-| QR code generation per event | Backlog |
-| Admin event management dashboard | Backlog |
-| Event edit / delete by owner | Backlog |
+| Event creation form (name, date, slug, cover photo, access code) | Shipped |
+| Unique slug generation and validation | Shipped |
+| Album management (create, rename, delete, categorise) | Shipped |
+| QR code generation per event | Shipped |
+| Admin event management dashboard | Shipped |
+| Event edit / delete by owner | Shipped |
 
 ## Success Metrics
 - An event can be created end-to-end in under 2 minutes.
