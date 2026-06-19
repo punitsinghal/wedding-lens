@@ -113,6 +113,15 @@ async def get_event(db: AsyncSession, event_id: uuid.UUID) -> Event | None:
     return result.scalar_one_or_none()
 
 
+async def list_events_by_owner(db: AsyncSession, owner_id: uuid.UUID) -> list[Event]:
+    result = await db.execute(
+        select(Event)
+        .where(Event.owner_id == owner_id, Event.status != "deleted")
+        .order_by(Event.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
 async def update_event(
     db: AsyncSession,
     event: Event,

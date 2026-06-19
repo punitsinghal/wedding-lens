@@ -70,6 +70,15 @@ async def get_event_by_slug(
 # Owner endpoints (JWT required)
 # ---------------------------------------------------------------------------
 
+@router.get("", response_model=list[EventOut])
+async def list_events(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[EventOut]:
+    events = await event_svc.list_events_by_owner(db, current_user.id)
+    return [EventOut.model_validate(e) for e in events]
+
+
 @router.post("", response_model=EventOut, status_code=status.HTTP_201_CREATED)
 async def create_event(
     data: EventCreate,
