@@ -1,5 +1,7 @@
 # WeddingLens
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Private wedding photo-sharing platform where guests instantly find and download their own photos from thousands of wedding pictures using AI-powered face recognition.
 
 A photographer uploads photos once. The backend indexes them with ArcFace embeddings stored in Qdrant. Guests scan a QR code, upload a selfie, and download a ZIP of every photo they appear in — no accounts required.
