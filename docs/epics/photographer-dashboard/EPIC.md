@@ -1,6 +1,6 @@
 # Photographer Dashboard
 
-**Status:** Draft
+**Status:** In Progress
 **Owner:** Product Team
 **Last Updated:** 2026-06-19
 
@@ -26,14 +26,9 @@ Provide photographers with a dedicated dashboard to upload photos via multiple m
 ## Features
 | Feature | Status |
 |---------|--------|
-| Drag-and-drop and folder upload UI | Backlog |
-| Google Drive sync from photographer dashboard | Backlog |
-| Google Photos sync from photographer dashboard | Backlog |
-| Chunked upload with resume on network interruption | Backlog |
-| Real-time processing progress dashboard | Backlog |
-| Album management (create, rename, assign photos) | Backlog |
-| Photographer Choice flag per photo | Backlog |
-| Photographer assignment to events | Backlog |
+| photographer-dashboard | Groomed — ready for /design |
+| Google Drive sync | Deferred — Photo Source Integration epic |
+| Google Photos sync | Deferred — Photo Source Integration epic |
 
 ## Success Metrics
 - Upload of 1,000 photos completes without manual retry on a stable connection.
@@ -41,9 +36,13 @@ Provide photographers with a dedicated dashboard to upload photos via multiple m
 - Photographer can set up an event gallery (upload + organise) in under 30 minutes for 500 photos.
 
 ## Decisions
-<!-- Decisions made during this epic's lifetime -->
+- **Maximum file size: 25 MB per photo** — JPEG and PNG only; HEIC and RAW are out of scope.
+- **Google Drive and Google Photos sync deferred** — moved to the Photo Source Integration epic; not part of this epic's delivery.
+- **HEIC and RAW format support out of scope** — only JPEG and PNG accepted in the upload pipeline.
+- **Photographer edit access restricted to upload and album management** — event settings (name, slug, access mode, cover photo) remain owner-only.
+- **Per-event photo storage quotas out of scope** — deferred to the Admin Platform epic.
 
 ## Open Questions
-- [ ] What is the maximum single-file size supported (e.g. 50MB RAW files)? — owner: Engineering
-- [ ] Should photographers have edit access to event settings, or is that restricted to bride/groom only? — owner: Product Team
-- [ ] Is there a per-event photo storage quota? — owner: Product Team
+- [x] What is the maximum single-file size supported? — **25 MB; JPEG and PNG only** (resolved 2026-06-19)
+- [x] Should photographers have edit access to event settings? — **No; restricted to event owner** (resolved 2026-06-19)
+- [x] Is there a per-event photo storage quota? — **Out of scope; deferred to Admin Platform epic** (resolved 2026-06-19)
