@@ -6,14 +6,46 @@ A photographer uploads photos once. The backend indexes them with ArcFace embedd
 
 ## Architecture
 
-```
-Photographer → uploads photos → FastAPI backend → stores files on SSD
-                                               → queues face pipeline (BackgroundTask)
-                                               → ArcFace embeddings → Qdrant Cloud
+```mermaid
+flowchart TD
+    subgraph Clients
+        P[Photographer]
+        G[Guest\nQR code + PIN]
+    end
 
-Guest → QR code + PIN → Next.js frontend → POST selfie → backend
-                                         ← similarity search by event_id ←
-                                         → download ZIP of matching photos
+    subgraph Frontend["Frontend (Next.js 14 · :3000)"]
+        UI[Dashboard / Gallery\nFace Search UI]
+    end
+
+    subgraph Backend["Backend (FastAPI · :8000)"]
+        API[REST API\n/api/v1/]
+        BG[Face Pipeline\nBackgroundTask]
+        SCHED[Purge Job\nAPScheduler daily 02:00]
+    end
+
+    subgraph Stores
+        PG[(PostgreSQL\nmetadata)]
+        QD[(Qdrant Cloud\n512-dim vectors)]
+        SSD[Local / USB SSD\nphoto files]
+    end
+
+    P -->|upload photos| UI
+    G -->|selfie search| UI
+    UI -->|REST /api/v1/| API
+
+    API -->|save file| SSD
+    API -->|save metadata| PG
+    API -->|enqueue| BG
+    BG -->|ArcFace embed| QD
+    BG -->|update face record| PG
+
+    API -->|similarity search\nscoped by event_id| QD
+    QD -->|matching photo IDs| API
+    API -->|serve photos / ZIP| UI
+
+    SCHED -->|delete expired files| SSD
+    SCHED -->|delete vectors by event_id| QD
+    SCHED -->|DELETE CASCADE| PG
 ```
 
 All services run on a single 4-core/16GB VM. Face embeddings are encrypted at rest. Searches are scoped per `event_id` — no cross-event leakage.
