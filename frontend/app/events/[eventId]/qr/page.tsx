@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { getEvent, getQrCodeUrl } from '@/lib/api';
-import { isAuthenticated } from '@/lib/auth';
+import { isAuthenticated, getToken } from '@/lib/auth';
 import type { Event } from '@/types/api';
 import StatusBadge from '@/components/StatusBadge';
 
@@ -20,6 +20,7 @@ export default function QrCodePage() {
   const [event, setEvent] = useState<Event | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [qrObjectUrl, setQrObjectUrl] = useState<string | null>(null);
 
   useEffect(() => {
     getEvent(eventId)
@@ -29,6 +30,25 @@ export default function QrCodePage() {
         setError(apiErr?.detail ?? 'Failed to load event.');
       })
       .finally(() => setIsLoading(false));
+  }, [eventId]);
+
+  // Fetch QR image with auth header and use a blob URL for display
+  useEffect(() => {
+    if (!eventId) return;
+    const token = getToken();
+    fetch(getQrCodeUrl(eventId), {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to load QR code');
+        return res.blob();
+      })
+      .then((blob) => setQrObjectUrl(URL.createObjectURL(blob)))
+      .catch(() => setError('Failed to load QR code image.'));
+    return () => {
+      if (qrObjectUrl) URL.revokeObjectURL(qrObjectUrl);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
 
   async function handleDownload() {
@@ -71,8 +91,6 @@ export default function QrCodePage() {
     );
   }
 
-  const qrUrl = getQrCodeUrl(eventId);
-
   return (
     <div className="max-w-lg mx-auto px-4 sm:px-6 py-8">
       {/* Breadcrumb */}
@@ -95,16 +113,22 @@ export default function QrCodePage() {
           {event.bride_name} &amp; {event.groom_name}
         </p>
 
-        {/* QR code image — proxied via Next.js API route */}
+        {/* QR code image — fetched with auth header and displayed via blob URL */}
         <div className="inline-block border border-gray-200 rounded-lg p-4 bg-white mb-6">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={qrUrl}
-            alt={`QR code for ${event.name}`}
-            width={256}
-            height={256}
-            className="block"
-          />
+          {qrObjectUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={qrObjectUrl}
+              alt={`QR code for ${event.name}`}
+              width={256}
+              height={256}
+              className="block"
+            />
+          ) : (
+            <div className="w-64 h-64 flex items-center justify-center text-gray-300 text-sm">
+              Loading QR…
+            </div>
+          )}
         </div>
 
         <p className="text-xs text-gray-400 font-mono mb-6">/{event.slug}</p>
