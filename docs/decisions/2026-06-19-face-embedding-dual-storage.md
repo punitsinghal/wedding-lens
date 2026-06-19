@@ -1,7 +1,7 @@
 # ADR: Face Embedding Dual Storage (Qdrant + PostgreSQL)
 
 **Date:** 2026-06-19
-**Status:** Proposed
+**Status:** Accepted (2026-06-19)
 **Deciders:** Engineering
 
 ---

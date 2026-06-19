@@ -276,5 +276,5 @@ Query: `SELECT processing_status, COUNT(*) FROM photos WHERE event_id=? GROUP BY
 
 ## Open Questions
 
-- [ ] **OQ-3 product confirmation:** Should per-photo `failed`/`error` status be visible in the photographer dashboard (not just aggregate counts)? Blocks Photographer Dashboard UI design. — owner: Product Team
-- [ ] **Encryption option confirmation:** Option A (dual storage) is the recommended path. Confirm before migration is written — this is irreversible once data is in production. — owner: Engineering Lead
+- [x] **OQ-3 product confirmation:** Per-photo `failed`/`error` status must be visible in the photographer dashboard (not just aggregate counts). — resolved 2026-06-19
+- [x] **Encryption option confirmation:** Option A (dual storage) confirmed. Migration can proceed. — resolved 2026-06-19
