@@ -1,5 +1,6 @@
 """Gallery endpoints — photo browsing, thumbnails, downloads, photographer choice."""
 
+import mimetypes
 import uuid
 from pathlib import Path
 
@@ -99,15 +100,19 @@ async def get_thumbnail(
             status_code=status.HTTP_404_NOT_FOUND, detail="Thumbnail not available"
         )
 
-    abs_path = Path(settings.STORAGE_PATH) / photo.thumbnail_path
+    storage_root = Path(settings.STORAGE_PATH).resolve()
+    abs_path = (storage_root / photo.thumbnail_path).resolve()
+    if not abs_path.is_relative_to(storage_root):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     if not abs_path.exists():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Thumbnail file not found"
         )
 
+    media_type = mimetypes.guess_type(str(abs_path))[0] or "image/webp"
     return FileResponse(
         str(abs_path),
-        media_type="image/webp",
+        media_type=media_type,
         headers={"Cache-Control": "public, max-age=31536000, immutable"},
     )
 
@@ -130,7 +135,16 @@ async def download_photo(
     if photo is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found")
 
-    # Atomically increment download count
+    storage_root = Path(settings.STORAGE_PATH).resolve()
+    abs_path = (storage_root / photo.storage_path).resolve()
+    if not abs_path.is_relative_to(storage_root):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    if not abs_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Photo file not found"
+        )
+
+    # Atomically increment download count — only after confirming file exists
     await db.execute(
         update(Photo)
         .where(Photo.id == photo_id, Photo.event_id == event_id)
@@ -138,17 +152,10 @@ async def download_photo(
     )
     await db.commit()
 
-    abs_path = Path(settings.STORAGE_PATH) / photo.storage_path
-    if not abs_path.exists():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Photo file not found"
-        )
-
     return FileResponse(
         str(abs_path),
         media_type="application/octet-stream",
         filename=photo.filename,
-        headers={"Content-Disposition": f"attachment; filename={photo.filename}"},
     )
 
 

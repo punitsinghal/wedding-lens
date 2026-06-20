@@ -38,7 +38,7 @@ export default function Lightbox({
 
     setBlobUrl(null);
 
-    guestFetchBlob(eventId, `/api/v1/events/${eventId}/photos/${photoId}/thumbnail`)
+    guestFetchBlob(eventId, photo.thumbnail_url ?? `/api/v1/events/${eventId}/photos/${photoId}/thumbnail`)
       .then((blob) => {
         if (cancelled) return;
         objectUrl = URL.createObjectURL(blob);
@@ -52,15 +52,19 @@ export default function Lightbox({
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [photoId, eventId]);
+  }, [photoId, eventId, photo?.thumbnail_url]);
 
   const navigateTo = useCallback(
     async (newIndex: number) => {
-      // If at the last loaded photo and more exist, fetch more before advancing
       if (newIndex >= photos.length && photos.length < total) {
         await onFetchMore();
       }
-      onNavigate(newIndex);
+      // Only advance if the photo now exists — onFetchMore may have been a no-op
+      // (e.g. another load was already in flight), in which case photos.length
+      // hasn't changed and newIndex is still out of bounds.
+      if (newIndex < photos.length) {
+        onNavigate(newIndex);
+      }
     },
     [photos.length, total, onFetchMore, onNavigate]
   );

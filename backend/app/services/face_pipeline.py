@@ -104,7 +104,7 @@ def _generate_thumbnail(image_bytes: bytes, photo_id: uuid.UUID, event_id: uuid.
     if img.mode != "RGB":
         img = img.convert("RGB")
     w, h = img.size
-    new_w = 600
+    new_w = min(600, w)
     new_h = int(h * new_w / w)
     img = img.resize((new_w, new_h), Image.LANCZOS)
 

@@ -19,7 +19,7 @@ export default function PhotoThumbnail({ photo, eventId, onClick }: PhotoThumbna
     let objectUrl: string | null = null;
     let cancelled = false;
 
-    guestFetchBlob(eventId, `/api/v1/events/${eventId}/photos/${photo.id}/thumbnail`)
+    guestFetchBlob(eventId, photo.thumbnail_url!)
       .then((blob) => {
         if (cancelled) return;
         objectUrl = URL.createObjectURL(blob);

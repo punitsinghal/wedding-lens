@@ -16,7 +16,7 @@ export default function AlbumFilterBar({ tabs, activeAlbum, onChange }: AlbumFil
           const isActive = tab.ceremony_category === activeAlbum;
           return (
             <button
-              key={tab.label}
+              key={tab.ceremony_category ?? 'all'}
               onClick={() => onChange(tab.ceremony_category)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
                 isActive

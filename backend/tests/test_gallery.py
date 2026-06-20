@@ -276,8 +276,9 @@ async def test_photographer_choice_guest_gets_403(
         json={"is_photographer_choice": True},
         headers=_guest_headers(event.id),
     )
-    # Guest token is not a valid owner JWT → 401 (bearer scheme requires owner JWT)
-    assert resp.status_code in (401, 403)
+    # Guest token is not a valid owner JWT — bearer scheme decodes it as an invalid
+    # user token, so the dependency raises 401 before any ownership check.
+    assert resp.status_code == 401
 
 
 # ---------------------------------------------------------------------------

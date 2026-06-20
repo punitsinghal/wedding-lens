@@ -64,7 +64,9 @@ function GalleryContent() {
         // Load tabs and initial batch of photos
         const albumsPromise = getGalleryAlbums(ev.id);
 
-        // Fetch photos in batches to cover the requested limit
+        // Fetch all restore batches in parallel (faster than sequential for 2-3 batches;
+        // the backend handles concurrent requests fine and the total volume is bounded
+        // by the URL limit which guests set themselves).
         const batchCount = Math.ceil(initialLimit / PAGE_SIZE);
         const batches = Array.from({ length: batchCount }, (_, i) =>
           getGalleryPhotos(ev.id, {

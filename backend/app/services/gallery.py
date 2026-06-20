@@ -22,6 +22,8 @@ async def list_photos(
 ) -> tuple[list[Photo], int]:
     """Returns (photos, total_count)."""
 
+    # Show all photos regardless of processing_status — face data is orthogonal to
+    # gallery browsing (OQ-5 decision: pending/failed photos show a thumbnail placeholder)
     base_q = select(Photo).where(Photo.event_id == event_id)
 
     if album is not None:

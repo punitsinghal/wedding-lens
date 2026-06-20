@@ -12,6 +12,9 @@ class Photo(Base):
     __tablename__ = "photos"
     __table_args__ = (
         Index("ix_photos_event_status", "event_id", "processing_status"),
+        # Gallery indexes are created with DESC expressions in migration 004.
+        # Plain Index() here uses ASC but the names match — autogenerate will flag
+        # them as different, so keep postgresql_ops overrides if autogenerate is used.
         Index("ix_photos_gallery_all_latest", "event_id", "created_at"),
         Index("ix_photos_gallery_all_popular", "event_id", "download_count"),
         Index("ix_photos_gallery_all_choice", "event_id", "is_photographer_choice", "created_at"),
