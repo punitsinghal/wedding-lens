@@ -61,6 +61,8 @@ async def update_album(
         album.ceremony_category = data.ceremony_category
     if data.sort_order is not None:
         album.sort_order = data.sort_order
+    if data.cover_photo_id is not None:
+        album.cover_photo_id = data.cover_photo_id
     album.updated_at = datetime.now(timezone.utc)
     db.add(album)
     await db.flush()

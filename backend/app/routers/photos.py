@@ -124,21 +124,26 @@ async def list_photos(
     event_id: uuid.UUID,
     limit: int = Query(default=50, le=100),
     offset: int = 0,
+    album_id: uuid.UUID | None = Query(None),
     event: Event = Depends(_get_owned_event),
     db: AsyncSession = Depends(get_db),
 ) -> PhotoListResponse:
-    total_result = await db.execute(
-        select(func.count(Photo.id)).where(Photo.event_id == event_id)
-    )
+    count_q = select(func.count(Photo.id)).where(Photo.event_id == event_id)
+    if album_id is not None:
+        count_q = count_q.where(Photo.album_id == album_id)
+    total_result = await db.execute(count_q)
     total = total_result.scalar_one()
 
-    rows = await db.execute(
+    rows_q = (
         select(Photo)
         .where(Photo.event_id == event_id)
         .order_by(Photo.created_at.desc())
         .limit(limit)
         .offset(offset)
     )
+    if album_id is not None:
+        rows_q = rows_q.where(Photo.album_id == album_id)
+    rows = await db.execute(rows_q)
     photos = list(rows.scalars().all())
 
     return PhotoListResponse(

@@ -5,6 +5,8 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   getEvent,
+  getPhotos,
+  fetchAuthedBlob,
   updateEvent,
   deleteEvent,
   publishEvent,
@@ -14,7 +16,7 @@ import {
 } from '@/lib/api';
 import { isAuthenticated } from '@/lib/auth';
 import { isSlugTakenError } from '@/types/api';
-import type { Event, AccessMode } from '@/types/api';
+import type { Event, AccessMode, Photo } from '@/types/api';
 import SlugField from '@/components/SlugField';
 import StatusBadge from '@/components/StatusBadge';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -59,9 +61,19 @@ export default function EventDetailPage() {
   const [isRevoking, setIsRevoking] = useState(false);
   const [revokeError, setRevokeError] = useState('');
 
+  // Cover photo picker
+  const [allPhotos, setAllPhotos] = useState<Photo[]>([]);
+  const [coverBlobUrls, setCoverBlobUrls] = useState<Record<string, string>>({});
+  const [photosLoading, setPhotosLoading] = useState(false);
+  const [settingEventCover, setSettingEventCover] = useState(false);
+  const [coverError, setCoverError] = useState('');
+
   useEffect(() => {
-    getEvent(eventId)
-      .then((ev) => {
+    Promise.all([
+      getEvent(eventId),
+      getPhotos(eventId, { limit: 100 }),
+    ])
+      .then(([ev, photoList]) => {
         setEvent(ev);
         setName(ev.name);
         setBrideName(ev.bride_name);
@@ -70,6 +82,25 @@ export default function EventDetailPage() {
         setAccessMode(ev.access_mode);
         setAccessCode(ev.access_code ?? '');
         setSlug(ev.slug);
+
+        // Only show photos that belong to an album
+        const albumPhotos = photoList.items.filter((p) => p.album_id != null);
+        setAllPhotos(albumPhotos);
+
+        // Fetch thumbnails concurrently
+        setPhotosLoading(true);
+        const map: Record<string, string> = {};
+        Promise.allSettled(
+          albumPhotos
+            .filter((p) => p.thumbnail_url)
+            .map(async (p) => {
+              const url = await fetchAuthedBlob(p.thumbnail_url!);
+              map[p.id] = url;
+            })
+        ).then(() => {
+          setCoverBlobUrls({ ...map });
+          setPhotosLoading(false);
+        });
       })
       .catch((err: unknown) => {
         const apiErr = err as { detail?: string };
@@ -168,6 +199,20 @@ export default function EventDetailPage() {
       setRevokeError(apiErr?.detail ?? 'Failed to update guest access.');
     } finally {
       setIsRevoking(false);
+    }
+  }
+
+  async function handleSetEventCover(photoId: string) {
+    setCoverError('');
+    setSettingEventCover(true);
+    try {
+      const updated = await updateEvent(eventId, { cover_photo_id: photoId });
+      setEvent(updated);
+    } catch (err: unknown) {
+      const apiErr = err as { detail?: string };
+      setCoverError(apiErr?.detail ?? 'Failed to set cover photo.');
+    } finally {
+      setSettingEventCover(false);
     }
   }
 
@@ -285,6 +330,86 @@ export default function EventDetailPage() {
               </button>
             </div>
             {revokeError && <p className="mt-2 text-xs text-red-600">{revokeError}</p>}
+          </div>
+        )}
+      </div>
+
+      {/* Cover Photo */}
+      <div className="mb-6 p-4 bg-white border border-gray-200 rounded-lg">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-800">Event Cover Photo</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Required to publish. Shown as the event thumbnail for guests.
+            </p>
+          </div>
+          {event.cover_photo_id && (
+            <span className="text-xs text-green-700 bg-green-50 border border-green-200 px-2 py-1 rounded-full">
+              Cover set
+            </span>
+          )}
+        </div>
+
+        {coverError && (
+          <p className="mb-3 text-xs text-red-600">{coverError}</p>
+        )}
+
+        {photosLoading && allPhotos.length === 0 ? (
+          <p className="text-xs text-gray-400 py-4 text-center">Loading photos...</p>
+        ) : allPhotos.length === 0 ? (
+          <p className="text-xs text-gray-400 py-4 text-center">
+            No photos in albums yet.{' '}
+            <Link href={`/events/${eventId}/albums`} className="text-blue-600 hover:underline">
+              Add photos to an album
+            </Link>{' '}
+            to set a cover.
+          </p>
+        ) : (
+          <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+            {allPhotos.map((photo) => {
+              const isCover = event.cover_photo_id === photo.id;
+              const thumbSrc = coverBlobUrls[photo.id];
+              return (
+                <button
+                  key={photo.id}
+                  onClick={() => handleSetEventCover(photo.id)}
+                  disabled={settingEventCover}
+                  className={[
+                    'relative aspect-square rounded-md overflow-hidden',
+                    'transition-all duration-150 focus:outline-none',
+                    isCover
+                      ? 'ring-2 ring-blue-500 ring-offset-1'
+                      : 'hover:ring-2 hover:ring-gray-400 hover:ring-offset-1',
+                    settingEventCover ? 'opacity-50 cursor-wait' : 'cursor-pointer',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  title={isCover ? 'Current event cover' : `Set as event cover`}
+                >
+                  {thumbSrc ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={thumbSrc}
+                      alt={photo.filename}
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center bg-gray-100 text-gray-400">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                  )}
+                  {isCover && (
+                    <span className="absolute top-1 right-1 flex items-center justify-center w-4 h-4 bg-blue-500 rounded-full shadow">
+                      <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 12 12" fill="none">
+                        <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>

@@ -81,6 +81,7 @@ export interface EventUpdateRequest {
   access_mode?: AccessMode;
   access_code?: string;
   slug?: string;
+  cover_photo_id?: string | null;
 }
 
 export interface Album {
@@ -88,6 +89,7 @@ export interface Album {
   event_id: string;
   name: string;
   ceremony_category: CeremonyCategory | null;
+  cover_photo_id: string | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -101,6 +103,7 @@ export interface AlbumCreateRequest {
 export interface AlbumUpdateRequest {
   name?: string;
   ceremony_category?: CeremonyCategory | null;
+  cover_photo_id?: string | null;
 }
 
 export interface AdminEvent extends Event {
