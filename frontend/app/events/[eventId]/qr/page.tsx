@@ -21,6 +21,12 @@ export default function QrCodePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [qrObjectUrl, setQrObjectUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [origin, setOrigin] = useState('');
+
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
 
   useEffect(() => {
     getEvent(eventId)
@@ -50,6 +56,12 @@ export default function QrCodePage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
+
+  async function handleCopy(url: string) {
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   async function handleDownload() {
     const url = getQrCodeUrl(eventId);
@@ -131,7 +143,26 @@ export default function QrCodePage() {
           )}
         </div>
 
-        <p className="text-xs text-gray-400 font-mono mb-6">/{event.slug}</p>
+        {/* Guest album link */}
+        {origin && (
+          <div className="mb-6 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-md px-3 py-2 text-sm">
+            <a
+              href={`${origin}/g/${event.slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 text-blue-600 hover:underline font-mono truncate text-left"
+            >
+              {origin}/g/{event.slug}
+            </a>
+            <button
+              onClick={() => handleCopy(`${origin}/g/${event.slug}`)}
+              className="shrink-0 text-xs text-gray-500 hover:text-gray-800 focus:outline-none"
+              title="Copy link"
+            >
+              {copied ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+        )}
 
         <button
           onClick={handleDownload}
