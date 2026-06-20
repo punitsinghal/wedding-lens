@@ -35,12 +35,13 @@ async def run_search(
     event_id: uuid.UUID,
     sid: str,
     db: AsyncSession,
-) -> list[SearchResult]:
+) -> tuple[list[SearchResult], bool]:
+    """Returns (results, cache_hit)."""
     selfie_hash = hashlib.sha256(selfie_bytes).hexdigest()
     cached = search_cache.get(sid, selfie_hash)
     if cached is not None:
         logger.info('{"event": "search_cache_hit", "event_id": "%s"}', event_id)
-        return cached
+        return cached, True
 
     try:
         faces = _detect_faces(selfie_bytes)
@@ -96,4 +97,4 @@ async def run_search(
         event_id,
         len(results),
     )
-    return results
+    return results, False

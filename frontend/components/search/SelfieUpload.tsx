@@ -1,7 +1,6 @@
 'use client';
 
 import { useRef, ChangeEvent } from 'react';
-import { getGuestToken } from '@/lib/auth';
 
 export interface SearchResultItem {
   photo_id: string;
@@ -55,7 +54,7 @@ export default function SelfieUpload({
       const formData = new FormData();
       formData.append('selfie', file);
 
-      const token = guestToken || getGuestToken(eventId);
+      const token = guestToken;
       const headers: Record<string, string> = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
 

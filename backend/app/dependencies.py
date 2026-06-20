@@ -115,6 +115,9 @@ async def get_validated_guest_event(
                 detail="Session invalidated by access revocation",
             )
 
+    # Tokens issued before the sid claim was introduced get a fresh UUID here.
+    # This UUID is NOT stable across refreshes for those old tokens, so their
+    # search cache will always miss. Acceptable: old tokens expire naturally.
     sid = claims.get("sid", str(uuid.uuid4()))
     refreshed = create_guest_token(str(event_id), ttl=settings.GUEST_SESSION_IDLE_TTL_SECONDS, sid=sid)
     return event, refreshed, sid

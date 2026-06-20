@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
-import { getGuestToken, setGuestToken } from '@/lib/auth';
+import { useParams, useRouter } from 'next/navigation';
+import { getGuestToken, setGuestToken, isGuestAuthenticated } from '@/lib/auth';
 import SelfieUpload from '@/components/search/SelfieUpload';
 import SearchResults from '@/components/search/SearchResults';
 import SearchError from '@/components/search/SearchError';
@@ -12,6 +12,7 @@ type SearchState = 'idle' | 'uploading' | 'results' | 'error';
 
 export default function SearchPage() {
   const params = useParams();
+  const router = useRouter();
   const eventId = params.eventId as string;
 
   const [guestToken, setGuestTokenState] = useState<string>('');
@@ -19,11 +20,15 @@ export default function SearchPage() {
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [errorCode, setErrorCode] = useState<string>('');
 
-  // Load guest token from localStorage on mount
+  // Auth guard: redirect to home if no valid guest token for this event
   useEffect(() => {
+    if (!isGuestAuthenticated(eventId)) {
+      router.replace('/');
+      return;
+    }
     const token = getGuestToken(eventId);
     if (token) setGuestTokenState(token);
-  }, [eventId]);
+  }, [eventId, router]);
 
   function handleTokenRefresh(newToken: string) {
     setGuestToken(eventId, newToken);

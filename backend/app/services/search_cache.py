@@ -13,11 +13,7 @@ class SearchCache:
         entry = self._store.get((sid, selfie_hash))
         if entry is None:
             return None
-        results, created_at = entry
-        age = (datetime.now(timezone.utc) - created_at).total_seconds()
-        if age > settings.FACE_SEARCH_CACHE_TTL_SECONDS:
-            del self._store[(sid, selfie_hash)]
-            return None
+        results, _ = entry
         return results
 
     def set(self, sid: str, selfie_hash: str, results: list) -> None:

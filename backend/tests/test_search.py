@@ -141,6 +141,22 @@ async def test_search_oversized_selfie(client: AsyncClient, event: Event):
 
 
 # ---------------------------------------------------------------------------
+# Test 3b: 422 on unsupported image type
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_search_unsupported_content_type(client: AsyncClient, event: Event):
+    resp = await client.post(
+        f"/api/v1/events/{event.id}/search",
+        files={"selfie": ("file.pdf", b"%PDF-1.4", "application/pdf")},
+        headers=_guest_headers(event.id),
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "unsupported_image_type"
+
+
+# ---------------------------------------------------------------------------
 # Test 4: 422 no_face_detected when _detect_faces returns []
 # ---------------------------------------------------------------------------
 

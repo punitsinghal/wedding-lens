@@ -1,5 +1,4 @@
 """Face recognition search endpoint."""
-import hashlib
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, status
@@ -8,9 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db, get_validated_guest_event
 from app.schemas.search import SearchResponse, SearchResultOut
 from app.services.face_search import NoDominantFaceError, NoFaceDetectedError, run_search
-from app.services.search_cache import search_cache
 
 MAX_SELFIE_BYTES = 20 * 1024 * 1024  # 20 MB
+_ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png"}
 
 router = APIRouter(prefix="/api/v1/events/{event_id}", tags=["search"])
 
@@ -26,6 +25,12 @@ async def face_search(
     _event, refreshed_token, sid = guest_event
     response.headers["X-Guest-Token"] = refreshed_token
 
+    if selfie.content_type not in _ALLOWED_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="unsupported_image_type",
+        )
+
     # Enforce 20 MB limit before reading full bytes
     chunk = await selfie.read(MAX_SELFIE_BYTES + 1)
     if len(chunk) > MAX_SELFIE_BYTES:
@@ -37,12 +42,8 @@ async def face_search(
     selfie_bytes = chunk
     await selfie.close()
 
-    # Check cache before run_search so we can set the header accurately
-    selfie_hash = hashlib.sha256(selfie_bytes).hexdigest()
-    cache_hit = search_cache.get(sid, selfie_hash) is not None
-
     try:
-        results = await run_search(selfie_bytes, event_id, sid, db)
+        results, cache_hit = await run_search(selfie_bytes, event_id, sid, db)
     except NoFaceDetectedError:
         response.headers["X-Search-Cache"] = "miss"
         raise HTTPException(
@@ -55,6 +56,8 @@ async def face_search(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="no_dominant_face",
         )
+    finally:
+        del selfie_bytes  # drop router's own reference; run_search already drops its own
 
     response.headers["X-Search-Cache"] = "hit" if cache_hit else "miss"
     return SearchResponse(
