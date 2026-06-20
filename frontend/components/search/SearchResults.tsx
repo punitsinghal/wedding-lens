@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { guestFetchBlob } from '@/lib/api';
+import { useFavourites } from '@/hooks/useFavourites';
+import FavouriteToggle from '@/components/photo-actions/FavouriteToggle';
+import ShareButton from '@/components/photo-actions/ShareButton';
+import BulkDownloadButton from '@/components/photo-actions/BulkDownloadButton';
 import type { SearchResultItem } from './SelfieUpload';
 
 interface SearchResultsProps {
@@ -13,9 +17,11 @@ interface SearchResultsProps {
 interface ResultCardProps {
   result: SearchResultItem;
   eventId: string;
+  isFavourited: boolean;
+  onToggleFavourite: () => void;
 }
 
-function ResultCard({ result, eventId }: ResultCardProps) {
+function ResultCard({ result, eventId, isFavourited, onToggleFavourite }: ResultCardProps) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -28,9 +34,7 @@ function ResultCard({ result, eventId }: ResultCardProps) {
         objectUrl = URL.createObjectURL(blob);
         setBlobUrl(objectUrl);
       })
-      .catch(() => {
-        // leave blobUrl as null — placeholder stays visible
-      });
+      .catch(() => {});
 
     return () => {
       cancelled = true;
@@ -39,22 +43,26 @@ function ResultCard({ result, eventId }: ResultCardProps) {
   }, [result.photo_id, result.thumbnail_url, eventId]);
 
   return (
-    <div className="relative aspect-square w-full overflow-hidden rounded-sm bg-gray-200">
+    <div className="relative aspect-square w-full overflow-hidden rounded-sm bg-gray-200 group">
       {blobUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={blobUrl}
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover"
-        />
+        <img src={blobUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
       ) : (
         <div className="absolute inset-0 bg-gray-200 animate-pulse" />
       )}
+      {/* Action overlay — always visible on mobile, hover-visible on desktop */}
+      <div className="absolute bottom-1.5 right-1.5 flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+        <FavouriteToggle isFavourited={isFavourited} onToggle={onToggleFavourite} />
+        <ShareButton eventId={eventId} photoId={result.photo_id} />
+      </div>
     </div>
   );
 }
 
 export default function SearchResults({ results, eventId, onRetry }: SearchResultsProps) {
+  const { isFavourited, toggle } = useFavourites(eventId);
+  const photoIds = results.map((r) => r.photo_id);
+
   return (
     <div className="px-4 py-6">
       {results.length === 0 ? (
@@ -87,12 +95,21 @@ export default function SearchResults({ results, eventId, onRetry }: SearchResul
         </div>
       ) : (
         <>
-          <p className="text-sm text-gray-500 mb-4">
-            Found {results.length} photo{results.length === 1 ? '' : 's'} with you in them.
-          </p>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm text-gray-500">
+              Found {results.length} photo{results.length === 1 ? '' : 's'} with you in them.
+            </p>
+            <BulkDownloadButton source="search" eventId={eventId} photoIds={photoIds} />
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1.5 mb-6">
             {results.map((result) => (
-              <ResultCard key={result.photo_id} result={result} eventId={eventId} />
+              <ResultCard
+                key={result.photo_id}
+                result={result}
+                eventId={eventId}
+                isFavourited={isFavourited(result.photo_id)}
+                onToggleFavourite={() => toggle(result.photo_id)}
+              />
             ))}
           </div>
           <div className="flex justify-center">

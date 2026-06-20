@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     FACE_SEARCH_SCORE_THRESHOLD: float = 0.4
     FACE_SEARCH_RESULT_CAP: int = 50
     FACE_SEARCH_CACHE_TTL_SECONDS: int = 3600
+    APP_HOST: str = "http://localhost:3000"
 
 
 settings = Settings()

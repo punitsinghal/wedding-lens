@@ -18,6 +18,9 @@ import type {
   Photo,
   PhotoListResponse,
   PhotoUploadResponse,
+  ShareLinkResponse,
+  FavouritesResponse,
+  ShareTokenResponse,
 } from '@/types/api';
 
 function baseUrl(): string {
@@ -388,4 +391,128 @@ export async function ownerFetchBlob(path: string): Promise<Blob> {
   const response = await fetch(`${baseUrl()}${path}`, { headers });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.blob();
+}
+
+// ---------------------------------------------------------------------------
+// Photo actions — guest-authenticated
+// ---------------------------------------------------------------------------
+
+export async function generateShareLink(
+  eventId: string,
+  photoId: string
+): Promise<ShareLinkResponse> {
+  return guestApiFetch<ShareLinkResponse>(
+    eventId,
+    `/api/v1/events/${eventId}/photos/${photoId}/share`,
+    { method: 'POST' }
+  );
+}
+
+export async function getFavourites(eventId: string): Promise<FavouritesResponse> {
+  return guestApiFetch<FavouritesResponse>(eventId, `/api/v1/events/${eventId}/favourites`);
+}
+
+export async function addFavourite(eventId: string, photoId: string): Promise<void> {
+  return guestApiFetch<void>(eventId, `/api/v1/events/${eventId}/favourites/${photoId}`, {
+    method: 'PUT',
+  });
+}
+
+export async function removeFavourite(eventId: string, photoId: string): Promise<void> {
+  return guestApiFetch<void>(eventId, `/api/v1/events/${eventId}/favourites/${photoId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function resolveShareToken(token: string): Promise<ShareTokenResponse> {
+  // Public endpoint — no guest auth
+  const response = await fetch(`${baseUrl()}/api/v1/share/${token}`);
+  if (!response.ok) {
+    let errorBody: unknown;
+    try { errorBody = await response.json(); } catch { errorBody = { detail: response.statusText }; }
+    throw errorBody;
+  }
+  return response.json() as Promise<ShareTokenResponse>;
+}
+
+export async function downloadZip(eventId: string, photoIds: string[]): Promise<void> {
+  const token = getGuestToken(eventId);
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const response = await fetch(`${baseUrl()}/api/v1/events/${eventId}/photos/zip`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ photo_ids: photoIds }),
+  });
+
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+  const freshToken = response.headers.get('X-Guest-Token');
+  if (freshToken) setGuestToken(eventId, freshToken);
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = response.headers.get('Content-Disposition')?.match(/filename="(.+?)"/)?.[1]
+    ?? 'wedding-my-photos.zip';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export async function downloadPhoto(eventId: string, photoId: string): Promise<void> {
+  const token = getGuestToken(eventId);
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const response = await fetch(
+    `${baseUrl()}/api/v1/events/${eventId}/photos/${photoId}/download`,
+    { headers }
+  );
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+  const freshToken = response.headers.get('X-Guest-Token');
+  if (freshToken) setGuestToken(eventId, freshToken);
+
+  const blob = await response.blob();
+  const filename =
+    response.headers.get('Content-Disposition')?.match(/filename="(.+?)"/)?.[1] ?? 'photo.jpg';
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export async function downloadFavouritesZip(eventId: string): Promise<void> {
+  const token = getGuestToken(eventId);
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const response = await fetch(`${baseUrl()}/api/v1/events/${eventId}/favourites/zip`, {
+    method: 'POST',
+    headers,
+  });
+
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+  const freshToken = response.headers.get('X-Guest-Token');
+  if (freshToken) setGuestToken(eventId, freshToken);
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = response.headers.get('Content-Disposition')?.match(/filename="(.+?)"/)?.[1]
+    ?? 'wedding-my-favourites.zip';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }

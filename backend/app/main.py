@@ -15,8 +15,10 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.routers import auth, events, albums, admin, guest_auth
 from app.routers.gallery import router as gallery_router
+from app.routers.photo_actions import router as photo_actions_router
 from app.routers.photos import router as photos_router, status_router as face_status_router
 from app.routers.search import router as search_router
+from app.routers.share import router as share_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -139,6 +141,8 @@ app.include_router(photos_router)
 app.include_router(face_status_router)
 app.include_router(gallery_router)
 app.include_router(search_router)
+app.include_router(photo_actions_router)
+app.include_router(share_router)
 
 
 @app.get("/health", tags=["health"])
