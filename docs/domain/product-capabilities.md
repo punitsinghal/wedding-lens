@@ -1,6 +1,6 @@
 # Product Capabilities
 
-Last updated: 2026-06-19
+Last updated: 2026-06-20
 
 ---
 
@@ -28,3 +28,25 @@ Last updated: 2026-06-19
 - Album management page: create, rename, delete, ceremony category; album count display
 - QR code page: display + download PNG button (proxied via Next.js API route)
 - Admin dashboard: paginated all-events table, suspend / unsuspend / hard-delete with confirmation
+
+---
+
+## Guest Access (Epic: guest-access)
+
+**Status:** Shipped — `feature/guest-access`
+
+### What was added
+
+**Backend (`backend/`):**
+- Guest authentication endpoint (`POST /api/v1/events/{id}/guest-auth`): handles all three access modes in one call — access-code (case-insensitive), magic-link-otp (6-char system-generated code), public (no code required)
+- Guest JWT issuance: `type: guest` discriminator, `sub = event_id`, sliding-window idle expiry via `X-Guest-Token` response header
+- Session revocation: `POST /api/v1/events/{id}/revoke-guest-access` sets `guest_access_enabled=false` + `guest_access_revoked_at`; all tokens issued before revocation are rejected on validation
+- Re-enable: `POST /api/v1/events/{id}/enable-guest-access`
+- In-process `GuestRateLimiter`: per-`(event_id, ip)` lockout after 3 failed attempts; 15-minute cooldown; reset on success
+
+**Frontend (`frontend/`):**
+- `app/g/layout.tsx`: minimal no-Nav layout for all guest pages — clean entry and gallery experience
+- `app/g/[slug]/page.tsx`: entry page; resolves event by slug, renders access-code or OTP entry form, handles already-authenticated redirect, lockout and revocation error messages, informative unavailable message for non-published events
+- `app/g/[slug]/gallery/page.tsx`: auth guard redirects to entry if token missing/expired; placeholder for photo browsing (Album Gallery epic)
+- `lib/api.ts` — `guestApiFetch`: guest-token-authenticated fetch helper; reads `X-Guest-Token` response header for sliding-window refresh; clears token on 401
+- `lib/auth.ts` — `getGuestToken` / `setGuestToken` / `clearGuestToken` / `isGuestAuthenticated`: per-event guest token management in `localStorage`
