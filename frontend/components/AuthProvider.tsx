@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { getToken, setToken, removeToken, isAuthenticated, isAdmin } from '@/lib/auth';
 
 interface AuthContextValue {
@@ -18,8 +18,13 @@ const AuthContext = createContext<AuthContextValue>({
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => isAuthenticated());
-  const [isAdminUser, setIsAdminUser] = useState<boolean>(() => isAdmin());
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
+  const [isAdminUser, setIsAdminUser] = useState<boolean>(false);
+
+  useEffect(() => {
+    setIsLoggedIn(isAuthenticated());
+    setIsAdminUser(isAdmin());
+  }, []);
 
   const signIn = useCallback((token: string) => {
     setToken(token);
