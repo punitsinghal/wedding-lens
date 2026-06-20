@@ -1,7 +1,7 @@
 // Typed fetch wrapper + auth header injection
 // All API calls go through this module — never call fetch directly from components
 
-import { getToken } from './auth';
+import { getToken, getGuestToken, setGuestToken, clearGuestToken } from './auth';
 import type {
   AuthResponse,
   Event,
@@ -53,6 +53,53 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
   }
 
   // 204 No Content
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  return response.json() as Promise<T>;
+}
+
+export async function guestApiFetch<T>(
+  eventId: string,
+  path: string,
+  options: FetchOptions = {}
+): Promise<T> {
+  const token = getGuestToken(eventId);
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string>),
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const init: RequestInit = {
+    ...options,
+    headers,
+    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+  };
+
+  const response = await fetch(`${baseUrl()}${path}`, init);
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      clearGuestToken(eventId);
+    }
+    let errorBody: unknown;
+    try {
+      errorBody = await response.json();
+    } catch {
+      errorBody = { detail: response.statusText };
+    }
+    throw errorBody;
+  }
+
+  const freshToken = response.headers.get('X-Guest-Token');
+  if (freshToken) {
+    setGuestToken(eventId, freshToken);
+  }
+
   if (response.status === 204) {
     return undefined as T;
   }

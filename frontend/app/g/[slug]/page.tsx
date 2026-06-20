@@ -3,7 +3,7 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { getEventBySlug, guestAuth } from '@/lib/api';
-import { setGuestToken } from '@/lib/auth';
+import { setGuestToken, isGuestAuthenticated } from '@/lib/auth';
 import type { EventPublicOut } from '@/types/api';
 
 export default function GuestEntryPage() {
@@ -23,8 +23,11 @@ export default function GuestEntryPage() {
     getEventBySlug(slug)
       .then((ev) => {
         setEvent(ev);
-        // Public events go straight to gallery
         if (ev.status === 'published' && ev.access_mode === 'public') {
+          router.replace(`/g/${slug}/gallery`);
+          return;
+        }
+        if (isGuestAuthenticated(ev.id)) {
           router.replace(`/g/${slug}/gallery`);
         }
       })
