@@ -50,3 +50,28 @@ Last updated: 2026-06-20
 - `app/g/[slug]/gallery/page.tsx`: auth guard redirects to entry if token missing/expired; placeholder for photo browsing (Album Gallery epic)
 - `lib/api.ts` — `guestApiFetch`: guest-token-authenticated fetch helper; reads `X-Guest-Token` response header for sliding-window refresh; clears token on 401
 - `lib/auth.ts` — `getGuestToken` / `setGuestToken` / `clearGuestToken` / `isGuestAuthenticated`: per-event guest token management in `localStorage`
+
+---
+
+## Album & Gallery Browsing (Epic 10)
+
+**Status:** Shipped — PR #20 (`feature/album-gallery-browsing`)
+
+### What was added
+
+**Backend (`backend/`):**
+- Migration 004: adds `download_count` (INTEGER, default 0), `is_photographer_choice` (BOOLEAN, default false), `thumbnail_path` (TEXT nullable) to `photos`; adds 6 composite gallery indexes covering all sort × filter combinations
+- Face pipeline: generates a 600 px-wide WebP thumbnail per photo during processing and stores the SSD-relative path in `thumbnail_path`; failure is non-blocking (face processing continues, thumbnail shows as placeholder)
+- `GET /api/v1/events/{id}/gallery` — paginated photo list (50/page); supports `album` filter (ceremony category), `sort` (latest / popular / photographer-choice), `offset` for load-more pagination; returns total count
+- `GET /api/v1/events/{id}/gallery/albums` — album tab bar data: All tab + one tab per ceremony category present in the event, each with photo count; zero-count tabs omitted
+- `GET /api/v1/events/{id}/photos/{id}/thumbnail` — streams WebP thumbnail from SSD; path-traversal safe; immutable cache headers
+- `GET /api/v1/events/{id}/photos/{id}/download` — serves original file as attachment; atomically increments `download_count` only after confirming file exists
+- `PATCH /api/v1/events/{id}/photos/{id}/photographer-choice` — owner JWT only; 403 for guest tokens; sets/clears the Photographer Choice flag
+
+**Frontend (`frontend/`):**
+- `app/g/[slug]/gallery/page.tsx`: full gallery page replacing the "coming soon" stub; auth guard preserved; URL state sync (`?album=&sort=&limit=`) with full restore on refresh/share; responsive 2–5 column thumbnail grid; Load More button (hidden when all photos loaded)
+- `components/gallery/AlbumFilterBar.tsx`: horizontal scrollable tab bar with per-album photo count badges; active tab highlighted
+- `components/gallery/SortSelector.tsx`: dropdown for Latest / Popular / Photographer Choice
+- `components/gallery/PhotoThumbnail.tsx`: fetches thumbnail as authenticated blob URL; gray pulse placeholder while loading or when pipeline pending; gold ✦ badge on Photographer's Choice photos
+- `components/gallery/Lightbox.tsx`: full-screen overlay; loads thumbnail blob for display; Prev/Next navigation with automatic next-batch fetch at list boundary; keyboard (Escape/Arrow keys); Download button (calls `/download`, triggers browser save); scroll position restored on close
+- `lib/api.ts` — `guestFetchBlob`: binary fetch helper for thumbnail/download endpoints; `getGalleryAlbums` / `getGalleryPhotos`: typed gallery API calls
