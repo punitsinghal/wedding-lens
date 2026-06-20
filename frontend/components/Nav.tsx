@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from './AuthProvider';
 
 export default function Nav() {
-  const { isLoggedIn, isAdminUser, signOut } = useAuth();
+  const { isLoggedIn, isAdminUser, authReady, signOut } = useAuth();
   const router = useRouter();
 
   function handleSignOut() {
@@ -19,7 +19,9 @@ export default function Nav() {
         <Link href="/" className="text-lg font-bold text-gray-900">
           WeddingLens
         </Link>
-        {isLoggedIn ? (
+        {!authReady ? (
+          <div className="h-8 w-32" />
+        ) : isLoggedIn ? (
           <nav className="flex items-center gap-4 text-sm">
             <Link href="/dashboard" className="text-gray-600 hover:text-gray-900">
               Dashboard

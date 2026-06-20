@@ -6,6 +6,7 @@ import { getToken, setToken, removeToken, isAuthenticated, isAdmin } from '@/lib
 interface AuthContextValue {
   isLoggedIn: boolean;
   isAdminUser: boolean;
+  authReady: boolean;
   signIn: (token: string) => void;
   signOut: () => void;
 }
@@ -13,6 +14,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue>({
   isLoggedIn: false,
   isAdminUser: false,
+  authReady: false,
   signIn: () => {},
   signOut: () => {},
 });
@@ -20,10 +22,12 @@ const AuthContext = createContext<AuthContextValue>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [isAdminUser, setIsAdminUser] = useState<boolean>(false);
+  const [authReady, setAuthReady] = useState<boolean>(false);
 
   useEffect(() => {
     setIsLoggedIn(isAuthenticated());
     setIsAdminUser(isAdmin());
+    setAuthReady(true);
   }, []);
 
   const signIn = useCallback((token: string) => {
@@ -39,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ isLoggedIn, isAdminUser, signIn, signOut }}>
+    <AuthContext.Provider value={{ isLoggedIn, isAdminUser, authReady, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );
