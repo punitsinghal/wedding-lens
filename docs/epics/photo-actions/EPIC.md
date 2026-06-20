@@ -1,8 +1,8 @@
 # Photo Actions (Download, Share & Favorites)
 
-**Status:** Draft
+**Status:** In Review
 **Owner:** Product Team
-**Last Updated:** 2026-06-19
+**Last Updated:** 2026-06-20
 
 ## Summary
 Allow guests to download individual or bulk sets of photos, share photos via a generated link, and maintain a personal favourites list so they can curate and revisit their best memories from the wedding.
@@ -26,12 +26,12 @@ Allow guests to download individual or bulk sets of photos, share photos via a g
 ## Features
 | Feature | Status |
 |---------|--------|
-| Single photo download (original resolution) | Backlog |
-| Bulk ZIP download for face-search results | Backlog |
-| Shareable link generation per photo | Backlog |
-| Favourite / unfavourite toggle on photo | Backlog |
-| My Favourites page | Backlog |
-| Download tracking (for analytics) | Backlog |
+| Single photo download (original resolution) | ✅ Done (reuses gallery endpoint) |
+| Bulk ZIP download for face-search results | ✅ Done |
+| Shareable link generation per photo | ✅ Done |
+| Favourite / unfavourite toggle on photo | ✅ Done |
+| My Favourites page | ✅ Done |
+| Download tracking (for analytics) | Backlog (Admin Platform epic) |
 
 ## Success Metrics
 - Single photo download starts within 2 seconds of clicking.
@@ -40,9 +40,11 @@ Allow guests to download individual or bulk sets of photos, share photos via a g
 - Favourites persist correctly across page refreshes.
 
 ## Decisions
-<!-- Decisions made during this epic's lifetime -->
+- **2026-06-20:** Favourites are anonymous (session-only), keyed by JWT `sid` claim. No cross-session sync for MVP. See ADR `docs/decisions/2026-06-20-favourites-in-process-store.md`.
+- **2026-06-20:** No per-guest download limit for MVP (REQ-9).
+- **2026-06-20:** Shareable links expire after 72 hours (fixed window from creation). See ADR `docs/decisions/2026-06-20-share-token-jwt.md`.
 
 ## Open Questions
-- [ ] Should favourites be anonymous (session-only) or tied to an email/OTP identity? — owner: Product Team
-- [ ] Is there a download limit per guest to control bandwidth costs? — owner: Product Team
-- [ ] Should shareable links expire, and if so, after how long? — owner: Product Team
+- [x] ~~Should favourites be anonymous (session-only) or tied to an email/OTP identity?~~ — Resolved: session-only, no cross-session sync for MVP.
+- [x] ~~Is there a download limit per guest to control bandwidth costs?~~ — Resolved: no limit for MVP.
+- [x] ~~Should shareable links expire, and if so, after how long?~~ — Resolved: 72-hour fixed window from creation.
