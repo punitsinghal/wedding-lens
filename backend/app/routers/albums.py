@@ -36,6 +36,20 @@ async def list_albums(
     return [AlbumOut.model_validate(a) for a in albums]
 
 
+@router.get("/{album_id}", response_model=AlbumOut)
+async def get_album(
+    event_id: uuid.UUID,
+    album_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AlbumOut:
+    await _get_event_for_owner(event_id, db, current_user)
+    album = await album_svc.get_album(db, event_id, album_id)
+    if album is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Album not found")
+    return AlbumOut.model_validate(album)
+
+
 @router.post("", response_model=AlbumOut, status_code=status.HTTP_201_CREATED)
 async def create_album(
     event_id: uuid.UUID,

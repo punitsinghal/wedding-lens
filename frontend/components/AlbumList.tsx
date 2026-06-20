@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import type { Album, AlbumCreateRequest, CeremonyCategory } from '@/types/api';
 import { createAlbum, updateAlbum, deleteAlbum } from '@/lib/api';
 import ConfirmDialog from './ConfirmDialog';
@@ -213,6 +214,7 @@ export default function AlbumList({ eventId, initialAlbums }: Props) {
                         </option>
                       ))}
                     </select>
+
                   </div>
                   <div className="flex gap-2 mt-2">
                     <button
@@ -243,8 +245,19 @@ export default function AlbumList({ eventId, initialAlbums }: Props) {
                       {album.ceremony_category}
                     </span>
                   )}
+                  {album.cover_photo_id && (
+                    <span className="ml-2 text-xs text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">
+                      Cover set
+                    </span>
+                  )}
                 </div>
                 <div className="flex gap-2">
+                  <Link
+                    href={`/events/${eventId}/albums/${album.id}`}
+                    className="text-xs text-gray-600 hover:text-gray-800 font-medium"
+                  >
+                    Photos
+                  </Link>
                   <button
                     onClick={() => startEdit(album)}
                     className="text-xs text-blue-600 hover:text-blue-800 font-medium"

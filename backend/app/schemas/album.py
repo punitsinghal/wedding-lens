@@ -23,6 +23,7 @@ class AlbumUpdate(BaseModel):
     name: str | None = None
     ceremony_category: str | None = None
     sort_order: int | None = None
+    cover_photo_id: uuid.UUID | None = None
 
     @field_validator("ceremony_category")
     @classmethod
@@ -40,5 +41,6 @@ class AlbumOut(BaseModel):
     name: str
     ceremony_category: str | None
     sort_order: int
+    cover_photo_id: uuid.UUID | None
     created_at: datetime
     updated_at: datetime

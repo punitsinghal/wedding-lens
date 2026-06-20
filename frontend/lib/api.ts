@@ -65,6 +65,16 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
   return response.json() as Promise<T>;
 }
 
+export async function fetchAuthedBlob(path: string): Promise<string> {
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${baseUrl()}${path}`, { headers });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
 export async function guestApiFetch<T>(
   eventId: string,
   path: string,
@@ -181,6 +191,10 @@ export function getQrCodeUrl(eventId: string): string {
 
 export async function getAlbums(eventId: string): Promise<Album[]> {
   return apiFetch<Album[]>(`/api/v1/events/${eventId}/albums`);
+}
+
+export async function getAlbum(eventId: string, albumId: string): Promise<Album> {
+  return apiFetch<Album>(`/api/v1/events/${eventId}/albums/${albumId}`);
 }
 
 export async function createAlbum(eventId: string, data: AlbumCreateRequest): Promise<Album> {
@@ -346,11 +360,12 @@ export async function uploadPhoto(
 
 export async function getPhotos(
   eventId: string,
-  params: { limit?: number; offset?: number } = {}
+  params: { limit?: number; offset?: number; albumId?: string } = {}
 ): Promise<PhotoListResponse> {
   const qs = new URLSearchParams();
   if (params.limit != null) qs.set('limit', String(params.limit));
   if (params.offset != null) qs.set('offset', String(params.offset));
+  if (params.albumId != null) qs.set('album_id', params.albumId);
   const query = qs.toString() ? `?${qs.toString()}` : '';
   return apiFetch<PhotoListResponse>(`/api/v1/events/${eventId}/photos${query}`);
 }
