@@ -1,6 +1,9 @@
 ## Epic
 docs/epics/photo-actions/EPIC.md
 
+## Status
+Groomed — ready for /design
+
 ## Purpose
 Allow authenticated wedding guests to download individual or bulk sets of photos at original resolution, generate event-scoped shareable links to specific photos, and maintain a personal favourites list within their session so they can curate and revisit their best memories from the wedding.
 
@@ -13,6 +16,7 @@ Allow authenticated wedding guests to download individual or bulk sets of photos
 6. Guest marks a photo as favourite / unmarks it
 7. Guest views their My Favourites list (all favourited photos in one view)
 8. Guest's favourites persist across page refreshes within the same session
+9. Guest downloads all their favourited photos as a ZIP archive from the My Favourites view
 
 ## User stories / use cases
 
@@ -43,6 +47,9 @@ Allow authenticated wedding guests to download individual or bulk sets of photos
 **Scenario 8 — Favourites persistence across refreshes**
 - As a guest, I want my favourites to still be present when I refresh or navigate away and return, so that I do not have to re-mark photos after a page reload.
 
+**Scenario 9 — Bulk ZIP download of favourites**
+- As a guest, I want to download all my favourited photos as a single ZIP archive from My Favourites, so that I can save my curated selection in one action.
+
 ## Functional requirements
 
 ### Scenario 1 — Single photo download
@@ -54,18 +61,18 @@ Allow authenticated wedding guests to download individual or bulk sets of photos
 - REQ-4 (Scenario 2): The system must provide a "Download All" action on the face-search results page that triggers a server-side ZIP generation for all photos in the guest's result set, up to a maximum of 200 photos.
 - REQ-5 (Scenario 2): If the face-search result set contains more than 200 photos, the ZIP is generated from the top 200 photos ranked by match score. A notice is displayed to the guest before and after the download explaining that only the top 200 are included.
 - REQ-6 (Scenario 2): ZIP generation is server-side and streaming — the response is streamed to the client; the backend must not buffer the entire archive in memory before responding.
-- REQ-7 (Scenario 2): Each file inside the ZIP uses the original filename. The ZIP filename itself follows the format confirmed in Open Questions (pending; see OQ-3).
+- REQ-7 (Scenario 2): Each file inside the ZIP uses the original filename. The ZIP filename follows the format `wedding-{event-slug}-my-photos.zip`.
 - REQ-8 (Scenario 2): The bulk download endpoint must validate the guest's session token and confirm all requested photo IDs belong to the same `event_id` before streaming the archive.
 - REQ-9 (Scenario 2): There is no per-guest download count limit for MVP.
 
 ### Scenario 3 — Shareable link generation
 - REQ-10 (Scenario 3): The system must provide a "Share" action on every photo visible to the guest. Triggering it returns a signed URL unique to that photo.
 - REQ-11 (Scenario 3): Shareable links are event-scoped signed URLs. The signature encodes `photo_id`, `event_id`, and an expiry timestamp. The backend validates the signature on every access.
-- REQ-12 (Scenario 3): Shareable links expire 72 hours after creation (see OQ-4 for open question on whether expiry resets on first access). After expiry the link must return a structured error response and not expose the photo.
+- REQ-12 (Scenario 3): Shareable links expire 72 hours after creation (fixed window from creation time, not from first access). After expiry the link must return a structured error response and not expose the photo.
 - REQ-13 (Scenario 3): A shareable link can only be generated for photos that belong to the guest's own event (validated via session token).
 
 ### Scenario 4 — Shareable link recipient flow
-- REQ-14 (Scenario 4): When a recipient opens a shareable link, the backend verifies the link signature before routing. The frontend then presents the event's configured authentication gate (access code, OTP, or no gate for public events) before displaying the photo.
+- REQ-14 (Scenario 4): When a recipient opens a shareable link, the backend verifies the link signature before routing. The frontend then presents the event's configured authentication gate (access code or OTP for protected events; no gate for public events) before displaying the photo.
 - REQ-15 (Scenario 4): A valid shareable link does not grant event access. It routes the recipient to the correct event entry point; existing event authentication rules apply.
 - REQ-16 (Scenario 4): After successful event authentication, the recipient is taken directly to the shared photo view.
 
@@ -80,12 +87,17 @@ Allow authenticated wedding guests to download individual or bulk sets of photos
 
 ### Scenario 7 — My Favourites view
 - REQ-22 (Scenario 7): The system must provide a My Favourites page that displays all photos the guest has marked as favourite within their current session.
-- REQ-23 (Scenario 7): Photos in the My Favourites view must be displayed with the same download and share actions available in the face-search results view.
+- REQ-23 (Scenario 7): Photos in the My Favourites view must be displayed with the same single-photo download and share actions available in the face-search results view.
 - REQ-24 (Scenario 7): If the guest has no favourited photos, the My Favourites page must display an empty state message explaining how to add favourites.
 
 ### Scenario 8 — Favourites persistence across page refreshes
 - REQ-25 (Scenario 8): Favourite state must survive page refresh and in-session navigation as long as the guest's session token remains valid (24-hour idle window).
 - REQ-26 (Scenario 8): When the session expires, all favourite state is cleared. The guest is not notified of this data loss proactively; the empty My Favourites page after re-authentication is the expected behaviour.
+
+### Scenario 9 — Bulk ZIP download of favourites
+- REQ-27 (Scenario 9): The My Favourites view must include a "Download All Favourites as ZIP" action that triggers server-side ZIP generation for all photos in the guest's current favourites list, subject to the same 200-photo cap as the face-search bulk download (REQ-4).
+- REQ-28 (Scenario 9): The favourites ZIP endpoint must validate the guest's session token and confirm all photo IDs in the favourites list belong to the same `event_id` before streaming the archive. The ZIP filename follows the format `wedding-{event-slug}-my-favourites.zip`. ZIP generation is streaming — the backend must not buffer the full archive in memory.
+- REQ-29 (Scenario 9): If the guest has no favourited photos, the "Download All Favourites as ZIP" action is hidden or disabled — it must not trigger a ZIP request for an empty set.
 
 ## Non-functional requirements
 - NFR-1: Single photo download response must begin within 2 seconds of the request for photos stored on local SSD.
@@ -103,7 +115,7 @@ Allow authenticated wedding guests to download individual or bulk sets of photos
 
 **Architectural notes**
 - Original photos are stored on local SSD at `STORAGE_PATH`. The backend streams files directly from disk using FastAPI's `FileResponse` or a streaming `StreamingResponse`.
-- Shareable link signatures use HMAC with the deployment `SECRET_KEY`; the signed payload includes `photo_id`, `event_id`, and `exp` (Unix timestamp).
+- Shareable link signatures use HMAC with the deployment `SECRET_KEY`; the signed payload includes `photo_id`, `event_id`, and `exp` (Unix timestamp). Expiry is a fixed 72-hour window measured from creation time.
 - Favourite state lives in server-side session state (in-process or PostgreSQL-backed session store, consistent with the guest session token design in `docs/decisions/2026-06-19-guest-session-token-design.md`). No separate favourites table is created.
 - ZIP generation uses Python's `zipfile` module with streaming writes. Files are read sequentially from SSD and written into the stream; the archive is never materialised fully in memory.
 - All endpoints follow the `/api/v1/` prefix convention and must be documented in the backend OpenAPI schema.
@@ -111,6 +123,7 @@ Allow authenticated wedding guests to download individual or bulk sets of photos
 **Access model**
 - Guests are anonymous (no email, no user account). Session tokens are JWT-based with a 24-hour idle expiry and a sliding refresh window.
 - Shareable links carry their own signed payload and do not carry a guest token; they are a separate auth surface and must be validated independently of the recipient's session.
+- For public events, a shareable link takes the recipient directly to the shared photo view with no authentication step.
 
 ## Out of scope
 - Favourites persisting across sessions or devices — no cross-session or cross-device sync for MVP.
@@ -119,13 +132,12 @@ Allow authenticated wedding guests to download individual or bulk sets of photos
 - Download analytics tracked per photo (download counts, guest attribution) — covered by the Admin Platform epic.
 - Social media sharing (native share sheet, direct-to-Instagram, etc.) — future scope.
 - Email or SMS delivery of shareable links by the platform — the guest copies and pastes the link manually.
-- Bulk download of favourites as a ZIP — see OQ-1 (open question, pending Product Team decision).
 
 ## Open questions
-- [ ] OQ-1: Should the My Favourites view include a "Download All Favourites as ZIP" action, or is ZIP download available only for face-search results? — owner: Product Team
-- [ ] OQ-2: The decisions document states shareable links require event authentication before the photo is shown — confirm with stakeholder whether this applies to all three event access modes (access-code, magic-link-otp, public), or only to protected modes. — owner: Product Team
-- [ ] OQ-3: What is the ZIP filename format? (e.g., `wedding-{event-slug}-my-photos.zip`) — owner: Product Team
-- [ ] OQ-4: Does the 72-hour shareable link expiry count from the moment of creation, or from the first time the link is accessed? — owner: Product Team
+- [x] OQ-1: Should the My Favourites view include a "Download All Favourites as ZIP" action? — **Resolved: Yes, include for MVP (Scenario 9 added).**
+- [x] OQ-2: Do shareable links require event auth for all event modes? — **Resolved: Yes for protected modes (access-code, OTP); public events skip auth and go directly to the photo (AC-12).**
+- [x] OQ-3: What is the ZIP filename format? — **Resolved: `wedding-{event-slug}-my-photos.zip` for face-search ZIP; `wedding-{event-slug}-my-favourites.zip` for favourites ZIP.**
+- [x] OQ-4: Does the 72-hour shareable link expiry count from creation or first access? — **Resolved: From creation (fixed window).**
 
 ## Acceptance criteria
 
@@ -135,7 +147,7 @@ Allow authenticated wedding guests to download individual or bulk sets of photos
 - AC-3 (Scenario 1): Given a guest with an expired session token attempts a download, the backend returns 401 and redirects the frontend to the event entry screen.
 
 **Scenario 2 — Bulk ZIP download**
-- AC-4 (Scenario 2): Given a guest's face-search result set contains 50 photos, clicking "Download All" triggers a streamed ZIP download containing all 50 original-resolution photos, completing in under 30 seconds.
+- AC-4 (Scenario 2): Given a guest's face-search result set contains 50 photos, clicking "Download All" triggers a streamed ZIP download named `wedding-{event-slug}-my-photos.zip` containing all 50 original-resolution photos, completing in under 30 seconds.
 - AC-5 (Scenario 2): Given a guest's face-search result set contains more than 200 photos, a notice is displayed stating that only the top 200 matches will be included in the ZIP, and the downloaded ZIP contains exactly 200 photos ordered by descending match score.
 - AC-6 (Scenario 2): Given the ZIP request includes a photo ID belonging to a different event, the backend rejects the entire request with 403 and no archive is served.
 - AC-7 (Scenario 2): Given a ZIP generation request, the backend begins streaming response bytes to the client without first accumulating the full archive in memory.
@@ -160,10 +172,15 @@ Allow authenticated wedding guests to download individual or bulk sets of photos
 - AC-18 (Scenario 6): Given two different guests (separate session tokens) access the same event, marking a photo as favourite in one session has no effect on the other session's favourite state.
 
 **Scenario 7 — My Favourites view**
-- AC-19 (Scenario 7): Given a guest has favourited three photos, navigating to My Favourites shows exactly those three photos with download and share actions available.
+- AC-19 (Scenario 7): Given a guest has favourited three photos, navigating to My Favourites shows exactly those three photos with single-photo download and share actions available.
 - AC-20 (Scenario 7): Given a guest has no favourited photos, the My Favourites page displays a clear empty state explaining how to mark favourites.
 - AC-21 (Scenario 7): Given a guest unfavourites a photo while on the My Favourites page, that photo is removed from the view immediately without a page reload.
 
 **Scenario 8 — Favourites persistence across refreshes**
 - AC-22 (Scenario 8): Given a guest has favourited photos and then refreshes the page, their My Favourites view shows the same set of photos after the reload.
 - AC-23 (Scenario 8): Given a guest's session has expired and they re-authenticate, the My Favourites view is empty (previous session's favourites are not carried over).
+
+**Scenario 9 — Bulk ZIP download of favourites**
+- AC-24 (Scenario 9): Given a guest has favourited photos and clicks "Download All Favourites as ZIP" on the My Favourites page, the browser initiates a streamed ZIP download named `wedding-{event-slug}-my-favourites.zip` containing all favourited photos at original resolution.
+- AC-25 (Scenario 9): Given a guest has no favourited photos, the "Download All Favourites as ZIP" action is hidden or disabled and does not trigger any backend request.
+- AC-26 (Scenario 9): Given the favourites ZIP request includes a photo ID belonging to a different `event_id`, the backend rejects the entire request with 403 and no archive is served.
