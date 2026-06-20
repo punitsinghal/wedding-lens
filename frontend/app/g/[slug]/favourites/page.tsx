@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { isGuestAuthenticated } from '@/lib/auth';
-import { getEventBySlug, getFavourites, guestFetchBlob } from '@/lib/api';
+import { getEventBySlug, guestFetchBlob } from '@/lib/api';
 import { useFavourites } from '@/hooks/useFavourites';
 import FavouriteToggle from '@/components/photo-actions/FavouriteToggle';
 import ShareButton from '@/components/photo-actions/ShareButton';
@@ -63,10 +63,9 @@ export default function FavouritesPage() {
   const slug = params.slug as string;
 
   const [eventId, setEventId] = useState('');
-  const [photos, setPhotos] = useState<FavouritePhoto[]>([]);
   const [isChecking, setIsChecking] = useState(true);
 
-  const { isFavourited, toggle, favouriteIds } = useFavourites(eventId);
+  const { photos, isFavourited, toggle, favouriteIds } = useFavourites(eventId);
 
   useEffect(() => {
     getEventBySlug(slug)
@@ -76,10 +75,6 @@ export default function FavouritesPage() {
           return;
         }
         setEventId(ev.id);
-        return getFavourites(ev.id);
-      })
-      .then((res) => {
-        if (res) setPhotos(res.photos);
       })
       .catch(() => {
         router.replace(`/g/${slug}`);

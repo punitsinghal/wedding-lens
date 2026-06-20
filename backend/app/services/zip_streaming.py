@@ -46,12 +46,21 @@ def generate_zip_stream(photos: list) -> Iterator[bytes]:
     """Yield compressed ZIP bytes incrementally. Peak memory = max(single photo size)."""
     storage_root = Path(settings.STORAGE_PATH).resolve()
     buf = _ZipBuffer()
+    seen_names: dict[str, int] = {}
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
         for photo in photos:
             abs_path = (storage_root / photo.storage_path).resolve()
             if not abs_path.is_relative_to(storage_root) or not abs_path.exists():
                 continue
-            zf.write(str(abs_path), arcname=photo.filename)
+            base = photo.filename
+            if base in seen_names:
+                seen_names[base] += 1
+                stem, sep, ext = base.rpartition(".")
+                arcname = f"{stem} ({seen_names[base]}).{ext}" if sep else f"{base} ({seen_names[base]})"
+            else:
+                seen_names[base] = 1
+                arcname = base
+            zf.write(str(abs_path), arcname=arcname)
             chunk = buf.pop()
             if chunk:
                 yield chunk

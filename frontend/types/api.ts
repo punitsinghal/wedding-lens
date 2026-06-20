@@ -211,4 +211,5 @@ export interface ShareLinkResponse {
 export interface ShareTokenResponse {
   photo_id: string;
   event_id: string;
+  event_slug: string | null;
 }

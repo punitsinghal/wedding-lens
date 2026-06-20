@@ -463,6 +463,33 @@ export async function downloadZip(eventId: string, photoIds: string[]): Promise<
   URL.revokeObjectURL(url);
 }
 
+export async function downloadPhoto(eventId: string, photoId: string): Promise<void> {
+  const token = getGuestToken(eventId);
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const response = await fetch(
+    `${baseUrl()}/api/v1/events/${eventId}/photos/${photoId}/download`,
+    { headers }
+  );
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+  const freshToken = response.headers.get('X-Guest-Token');
+  if (freshToken) setGuestToken(eventId, freshToken);
+
+  const blob = await response.blob();
+  const filename =
+    response.headers.get('Content-Disposition')?.match(/filename="(.+?)"/)?.[1] ?? 'photo.jpg';
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export async function downloadFavouritesZip(eventId: string): Promise<void> {
   const token = getGuestToken(eventId);
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };

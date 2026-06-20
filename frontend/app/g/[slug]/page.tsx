@@ -29,7 +29,7 @@ export default function GuestEntryPage() {
         }
         if (isGuestAuthenticated(ev.id)) {
           const nextParam = new URLSearchParams(window.location.search).get('next');
-          router.replace(nextParam ?? `/g/${slug}/gallery`);
+          router.replace(nextParam?.startsWith('/') ? nextParam : `/g/${slug}/gallery`);
         }
       })
       .catch(() => {
@@ -47,7 +47,7 @@ export default function GuestEntryPage() {
       const token = await guestAuth(event.id, code.trim());
       setGuestToken(event.id, token.access_token);
       const nextParam = new URLSearchParams(window.location.search).get('next');
-      router.replace(nextParam ?? `/g/${slug}/gallery`);
+      router.replace(nextParam?.startsWith('/') ? nextParam : `/g/${slug}/gallery`);
     } catch (err: unknown) {
       const apiErr = err as { detail?: string; status?: number };
       // Check for 429 rate-limit — the thrown body may carry a status or detail

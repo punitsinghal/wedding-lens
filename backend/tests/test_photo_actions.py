@@ -132,14 +132,12 @@ async def test_bulk_zip_empty_ids_returns_400(
 
 
 # ---------------------------------------------------------------------------
-# Test 3: share token expired → decode raises 410
+# Test 3: share token expired → decode raises ValueError("link_expired")
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_share_token_expired_returns_410():
-    from fastapi import HTTPException
-
     photo_id = str(uuid.uuid4())
     event_id = str(uuid.uuid4())
 
@@ -154,22 +152,19 @@ async def test_share_token_expired_returns_410():
     }
     token = jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ValueError) as exc_info:
         decode_share_token(token)
 
-    assert exc_info.value.status_code == 410
-    assert exc_info.value.detail == "link_expired"
+    assert str(exc_info.value) == "link_expired"
 
 
 # ---------------------------------------------------------------------------
-# Test 4: share token bad signature → decode raises 403
+# Test 4: share token bad signature → decode raises ValueError("invalid_share_token")
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_share_token_invalid_returns_403():
-    from fastapi import HTTPException
-
     photo_id = str(uuid.uuid4())
     event_id = str(uuid.uuid4())
 
@@ -183,30 +178,26 @@ async def test_share_token_invalid_returns_403():
     }
     bad_token = jwt.encode(payload, "wrong-secret-key", algorithm=settings.ALGORITHM)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ValueError) as exc_info:
         decode_share_token(bad_token)
 
-    assert exc_info.value.status_code == 403
-    assert exc_info.value.detail == "invalid_share_token"
+    assert str(exc_info.value) == "invalid_share_token"
 
 
 # ---------------------------------------------------------------------------
-# Test 5: guest token passed to decode_share_token → 403 (wrong type)
+# Test 5: guest token passed to decode_share_token → ValueError (wrong type)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_share_token_wrong_type_returns_403():
-    from fastapi import HTTPException
-
     event_id = str(uuid.uuid4())
     guest_token = create_guest_token(event_id)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ValueError) as exc_info:
         decode_share_token(guest_token)
 
-    assert exc_info.value.status_code == 403
-    assert exc_info.value.detail == "invalid_share_token"
+    assert str(exc_info.value) == "invalid_share_token"
 
 
 # ---------------------------------------------------------------------------
@@ -351,6 +342,7 @@ async def test_resolve_share_token_valid(client: AsyncClient):
     body = resp.json()
     assert body["photo_id"] == photo_id
     assert body["event_id"] == event_id
+    assert "event_slug" in body
 
 
 # ---------------------------------------------------------------------------

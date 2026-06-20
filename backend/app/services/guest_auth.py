@@ -110,14 +110,15 @@ def create_share_token(photo_id: str, event_id: str) -> str:
 
 
 def decode_share_token(token: str) -> dict:
-    """Decode and validate a share JWT. Raises HTTPException on failure."""
-    from fastapi import HTTPException
+    """Decode and validate a share JWT. Raises ValueError on failure."""
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
     except ExpiredSignatureError:
-        raise HTTPException(status_code=410, detail="link_expired")
+        raise ValueError("link_expired")
     except JWTError:
-        raise HTTPException(status_code=403, detail="invalid_share_token")
+        raise ValueError("invalid_share_token")
     if payload.get("type") != "share":
-        raise HTTPException(status_code=403, detail="invalid_share_token")
+        raise ValueError("invalid_share_token")
+    if not payload.get("photo_id") or not payload.get("sub"):
+        raise ValueError("invalid_share_token")
     return payload

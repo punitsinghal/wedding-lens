@@ -1,15 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { resolveShareToken, guestFetchBlob } from '@/lib/api';
+import { resolveShareToken, guestFetchBlob, downloadPhoto } from '@/lib/api';
 import { isGuestAuthenticated } from '@/lib/auth';
 
 type PageState = 'loading' | 'expired' | 'invalid' | 'unauthenticated' | 'ready';
 
 export default function SharePage() {
   const params = useParams();
+  const router = useRouter();
   const token = params.token as string;
 
   const [state, setState] = useState<PageState>('loading');
@@ -23,7 +24,11 @@ export default function SharePage() {
         setPhotoId(data.photo_id);
         setEventId(data.event_id);
         if (!isGuestAuthenticated(data.event_id)) {
-          setState('unauthenticated');
+          if (data.event_slug) {
+            router.replace(`/g/${data.event_slug}?next=/share/${token}`);
+          } else {
+            setState('unauthenticated');
+          }
           return;
         }
         setState('ready');
@@ -33,7 +38,7 @@ export default function SharePage() {
         if (detail === 'link_expired') setState('expired');
         else setState('invalid');
       });
-  }, [token]);
+  }, [token, router]);
 
   // Load photo blob when ready
   useEffect(() => {
@@ -121,12 +126,12 @@ export default function SharePage() {
           )}
         </div>
         <div className="mt-4 flex justify-center gap-3">
-          <a
-            href={`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'}/api/v1/events/${eventId}/photos/${photoId}/download`}
+          <button
+            onClick={() => downloadPhoto(eventId, photoId).catch(() => {})}
             className="px-4 py-2 text-sm font-medium bg-gray-900 text-white rounded-full hover:bg-gray-700 transition-colors"
           >
             Download original
-          </a>
+          </button>
         </div>
       </div>
     </div>

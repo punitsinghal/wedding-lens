@@ -1,6 +1,6 @@
 """Photo action endpoints — ZIP download, share link, favourites CRUD."""
 import uuid
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Response, status
@@ -18,6 +18,7 @@ from app.services.zip_streaming import generate_zip_stream
 router = APIRouter(prefix="/api/v1/events/{event_id}", tags=["photo-actions"])
 
 _ZIP_PHOTO_CAP = 200
+_FAVOURITES_CAP = 500
 
 
 @router.post("/photos/zip", status_code=200)
@@ -34,8 +35,8 @@ async def bulk_zip_download(
     if not photo_ids:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="photo_ids_required")
 
-    # Cap at 200
-    photo_ids = photo_ids[:_ZIP_PHOTO_CAP]
+    # Cap at 200 and deduplicate to prevent false 403
+    photo_ids = list(dict.fromkeys(photo_ids[:_ZIP_PHOTO_CAP]))
 
     # Validate all IDs belong to this event in one query
     result = await db.execute(
@@ -90,7 +91,6 @@ async def generate_share_link(
     token = create_share_token(str(photo_id), str(event_id))
     share_url = f"{settings.APP_HOST}/share/{token}"
 
-    from datetime import datetime, timedelta
     expires_at = datetime.now(timezone.utc) + timedelta(hours=72)
 
     return {
@@ -143,6 +143,9 @@ async def add_favourite(
     )
     if result.scalar_one_or_none() is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found")
+
+    if len(favourites_store.get(sid)) >= _FAVOURITES_CAP:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="favourites_cap_reached")
 
     favourites_store.add(sid, str(photo_id))
 
