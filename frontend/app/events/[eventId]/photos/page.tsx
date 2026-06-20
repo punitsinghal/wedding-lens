@@ -13,6 +13,7 @@ const LIMIT = 50;
 type UploadStatus = 'queued' | 'uploading' | 'done' | 'error';
 
 interface UploadItem {
+  id: string;
   file: File;
   status: UploadStatus;
   error?: string;
@@ -69,6 +70,9 @@ function PhotoCard({
     setIsChangingAlbum(true);
     try {
       await onAlbumChange(photo.id, val === '' ? null : val);
+    } catch {
+      // Revert select to the current album value
+      (e.target as HTMLSelectElement).value = photo.album_id ?? '';
     } finally {
       setIsChangingAlbum(false);
     }
@@ -171,7 +175,11 @@ export default function PhotosPage() {
     );
     setUploadQueue((prev) => [
       ...prev,
-      ...arr.map((f) => ({ file: f, status: 'queued' as UploadStatus })),
+      ...arr.map((f) => ({
+        id: `${f.name}-${f.size}-${f.lastModified}`,
+        file: f,
+        status: 'queued' as UploadStatus,
+      })),
     ]);
   }
 
@@ -216,8 +224,12 @@ export default function PhotosPage() {
   }
 
   async function handleAlbumChange(photoId: string, albumId: string | null) {
-    const updated = await updatePhotoAlbum(eventId, photoId, albumId);
-    setPhotos((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    try {
+      const updated = await updatePhotoAlbum(eventId, photoId, albumId);
+      setPhotos((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    } catch {
+      // error surfaces via PhotoCard's select revert; no additional UI needed
+    }
   }
 
   if (loadError && !event) {
@@ -323,8 +335,8 @@ export default function PhotosPage() {
         {/* Upload queue */}
         {uploadQueue.length > 0 && (
           <div className="mt-3 space-y-1 max-h-40 overflow-y-auto">
-            {uploadQueue.map((item, i) => (
-              <div key={i} className="flex items-center gap-2 text-xs text-gray-600">
+            {uploadQueue.map((item) => (
+              <div key={item.id} className="flex items-center gap-2 text-xs text-gray-600">
                 <span
                   className={`w-2 h-2 rounded-full flex-shrink-0 ${
                     item.status === 'queued'

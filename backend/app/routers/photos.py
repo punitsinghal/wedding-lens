@@ -7,10 +7,12 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.dependencies import get_current_user, get_db
+from app.models.album import Album
 from app.models.event import Event
 from app.models.photo import Photo
 from app.models.user import User
@@ -26,6 +28,9 @@ from app.services.face_pipeline import process_photo
 
 logger = logging.getLogger("weddinglens.photos")
 router = APIRouter(prefix="/api/v1/events/{event_id}/photos", tags=["photos"])
+
+ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png"}
+MAX_FILE_SIZE = 25 * 1024 * 1024  # 25 MB
 
 
 async def _get_owned_event(
@@ -72,6 +77,19 @@ async def upload_photo(
     abs_path.parent.mkdir(parents=True, exist_ok=True)
 
     contents = await file.read()
+
+    if file.content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(status_code=422, detail="Only JPEG and PNG files are accepted")
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=422, detail="File exceeds the 25 MB limit")
+
+    if album_id is not None:
+        album_check = await db.execute(
+            select(Album).where(Album.id == album_id, Album.event_id == event_id)
+        )
+        if album_check.scalar_one_or_none() is None:
+            raise HTTPException(status_code=422, detail="Album does not belong to this event")
+
     abs_path.write_bytes(contents)
 
     photo = Photo(
@@ -84,7 +102,11 @@ async def upload_photo(
         processing_status="pending",
     )
     db.add(photo)
-    await db.flush()  # get photo into DB before BackgroundTask runs
+    try:
+        await db.flush()  # get photo into DB before BackgroundTask runs
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail="Invalid album_id")
 
     background_tasks.add_task(process_photo, photo_id, event_id)
 
@@ -142,8 +164,19 @@ async def update_photo_album(
     if photo is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found")
 
+    if body.album_id is not None:
+        album_check = await db.execute(
+            select(Album).where(Album.id == body.album_id, Album.event_id == event_id)
+        )
+        if album_check.scalar_one_or_none() is None:
+            raise HTTPException(status_code=422, detail="Album does not belong to this event")
+
     photo.album_id = body.album_id
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail="Invalid album_id")
     await db.refresh(photo)
 
     return _photo_to_out(photo, event_id)
