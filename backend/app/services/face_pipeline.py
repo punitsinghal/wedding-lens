@@ -55,7 +55,7 @@ def _detect_faces(image_bytes: bytes) -> list[dict]:
         if w < MIN_FACE_SIZE or h < MIN_FACE_SIZE:
             continue
         results.append({
-            "bbox": [x1, y1, w, h],
+            "bbox": [int(x1), int(y1), int(w), int(h)],
             "embedding": face.normed_embedding,  # float32[512]
         })
     return results
