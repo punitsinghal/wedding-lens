@@ -135,3 +135,28 @@ export function isSlugTakenError(
     (err as ApiError).detail === 'slug_taken'
   );
 }
+
+// ---------------------------------------------------------------------------
+// Gallery types
+// ---------------------------------------------------------------------------
+
+export interface GalleryPhoto {
+  id: string;
+  thumbnail_url: string | null;
+  is_photographer_choice: boolean;
+  download_count: number;
+  created_at: string;
+}
+
+export interface GalleryListResponse {
+  photos: GalleryPhoto[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AlbumTab {
+  ceremony_category: string | null;
+  label: string;
+  photo_count: number;
+}

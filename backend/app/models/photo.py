@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, LargeBinary, String, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, LargeBinary, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -12,6 +12,15 @@ class Photo(Base):
     __tablename__ = "photos"
     __table_args__ = (
         Index("ix_photos_event_status", "event_id", "processing_status"),
+        # Gallery indexes are created with DESC expressions in migration 004.
+        # Plain Index() here uses ASC but the names match — autogenerate will flag
+        # them as different, so keep postgresql_ops overrides if autogenerate is used.
+        Index("ix_photos_gallery_all_latest", "event_id", "created_at"),
+        Index("ix_photos_gallery_all_popular", "event_id", "download_count"),
+        Index("ix_photos_gallery_all_choice", "event_id", "is_photographer_choice", "created_at"),
+        Index("ix_photos_gallery_alb_latest", "event_id", "album_id", "created_at"),
+        Index("ix_photos_gallery_alb_popular", "event_id", "album_id", "download_count"),
+        Index("ix_photos_gallery_alb_choice", "event_id", "album_id", "is_photographer_choice", "created_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -30,6 +39,9 @@ class Photo(Base):
     processing_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     processing_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    download_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_photographer_choice: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    thumbnail_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
