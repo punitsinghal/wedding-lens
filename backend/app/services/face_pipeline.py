@@ -1,7 +1,9 @@
 """Face detection + embedding pipeline using InsightFace/ArcFace."""
+import io
 import logging
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 import numpy as np
 from sqlalchemy import select, update
@@ -93,6 +95,26 @@ async def process_photo(photo_id: uuid.UUID, event_id: uuid.UUID) -> None:
     await _run_pipeline(photo_id, event_id)
 
 
+def _generate_thumbnail(image_bytes: bytes, photo_id: uuid.UUID, event_id: uuid.UUID) -> str:
+    """Generate a 600px-wide WebP thumbnail. Returns SSD-relative path."""
+    from PIL import Image
+
+    img = Image.open(io.BytesIO(image_bytes))
+    # Convert to RGB if needed (e.g. RGBA PNG)
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+    w, h = img.size
+    new_w = 600
+    new_h = int(h * new_w / w)
+    img = img.resize((new_w, new_h), Image.LANCZOS)
+
+    rel_path = f"events/{event_id}/thumbs/{photo_id}.webp"
+    abs_path = Path(settings.STORAGE_PATH) / rel_path
+    abs_path.parent.mkdir(parents=True, exist_ok=True)
+    img.save(abs_path, "WEBP", quality=85)
+    return rel_path
+
+
 async def _run_pipeline(photo_id: uuid.UUID, event_id: uuid.UUID) -> None:
     """Execute detection, embedding, and storage. Handles errors → failed/error status."""
     from app.services.qdrant import ensure_collection, upsert_face_vectors
@@ -109,12 +131,22 @@ async def _run_pipeline(photo_id: uuid.UUID, event_id: uuid.UUID) -> None:
 
     try:
         # Read image bytes from storage
-        from pathlib import Path
-
         image_path = Path(settings.STORAGE_PATH) / storage_path
         image_bytes = image_path.read_bytes()
 
         faces = _detect_faces(image_bytes)
+
+        # Generate thumbnail (failure must not block face processing)
+        thumb_path: str | None = None
+        try:
+            thumb_path = _generate_thumbnail(image_bytes, photo_id, event_id)
+        except Exception as thumb_exc:
+            logger.warning(
+                '{"event": "thumbnail_error", "photo_id": "%s", "exc_type": "%s", "detail": "%s"}',
+                photo_id,
+                type(thumb_exc).__name__,
+                str(thumb_exc),
+            )
 
         async with AsyncSessionLocal() as db:
             if not faces:
@@ -122,7 +154,7 @@ async def _run_pipeline(photo_id: uuid.UUID, event_id: uuid.UUID) -> None:
                 await db.execute(
                     update(Photo)
                     .where(Photo.id == photo_id)
-                    .values(face_count=0, processing_status="complete")
+                    .values(face_count=0, processing_status="complete", thumbnail_path=thumb_path)
                 )
                 await db.commit()
                 logger.info(
@@ -174,7 +206,7 @@ async def _run_pipeline(photo_id: uuid.UUID, event_id: uuid.UUID) -> None:
             await db.execute(
                 update(Photo)
                 .where(Photo.id == photo_id)
-                .values(face_count=len(faces), processing_status="complete")
+                .values(face_count=len(faces), processing_status="complete", thumbnail_path=thumb_path)
             )
             await db.commit()
 

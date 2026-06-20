@@ -13,6 +13,8 @@ import type {
   AlbumCreateRequest,
   AlbumUpdateRequest,
   AdminEventsResponse,
+  AlbumTab,
+  GalleryListResponse,
 } from '@/types/api';
 
 function baseUrl(): string {
@@ -254,6 +256,41 @@ export async function guestAuth(eventId: string, code: string): Promise<GuestTok
     method: 'POST',
     body: { code },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Gallery — guest-authenticated endpoints
+// ---------------------------------------------------------------------------
+
+export async function guestFetchBlob(eventId: string, path: string): Promise<Blob> {
+  const token = getGuestToken(eventId);
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const response = await fetch(`${baseUrl()}${path}`, { headers });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const refreshed = response.headers.get('X-Guest-Token');
+  if (refreshed) setGuestToken(eventId, refreshed);
+  return response.blob();
+}
+
+export async function getGalleryAlbums(eventId: string): Promise<AlbumTab[]> {
+  return guestApiFetch<AlbumTab[]>(eventId, `/api/v1/events/${eventId}/gallery/albums`);
+}
+
+export async function getGalleryPhotos(
+  eventId: string,
+  params: { album?: string; sort?: string; limit?: number; offset?: number }
+): Promise<GalleryListResponse> {
+  const qs = new URLSearchParams();
+  if (params.album != null) qs.set('album', params.album);
+  if (params.sort != null) qs.set('sort', params.sort);
+  if (params.limit != null) qs.set('limit', String(params.limit));
+  if (params.offset != null) qs.set('offset', String(params.offset));
+  const query = qs.toString() ? `?${qs.toString()}` : '';
+  return guestApiFetch<GalleryListResponse>(
+    eventId,
+    `/api/v1/events/${eventId}/gallery${query}`
+  );
 }
 
 // ---------------------------------------------------------------------------
