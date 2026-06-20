@@ -160,3 +160,32 @@ export interface AlbumTab {
   label: string;
   photo_count: number;
 }
+
+// ---------------------------------------------------------------------------
+// Photos — owner-only types
+// ---------------------------------------------------------------------------
+
+export interface Photo {
+  id: string;
+  event_id: string;
+  album_id: string | null;
+  filename: string;
+  processing_status: string;
+  thumbnail_url: string | null;
+  created_at: string;
+}
+
+export interface PhotoListResponse {
+  items: Photo[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface PhotoUploadResponse {
+  id: string;
+  event_id: string;
+  album_id: string | null;
+  filename: string;
+  processing_status: string;
+}
