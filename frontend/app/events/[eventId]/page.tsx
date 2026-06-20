@@ -205,7 +205,13 @@ export default function EventDetailPage() {
       </div>
 
       {/* Quick links */}
-      <div className="flex gap-4 mb-6 text-sm">
+      <div className="flex gap-4 mb-6 text-sm flex-wrap">
+        <Link
+          href={`/events/${eventId}/photos`}
+          className="text-blue-600 hover:underline"
+        >
+          Manage Photos
+        </Link>
         <Link
           href={`/events/${eventId}/albums`}
           className="text-blue-600 hover:underline"

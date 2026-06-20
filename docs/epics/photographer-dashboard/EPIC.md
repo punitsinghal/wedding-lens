@@ -11,10 +11,11 @@ Provide photographers with a dedicated dashboard to upload photos via multiple m
 1. Photographers can upload photos via: drag-and-drop, folder upload, sync from Google Drive, sync from Google Photos.
 2. Dashboard shows real-time upload and processing progress: total photos, processed count, and in-progress count.
 3. Photographers can create, rename, and organise albums within an event.
-4. Photographers can flag specific photos as "Photographer Choice" for surfacing in the guest gallery.
-5. Photographers can be assigned to one or more events by the event owner (bride/groom).
-6. Upload resumes automatically after a network interruption (chunked upload with resume support).
-7. Face processing is triggered automatically after upload completes.
+4. Photographers can assign photos to an album at upload time and reassign them to a different album (or no album) afterwards via the photo management page.
+5. Photographers can flag specific photos as "Photographer Choice" for surfacing in the guest gallery.
+6. Photographers can be assigned to one or more events by the event owner (bride/groom).
+7. Upload resumes automatically after a network interruption (chunked upload with resume support).
+8. Face processing is triggered automatically after upload completes.
 
 ## User Stories
 - As a photographer, I want to drag-and-drop an entire folder of photos onto the upload page, so that I can submit thousands of images without clicking individual files.

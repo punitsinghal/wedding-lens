@@ -15,6 +15,9 @@ import type {
   AdminEventsResponse,
   AlbumTab,
   GalleryListResponse,
+  Photo,
+  PhotoListResponse,
+  PhotoUploadResponse,
 } from '@/types/api';
 
 function baseUrl(): string {
@@ -307,4 +310,67 @@ export async function enableGuestAccess(eventId: string): Promise<{ detail: stri
   return apiFetch<{ detail: string }>(`/api/v1/events/${eventId}/enable-guest-access`, {
     method: 'POST',
   });
+}
+
+// ---------------------------------------------------------------------------
+// Photos — owner-only endpoints
+// ---------------------------------------------------------------------------
+
+export async function uploadPhoto(
+  eventId: string,
+  file: File,
+  albumId?: string | null
+): Promise<PhotoUploadResponse> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append('file', file);
+  if (albumId) formData.append('album_id', albumId);
+
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const response = await fetch(`${baseUrl()}/api/v1/events/${eventId}/photos`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    let errorBody: unknown;
+    try { errorBody = await response.json(); } catch { errorBody = { detail: response.statusText }; }
+    throw errorBody;
+  }
+
+  return response.json() as Promise<PhotoUploadResponse>;
+}
+
+export async function getPhotos(
+  eventId: string,
+  params: { limit?: number; offset?: number } = {}
+): Promise<PhotoListResponse> {
+  const qs = new URLSearchParams();
+  if (params.limit != null) qs.set('limit', String(params.limit));
+  if (params.offset != null) qs.set('offset', String(params.offset));
+  const query = qs.toString() ? `?${qs.toString()}` : '';
+  return apiFetch<PhotoListResponse>(`/api/v1/events/${eventId}/photos${query}`);
+}
+
+export async function updatePhotoAlbum(
+  eventId: string,
+  photoId: string,
+  albumId: string | null
+): Promise<Photo> {
+  return apiFetch<Photo>(`/api/v1/events/${eventId}/photos/${photoId}/album`, {
+    method: 'PATCH',
+    body: { album_id: albumId },
+  });
+}
+
+export async function ownerFetchBlob(path: string): Promise<Blob> {
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const response = await fetch(`${baseUrl()}${path}`, { headers });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.blob();
 }
