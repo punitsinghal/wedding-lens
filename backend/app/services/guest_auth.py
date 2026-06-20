@@ -6,7 +6,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from jose import JWTError, jwt
+from jose import ExpiredSignatureError, JWTError, jwt
 
 from app.config import settings
 
@@ -95,3 +95,29 @@ class GuestRateLimiter:
 
 # Module-level singleton shared by the guest_auth router
 rate_limiter = GuestRateLimiter()
+
+
+def create_share_token(photo_id: str, event_id: str) -> str:
+    now = datetime.now(timezone.utc)
+    payload = {
+        "type": "share",
+        "sub": event_id,
+        "photo_id": photo_id,
+        "exp": now + timedelta(hours=72),
+        "iat": now,
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def decode_share_token(token: str) -> dict:
+    """Decode and validate a share JWT. Raises HTTPException on failure."""
+    from fastapi import HTTPException
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=410, detail="link_expired")
+    except JWTError:
+        raise HTTPException(status_code=403, detail="invalid_share_token")
+    if payload.get("type") != "share":
+        raise HTTPException(status_code=403, detail="invalid_share_token")
+    return payload

@@ -192,3 +192,23 @@ export interface PhotoUploadResponse {
   filename: string;
   processing_status: string;
 }
+
+// Photo Actions
+export interface FavouritePhoto {
+  photo_id: string;
+  thumbnail_url: string | null;
+}
+
+export interface FavouritesResponse {
+  photos: FavouritePhoto[];
+}
+
+export interface ShareLinkResponse {
+  share_url: string;
+  expires_at: string;
+}
+
+export interface ShareTokenResponse {
+  photo_id: string;
+  event_id: string;
+}
