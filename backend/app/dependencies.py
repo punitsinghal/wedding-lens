@@ -70,10 +70,10 @@ async def get_validated_guest_event(
     event_id: uuid.UUID,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),
-) -> tuple[EventModel, str]:
+) -> tuple[EventModel, str, str]:
     """
     Validate a guest JWT for a specific event.
-    Returns (event, refreshed_token).
+    Returns (event, refreshed_token, sid).
     The caller should add X-Guest-Token: <refreshed_token> to the response.
     """
     from app.services.guest_auth import decode_guest_token, create_guest_token
@@ -115,5 +115,6 @@ async def get_validated_guest_event(
                 detail="Session invalidated by access revocation",
             )
 
-    refreshed = create_guest_token(str(event_id), ttl=settings.GUEST_SESSION_IDLE_TTL_SECONDS)
-    return event, refreshed
+    sid = claims.get("sid", str(uuid.uuid4()))
+    refreshed = create_guest_token(str(event_id), ttl=settings.GUEST_SESSION_IDLE_TTL_SECONDS, sid=sid)
+    return event, refreshed, sid
