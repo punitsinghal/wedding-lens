@@ -42,7 +42,7 @@ function GalleryContent() {
   useEffect(() => {
     getEventBySlug(slug)
       .then((ev) => {
-        if (!isGuestAuthenticated(ev.id)) {
+        if (ev.access_mode !== 'public' && !isGuestAuthenticated(ev.id)) {
           router.replace(`/g/${slug}`);
           setIsChecking(false);
           return;
