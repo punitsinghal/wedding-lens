@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { getAlbum, getPhotos, updateAlbum, fetchAuthedBlob } from '@/lib/api';
+import { getAlbum, getEvent, getPhotos, updateAlbum, fetchAuthedBlob } from '@/lib/api';
 import { isAuthenticated } from '@/lib/auth';
-import type { Album, Photo } from '@/types/api';
+import type { Album, Event, Photo } from '@/types/api';
 
 export default function AlbumDetailPage() {
   const router = useRouter();
@@ -13,6 +13,7 @@ export default function AlbumDetailPage() {
   const eventId = params.eventId as string;
   const albumId = params.albumId as string;
 
+  const [event, setEvent] = useState<Event | null>(null);
   const [album, setAlbum] = useState<Album | null>(null);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [blobUrls, setBlobUrls] = useState<Record<string, string>>({});
@@ -38,10 +39,12 @@ export default function AlbumDetailPage() {
     setIsLoading(true);
     setError('');
     try {
-      const [alb, photoList] = await Promise.all([
+      const [evt, alb, photoList] = await Promise.all([
+        getEvent(eventId),
         getAlbum(eventId, albumId),
         getPhotos(eventId, { albumId }),
       ]);
+      setEvent(evt);
       setAlbum(alb);
       setPhotos(photoList.items);
 
@@ -116,7 +119,7 @@ export default function AlbumDetailPage() {
         </Link>
         <span className="text-gray-300">/</span>
         <Link href={`/events/${eventId}`} className="text-gray-500 hover:text-gray-700 truncate">
-          {eventId}
+          {event?.name ?? eventId}
         </Link>
         <span className="text-gray-300">/</span>
         <Link href={`/events/${eventId}/albums`} className="text-gray-500 hover:text-gray-700">
