@@ -50,7 +50,7 @@ async def list_gallery(
     guest_event: tuple = Depends(get_validated_guest_event),
     db: AsyncSession = Depends(get_db),
 ) -> GalleryListResponse:
-    _event, refreshed_token = guest_event
+    _event, refreshed_token, _sid = guest_event
     response.headers["X-Guest-Token"] = refreshed_token
 
     photos, total = await gallery_service.list_photos(
@@ -71,7 +71,7 @@ async def list_gallery_albums(
     guest_event: tuple = Depends(get_validated_guest_event),
     db: AsyncSession = Depends(get_db),
 ) -> list[AlbumTabOut]:
-    _event, refreshed_token = guest_event
+    _event, refreshed_token, _sid = guest_event
     response.headers["X-Guest-Token"] = refreshed_token
 
     tabs = await gallery_service.list_album_tabs(db, event_id)
@@ -86,7 +86,7 @@ async def get_thumbnail(
     guest_event: tuple = Depends(get_validated_guest_event),
     db: AsyncSession = Depends(get_db),
 ) -> FileResponse:
-    _event, refreshed_token = guest_event
+    _event, refreshed_token, _sid = guest_event
     response.headers["X-Guest-Token"] = refreshed_token
 
     result = await db.execute(
@@ -125,7 +125,7 @@ async def download_photo(
     guest_event: tuple = Depends(get_validated_guest_event),
     db: AsyncSession = Depends(get_db),
 ) -> FileResponse:
-    _event, refreshed_token = guest_event
+    _event, refreshed_token, _sid = guest_event
     response.headers["X-Guest-Token"] = refreshed_token
 
     result = await db.execute(

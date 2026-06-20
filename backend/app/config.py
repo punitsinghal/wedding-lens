@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     GUEST_SESSION_IDLE_TTL_SECONDS: int = 86400   # 24 hours
     GUEST_LOCKOUT_ATTEMPTS: int = 3
     GUEST_LOCKOUT_DURATION_SECONDS: int = 900     # 15 minutes
+    FACE_SEARCH_SCORE_THRESHOLD: float = 0.4
+    FACE_SEARCH_RESULT_CAP: int = 50
+    FACE_SEARCH_CACHE_TTL_SECONDS: int = 3600
 
 
 settings = Settings()

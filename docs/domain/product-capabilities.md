@@ -75,3 +75,28 @@ Last updated: 2026-06-20
 - `components/gallery/PhotoThumbnail.tsx`: fetches thumbnail as authenticated blob URL; gray pulse placeholder while loading or when pipeline pending; gold ✦ badge on Photographer's Choice photos
 - `components/gallery/Lightbox.tsx`: full-screen overlay; loads thumbnail blob for display; Prev/Next navigation with automatic next-batch fetch at list boundary; keyboard (Escape/Arrow keys); Download button (calls `/download`, triggers browser save); scroll position restored on close
 - `lib/api.ts` — `guestFetchBlob`: binary fetch helper for thumbnail/download endpoints; `getGalleryAlbums` / `getGalleryPhotos`: typed gallery API calls
+
+---
+
+## Face Recognition Search (Epic 5)
+
+**Status:** Shipped — `feature/face-recognition-search`
+
+### What was added
+
+**Backend (`backend/`):**
+- `POST /api/v1/events/{id}/search` — multipart selfie upload; extracts ArcFace embedding with InsightFace, vector-searches Qdrant, returns ranked photo list; 20 MB limit enforced before any processing; 401 on invalid/expired guest JWT
+- Dominant-face selection: when multiple faces detected, proceeds with the highest-confidence face if its `det_score` gap over the next is ≥ 0.10; otherwise returns `422 no_dominant_face`; zero faces returns `422 no_face_detected`
+- Selfie deletion guarantee: `selfie_bytes` copied into memory, `UploadFile` closed (temp file deleted) before extraction; `del selfie_bytes` called in `try/finally` so no bytes survive an extraction error
+- `app/services/face_search.py` — orchestrates embedding extraction, dominant-face selection, Qdrant search, photo dedup (highest score per photo), DB photo fetch, thumbnail URL construction
+- `app/services/search_cache.py` — in-memory `SearchCache` singleton keyed by `(sid, sha256(selfie_bytes))`; 1-hour TTL with lazy eviction; `X-Search-Cache: hit|miss` response header
+- `app/services/qdrant.py` — added `search_faces(event_id, embedding, score_threshold, limit)` for vector similarity search
+- Guest JWT gains stable `sid` claim (UUID) generated at login and threaded unchanged through all token refreshes; used as the per-session cache scope
+- `app/config.py` — three new deployment-level config values: `FACE_SEARCH_SCORE_THRESHOLD` (0.4), `FACE_SEARCH_RESULT_CAP` (50), `FACE_SEARCH_CACHE_TTL_SECONDS` (3600)
+- `app/services/face_pipeline.py` — `_detect_faces` now returns `det_score` alongside `bbox` and `embedding`
+
+**Frontend (`frontend/`):**
+- `app/events/[eventId]/search/page.tsx` — search page; state machine `idle → uploading → results | error`; clears stale results immediately on new upload
+- `components/search/SelfieUpload.tsx` — file input (`image/jpeg,image/png`), `capture="user"` for mobile camera; client-side 20 MB pre-check; loading spinner during upload; raw `fetch` multipart POST; refreshes guest token from `X-Guest-Token` header
+- `components/search/SearchResults.tsx` — ranked photo grid (API order = match rank); authenticated blob URL thumbnails via `guestFetchBlob`; "no photos found" empty state; "Try another photo" button
+- `components/search/SearchError.tsx` — maps `no_face_detected`, `no_dominant_face`, `file_too_large`, and unknown codes to user-friendly messages

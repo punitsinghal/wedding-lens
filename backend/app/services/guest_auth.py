@@ -17,14 +17,16 @@ def generate_otp_code() -> str:
     return "".join(random.choices(alphabet, k=6))  # noqa: S311
 
 
-def create_guest_token(event_id: str, ttl: int | None = None) -> str:
+def create_guest_token(event_id: str, ttl: int | None = None, sid: str | None = None) -> str:
     if ttl is None:
         ttl = settings.GUEST_SESSION_IDLE_TTL_SECONDS
+    sid = sid or str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     expire = now + timedelta(seconds=ttl)
     payload = {
         "sub": event_id,
         "type": "guest",
+        "sid": sid,
         "jti": str(uuid.uuid4()),
         "iat": now,
         "exp": expire,

@@ -57,6 +57,7 @@ def _detect_faces(image_bytes: bytes) -> list[dict]:
         results.append({
             "bbox": [int(x1), int(y1), int(w), int(h)],
             "embedding": face.normed_embedding,  # float32[512]
+            "det_score": float(face.det_score),
         })
     return results
 

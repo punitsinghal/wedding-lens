@@ -4,6 +4,7 @@ import uuid
 from typing import Any
 
 from qdrant_client import QdrantClient
+from qdrant_client.http.exceptions import UnexpectedResponse
 from qdrant_client.http.models import Distance, PointStruct, VectorParams
 
 from app.config import settings
@@ -62,6 +63,28 @@ def upsert_face_vectors(
         name,
         len(qdrant_points),
     )
+
+
+def search_faces(
+    event_id: uuid.UUID,
+    embedding: list[float],
+    score_threshold: float,
+    limit: int,
+) -> list[dict]:
+    """Vector similarity search. Returns [{"photo_id": str, "score": float}] desc by score."""
+    client = get_qdrant_client()
+    name = collection_name(event_id)
+    try:
+        hits = client.search(
+            collection_name=name,
+            query_vector=embedding,
+            limit=limit,
+            score_threshold=score_threshold,
+        )
+    except UnexpectedResponse:
+        # Collection doesn't exist yet (no photos uploaded for this event)
+        return []
+    return [{"photo_id": hit.payload["photo_id"], "score": hit.score} for hit in hits]
 
 
 def delete_collection(event_id: uuid.UUID) -> None:
