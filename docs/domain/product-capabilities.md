@@ -1,6 +1,6 @@
 # Product Capabilities
 
-Last updated: 2026-06-20
+Last updated: 2026-06-21
 
 ---
 
@@ -100,3 +100,17 @@ Last updated: 2026-06-20
 - `components/search/SelfieUpload.tsx` — file input (`image/jpeg,image/png`), `capture="user"` for mobile camera; client-side 20 MB pre-check; loading spinner during upload; raw `fetch` multipart POST; refreshes guest token from `X-Guest-Token` header
 - `components/search/SearchResults.tsx` — ranked photo grid (API order = match rank); authenticated blob URL thumbnails via `guestFetchBlob`; "no photos found" empty state; "Try another photo" button
 - `components/search/SearchError.tsx` — maps `no_face_detected`, `no_dominant_face`, `file_too_large`, and unknown codes to user-friendly messages
+
+---
+
+## Gallery Guest Actions
+
+**Status:** Shipped — `feature/gallery-guest-actions`
+
+### What was added
+
+**Frontend (`frontend/`):**
+- `components/gallery/PhotoThumbnail.tsx`: restructured to `<div>` + inner `<button>` to support an action overlay; FavouriteToggle (heart) and ShareButton (copy link) appear as a bottom-right overlay — always visible on mobile, hover-visible on desktop; Photographer's Choice badge moved to outer div with `pointer-events-none`
+- `components/gallery/Lightbox.tsx`: FavouriteToggle and ShareButton added to top bar alongside the existing Download button; isFavourited/onToggleFavourite props thread through from the gallery page
+- `app/g/[slug]/gallery/page.tsx`: wired `useFavourites` hook; gallery header extended with "Find my photos" blue pill link (→ search page) and "Favourites" link with live count badge; isFavourited + toggle callbacks passed to every PhotoThumbnail and the Lightbox
+- `app/g/[slug]/search/page.tsx`: new guest face search page; auth guard (redirects unauthenticated guests to event entry); state machine renders SelfieUpload → SearchResults | SearchError; token refresh persisted to both localStorage and local state; Suspense wrapper matching gallery pattern
