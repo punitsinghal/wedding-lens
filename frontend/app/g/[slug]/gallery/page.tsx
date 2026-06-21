@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { getEventBySlug, getGalleryAlbums, getGalleryPhotos } from '@/lib/api';
-import { isGuestAuthenticated } from '@/lib/auth';
+import { getEventBySlug, getGalleryAlbums, getGalleryPhotos, guestAuth } from '@/lib/api';
+import { isGuestAuthenticated, setGuestToken } from '@/lib/auth';
 import { useFavourites } from '@/hooks/useFavourites';
 import AlbumFilterBar from '@/components/gallery/AlbumFilterBar';
 import SortSelector from '@/components/gallery/SortSelector';
@@ -44,68 +44,88 @@ function GalleryContent() {
   // Auth check + initial state from URL
   // ---------------------------------------------------------------------------
   useEffect(() => {
-    getEventBySlug(slug)
-      .then((ev) => {
-        if (ev.access_mode !== 'public' && !isGuestAuthenticated(ev.id)) {
-          router.replace(`/g/${slug}`);
-          setIsChecking(false);
-          return;
-        }
-        setEvent(ev);
-
-        // Parse URL params
-        const urlAlbum = searchParams.get('album');
-        const urlSort = searchParams.get('sort');
-        const urlLimit = parseInt(searchParams.get('limit') ?? '0', 10);
-
-        const initialAlbum = urlAlbum ?? null;
-        const initialSort: SortValue = isValidSort(urlSort) ? urlSort : 'latest';
-        const initialLimit = urlLimit > 0 ? urlLimit : PAGE_SIZE;
-
-        setActiveAlbum(initialAlbum);
-        setSort(initialSort);
-
-        // Load tabs and initial batch of photos
-        const albumsPromise = getGalleryAlbums(ev.id);
-
-        // Fetch all restore batches in parallel (faster than sequential for 2-3 batches;
-        // the backend handles concurrent requests fine and the total volume is bounded
-        // by the URL limit which guests set themselves).
-        const batchCount = Math.ceil(initialLimit / PAGE_SIZE);
-        const batches = Array.from({ length: batchCount }, (_, i) =>
-          getGalleryPhotos(ev.id, {
-            album: initialAlbum ?? undefined,
-            sort: initialSort,
-            limit: PAGE_SIZE,
-            offset: i * PAGE_SIZE,
-          })
-        );
-
-        setLoading(true);
-        Promise.all([albumsPromise, Promise.all(batches)] as const)
-          .then(([albumsResult, photoResults]) => {
-            setTabs(albumsResult);
-            const allPhotos: GalleryPhoto[] = [];
-            let finalTotal = 0;
-            for (const r of photoResults) {
-              allPhotos.push(...r.photos);
-              finalTotal = r.total;
-            }
-            setPhotos(allPhotos);
-            setTotal(finalTotal);
-          })
-          .catch(() => {
-            // If fetch fails, still show the page — photos will just be empty
-          })
-          .finally(() => {
-            setLoading(false);
-            setIsChecking(false);
-          });
-      })
-      .catch(() => {
+    async function init() {
+      let ev: EventPublicOut;
+      try {
+        ev = await getEventBySlug(slug);
+      } catch {
         router.replace(`/g/${slug}`);
         setIsChecking(false);
-      });
+        return;
+      }
+
+      if (ev.access_mode !== 'public' && !isGuestAuthenticated(ev.id)) {
+        router.replace(`/g/${slug}`);
+        setIsChecking(false);
+        return;
+      }
+
+      // Public events skip the entry-page auth flow, so auto-issue a guest token
+      // here if one isn't already stored — the gallery API requires a valid JWT
+      // regardless of access_mode.
+      if (ev.access_mode === 'public' && !isGuestAuthenticated(ev.id)) {
+        try {
+          const { access_token } = await guestAuth(ev.id, '');
+          setGuestToken(ev.id, access_token);
+        } catch {
+          // If token issuance fails, continue — API calls will fail and show empty gallery
+        }
+      }
+
+      setEvent(ev);
+
+      // Parse URL params
+      const urlAlbum = searchParams.get('album');
+      const urlSort = searchParams.get('sort');
+      const urlLimit = parseInt(searchParams.get('limit') ?? '0', 10);
+
+      const initialAlbum = urlAlbum ?? null;
+      const initialSort: SortValue = isValidSort(urlSort) ? urlSort : 'latest';
+      const initialLimit = urlLimit > 0 ? urlLimit : PAGE_SIZE;
+
+      setActiveAlbum(initialAlbum);
+      setSort(initialSort);
+
+      // Load tabs and initial batch of photos
+      const albumsPromise = getGalleryAlbums(ev.id);
+
+      // Fetch all restore batches in parallel (faster than sequential for 2-3 batches;
+      // the backend handles concurrent requests fine and the total volume is bounded
+      // by the URL limit which guests set themselves).
+      const batchCount = Math.ceil(initialLimit / PAGE_SIZE);
+      const batches = Array.from({ length: batchCount }, (_, i) =>
+        getGalleryPhotos(ev.id, {
+          album: initialAlbum ?? undefined,
+          sort: initialSort,
+          limit: PAGE_SIZE,
+          offset: i * PAGE_SIZE,
+        })
+      );
+
+      setLoading(true);
+      try {
+        const [albumsResult, photoResults] = await Promise.all([
+          albumsPromise,
+          Promise.all(batches),
+        ]);
+        setTabs(albumsResult);
+        const allPhotos: GalleryPhoto[] = [];
+        let finalTotal = 0;
+        for (const r of photoResults) {
+          allPhotos.push(...r.photos);
+          finalTotal = r.total;
+        }
+        setPhotos(allPhotos);
+        setTotal(finalTotal);
+      } catch {
+        // If fetch fails, still show the page — photos will just be empty
+      } finally {
+        setLoading(false);
+        setIsChecking(false);
+      }
+    }
+
+    init();
     // Only run on mount — searchParams is stable via Next.js
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, router]);
