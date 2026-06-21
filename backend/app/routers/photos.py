@@ -1,4 +1,6 @@
 """Photo upload and face-processing status endpoints."""
+from __future__ import annotations
+
 import logging
 import mimetypes
 import uuid
@@ -6,15 +8,16 @@ from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import func, select
+from pydantic import BaseModel
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.dependencies import get_current_user, get_db
+from app.dependencies import get_current_user, get_db, get_event_with_photographer_access
 from app.models.album import Album
 from app.models.event import Event
-from app.models.photo import Photo
+from app.models.photo import Photo, PhotoAlbum
 from app.models.user import User
 from app.schemas.photo import (
     FaceProcessingStatusResponse,
@@ -33,18 +36,28 @@ ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png"}
 MAX_FILE_SIZE = 25 * 1024 * 1024  # 25 MB
 
 
-async def _get_owned_event(
-    event_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> Event:
-    result = await db.execute(
-        select(Event).where(Event.id == event_id, Event.owner_id == current_user.id)
-    )
-    event = result.scalar_one_or_none()
-    if event is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
-    return event
+# ---------------------------------------------------------------------------
+# Additional request schemas
+# ---------------------------------------------------------------------------
+
+
+class PhotoAlbumsPut(BaseModel):
+    album_ids: list[uuid.UUID] = []
+
+
+class PhotoAlbumsOut(BaseModel):
+    photo_id: uuid.UUID
+    album_ids: list[uuid.UUID]
+
+
+class ReprocessOut(BaseModel):
+    photo_id: uuid.UUID
+    status: str
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 
 def _photo_to_out(photo: Photo, event_id: uuid.UUID) -> PhotoOut:
@@ -62,13 +75,18 @@ def _photo_to_out(photo: Photo, event_id: uuid.UUID) -> PhotoOut:
     )
 
 
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+
 @router.post("", response_model=PhotoUploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_photo(
     event_id: uuid.UUID,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     album_id: uuid.UUID | None = Form(None),
-    event: Event = Depends(_get_owned_event),
+    event: Event = Depends(get_event_with_photographer_access),
     db: AsyncSession = Depends(get_db),
 ) -> PhotoUploadResponse:
     photo_id = uuid.uuid4()
@@ -102,8 +120,10 @@ async def upload_photo(
         processing_status="pending",
     )
     db.add(photo)
+    if album_id is not None:
+        db.add(PhotoAlbum(photo_id=photo_id, album_id=album_id))
     try:
-        await db.flush()  # get photo into DB before BackgroundTask runs
+        await db.commit()
     except IntegrityError:
         await db.rollback()
         raise HTTPException(status_code=422, detail="Invalid album_id")
@@ -125,7 +145,7 @@ async def list_photos(
     limit: int = Query(default=50, le=100),
     offset: int = 0,
     album_id: uuid.UUID | None = Query(None),
-    event: Event = Depends(_get_owned_event),
+    event: Event = Depends(get_event_with_photographer_access),
     db: AsyncSession = Depends(get_db),
 ) -> PhotoListResponse:
     count_q = select(func.count(Photo.id)).where(Photo.event_id == event_id)
@@ -159,7 +179,7 @@ async def update_photo_album(
     event_id: uuid.UUID,
     photo_id: uuid.UUID,
     body: PhotoAlbumPatch,
-    event: Event = Depends(_get_owned_event),
+    event: Event = Depends(get_event_with_photographer_access),
     db: AsyncSession = Depends(get_db),
 ) -> PhotoOut:
     result = await db.execute(
@@ -177,6 +197,12 @@ async def update_photo_album(
             raise HTTPException(status_code=422, detail="Album does not belong to this event")
 
     photo.album_id = body.album_id
+
+    # Sync photo_albums join table
+    await db.execute(delete(PhotoAlbum).where(PhotoAlbum.photo_id == photo_id))
+    if body.album_id is not None:
+        db.add(PhotoAlbum(photo_id=photo_id, album_id=body.album_id))
+
     try:
         await db.commit()
     except IntegrityError:
@@ -187,11 +213,94 @@ async def update_photo_album(
     return _photo_to_out(photo, event_id)
 
 
+@router.put("/{photo_id}/albums", response_model=PhotoAlbumsOut)
+async def set_photo_albums(
+    event_id: uuid.UUID,
+    photo_id: uuid.UUID,
+    body: PhotoAlbumsPut,
+    event: Event = Depends(get_event_with_photographer_access),
+    db: AsyncSession = Depends(get_db),
+) -> PhotoAlbumsOut:
+    """Replace all album assignments for a photo (many-to-many)."""
+    result = await db.execute(
+        select(Photo).where(Photo.id == photo_id, Photo.event_id == event_id)
+    )
+    photo = result.scalar_one_or_none()
+    if photo is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found")
+
+    # Validate all album_ids belong to this event
+    if body.album_ids:
+        albums_result = await db.execute(
+            select(Album).where(
+                Album.id.in_(body.album_ids),
+                Album.event_id == event_id,
+            )
+        )
+        found_albums = {a.id for a in albums_result.scalars().all()}
+        missing = set(body.album_ids) - found_albums
+        if missing:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Album IDs do not belong to this event: {[str(a) for a in missing]}",
+            )
+
+    # Delete all existing photo_albums for this photo
+    await db.execute(delete(PhotoAlbum).where(PhotoAlbum.photo_id == photo_id))
+
+    # Insert new entries
+    for alb_id in body.album_ids:
+        db.add(PhotoAlbum(photo_id=photo_id, album_id=alb_id))
+
+    # Sync denormalized album_id (first album or None) for backward compat
+    photo.album_id = body.album_ids[0] if body.album_ids else None
+
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail="Invalid album assignment")
+
+    return PhotoAlbumsOut(photo_id=photo_id, album_ids=body.album_ids)
+
+
+@router.post("/{photo_id}/reprocess", response_model=ReprocessOut, status_code=status.HTTP_202_ACCEPTED)
+async def reprocess_photo(
+    event_id: uuid.UUID,
+    photo_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    event: Event = Depends(get_event_with_photographer_access),
+    db: AsyncSession = Depends(get_db),
+) -> ReprocessOut:
+    """Re-enqueue face processing for a failed photo."""
+    result = await db.execute(
+        select(Photo).where(Photo.id == photo_id, Photo.event_id == event_id)
+    )
+    photo = result.scalar_one_or_none()
+    if photo is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found")
+
+    if photo.processing_status not in ("failed", "error"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Photo is not in a failed state (current: {photo.processing_status})",
+        )
+
+    photo.processing_status = "pending"
+    photo.face_error = None
+    photo.processing_attempts = 0
+    await db.commit()
+
+    background_tasks.add_task(process_photo, photo_id, event_id)
+
+    return ReprocessOut(photo_id=photo_id, status="pending")
+
+
 @router.get("/{photo_id}/preview")
 async def get_photo_preview(
     event_id: uuid.UUID,
     photo_id: uuid.UUID,
-    event: Event = Depends(_get_owned_event),
+    event: Event = Depends(get_event_with_photographer_access),
     db: AsyncSession = Depends(get_db),
 ) -> FileResponse:
     result = await db.execute(
@@ -218,7 +327,10 @@ async def get_photo_preview(
     )
 
 
+# ---------------------------------------------------------------------------
 # Separate router for the status endpoint (different URL prefix)
+# ---------------------------------------------------------------------------
+
 status_router = APIRouter(prefix="/api/v1/events", tags=["photos"])
 
 

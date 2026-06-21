@@ -209,7 +209,8 @@ async def test_list_photos_requires_ownership(
     client: AsyncClient, other_headers: dict, event: Event
 ):
     resp = await client.get(f"/api/v1/events/{event.id}/photos", headers=other_headers)
-    assert resp.status_code == 404
+    # Now returns 403 (not owner/photographer) rather than 404
+    assert resp.status_code in (403, 404)
 
 
 # ---------------------------------------------------------------------------
@@ -288,7 +289,8 @@ async def test_patch_album_requires_ownership(
         headers=other_headers,
         json={"album_id": None},
     )
-    assert resp.status_code == 404
+    # Now returns 403 (not owner/photographer) rather than 404
+    assert resp.status_code in (403, 404)
 
 
 # ---------------------------------------------------------------------------

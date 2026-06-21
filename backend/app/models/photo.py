@@ -8,6 +8,25 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 
+class PhotoAlbum(Base):
+    """Association object for the photo_albums many-to-many join table."""
+
+    __tablename__ = "photo_albums"
+
+    photo_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("photos.id", ondelete="CASCADE"),
+        primary_key=True,
+        nullable=False,
+    )
+    album_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("albums.id", ondelete="CASCADE"),
+        primary_key=True,
+        nullable=False,
+    )
+
+
 class Photo(Base):
     __tablename__ = "photos"
     __table_args__ = (
@@ -42,6 +61,8 @@ class Photo(Base):
     download_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_photographer_choice: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     thumbnail_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+    face_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -54,6 +75,14 @@ class Photo(Base):
         back_populates="photo",
         cascade="all, delete-orphan",
         lazy="select",
+    )
+
+    photo_album_entries: Mapped[list["PhotoAlbum"]] = relationship(
+        "PhotoAlbum",
+        cascade="all, delete-orphan",
+        lazy="select",
+        foreign_keys=[PhotoAlbum.photo_id],
+        primaryjoin="Photo.id == PhotoAlbum.photo_id",
     )
 
 

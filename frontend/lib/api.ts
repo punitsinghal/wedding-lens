@@ -2,6 +2,7 @@
 // All API calls go through this module — never call fetch directly from components
 
 import { getToken, getGuestToken, setGuestToken, clearGuestToken } from './auth';
+export { getToken as getAuthToken };
 import type {
   AuthResponse,
   Event,
@@ -488,6 +489,153 @@ export async function downloadPhoto(eventId: string, photoId: string): Promise<v
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+// ---------------------------------------------------------------------------
+// Chunked upload — photographer-only
+// ---------------------------------------------------------------------------
+
+export async function hashFile(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+type InitiateUploadResult =
+  | { type: 'new'; session_id: string; chunk_size_bytes: number; total_chunks: number }
+  | { type: 'duplicate'; photo_id: string }
+  | { type: 'resumable'; session_id: string; chunk_size_bytes: number; total_chunks: number; received_chunks: number[] };
+
+export async function initiateUpload(
+  eventId: string,
+  filename: string,
+  fileSizeBytes: number,
+  contentHash: string
+): Promise<InitiateUploadResult> {
+  const token = getToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const response = await fetch(`${baseUrl()}/api/v1/events/${eventId}/uploads`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ filename, file_size_bytes: fileSizeBytes, content_hash: contentHash }),
+  });
+
+  if (!response.ok) {
+    let errorBody: unknown;
+    try { errorBody = await response.json(); } catch { errorBody = { detail: response.statusText }; }
+    throw errorBody;
+  }
+
+  const data = await response.json() as Record<string, unknown>;
+
+  if (response.status === 200) {
+    if ('status' in data && data.status === 'duplicate') {
+      return { type: 'duplicate', photo_id: data.photo_id as string };
+    }
+    // resumable
+    return {
+      type: 'resumable',
+      session_id: data.session_id as string,
+      chunk_size_bytes: data.chunk_size_bytes as number,
+      total_chunks: data.total_chunks as number,
+      received_chunks: data.received_chunks as number[],
+    };
+  }
+
+  // 201 — new session
+  return {
+    type: 'new',
+    session_id: data.session_id as string,
+    chunk_size_bytes: data.chunk_size_bytes as number,
+    total_chunks: data.total_chunks as number,
+  };
+}
+
+export async function getUploadSession(
+  eventId: string,
+  sessionId: string
+): Promise<{ session_id: string; received_chunks: number[]; total_chunks: number; status: string }> {
+  return apiFetch(`/api/v1/events/${eventId}/uploads/${sessionId}`);
+}
+
+export async function uploadChunk(
+  eventId: string,
+  sessionId: string,
+  chunkIndex: number,
+  bytes: Uint8Array
+): Promise<void> {
+  const token = getToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/octet-stream' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const response = await fetch(
+    `${baseUrl()}/api/v1/events/${eventId}/uploads/${sessionId}/chunks/${chunkIndex}`,
+    { method: 'PUT', headers, body: bytes.buffer as ArrayBuffer }
+  );
+
+  if (!response.ok) {
+    let errorBody: unknown;
+    try { errorBody = await response.json(); } catch { errorBody = { detail: response.statusText }; }
+    throw errorBody;
+  }
+}
+
+export async function completeUpload(
+  eventId: string,
+  sessionId: string
+): Promise<{ photo_id: string }> {
+  return apiFetch(`/api/v1/events/${eventId}/uploads/${sessionId}/complete`, { method: 'POST' });
+}
+
+// SSE progress — caller must close the returned EventSource when done
+export function subscribeProgress(eventId: string, token: string): EventSource {
+  const url = `${baseUrl()}/api/v1/events/${eventId}/progress?token=${encodeURIComponent(token)}`;
+  return new EventSource(url);
+}
+
+export async function assignPhotoAlbums(
+  eventId: string,
+  photoId: string,
+  albumIds: string[]
+): Promise<void> {
+  return apiFetch(`/api/v1/events/${eventId}/photos/${photoId}/albums`, {
+    method: 'PUT',
+    body: { album_ids: albumIds },
+  });
+}
+
+export async function reprocessPhoto(eventId: string, photoId: string): Promise<void> {
+  return apiFetch(`/api/v1/events/${eventId}/photos/${photoId}/reprocess`, { method: 'POST' });
+}
+
+// ---------------------------------------------------------------------------
+// Photographer assignment
+// ---------------------------------------------------------------------------
+
+export async function assignPhotographer(
+  eventId: string,
+  email: string
+): Promise<{ photographer_id: string; email: string }> {
+  return apiFetch(`/api/v1/events/${eventId}/photographers`, {
+    method: 'POST',
+    body: { email },
+  });
+}
+
+export async function removePhotographer(
+  eventId: string,
+  photographerId: string
+): Promise<void> {
+  return apiFetch(`/api/v1/events/${eventId}/photographers/${photographerId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function getMyAssignedEvents(): Promise<{ events: Event[] }> {
+  return apiFetch('/api/v1/photographers/me/events');
 }
 
 export async function downloadFavouritesZip(eventId: string): Promise<void> {
