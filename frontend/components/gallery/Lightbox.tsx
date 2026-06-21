@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { guestFetchBlob } from '@/lib/api';
 import type { GalleryPhoto } from '@/types/api';
+import FavouriteToggle from '@/components/photo-actions/FavouriteToggle';
+import ShareButton from '@/components/photo-actions/ShareButton';
 
 interface LightboxProps {
   photos: GalleryPhoto[];
@@ -12,6 +14,8 @@ interface LightboxProps {
   onClose: () => void;
   onNavigate: (newIndex: number) => void;
   onFetchMore: () => Promise<void>;
+  isFavourited: boolean;
+  onToggleFavourite: () => void;
 }
 
 export default function Lightbox({
@@ -22,6 +26,8 @@ export default function Lightbox({
   onClose,
   onNavigate,
   onFetchMore,
+  isFavourited,
+  onToggleFavourite,
 }: LightboxProps) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -119,6 +125,8 @@ export default function Lightbox({
           {currentIndex + 1} / {total}
         </span>
         <div className="flex items-center gap-3">
+          <FavouriteToggle isFavourited={isFavourited} onToggle={onToggleFavourite} />
+          <ShareButton eventId={eventId} photoId={photo.id} />
           <button
             onClick={handleDownload}
             disabled={downloading}

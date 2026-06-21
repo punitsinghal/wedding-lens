@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { getEventBySlug, getGalleryAlbums, getGalleryPhotos } from '@/lib/api';
 import { isGuestAuthenticated } from '@/lib/auth';
+import { useFavourites } from '@/hooks/useFavourites';
 import AlbumFilterBar from '@/components/gallery/AlbumFilterBar';
 import SortSelector from '@/components/gallery/SortSelector';
 import PhotoThumbnail from '@/components/gallery/PhotoThumbnail';
@@ -35,6 +37,8 @@ function GalleryContent() {
   const [loading, setLoading] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const savedScrollY = useRef(0);
+
+  const { isFavourited, toggle: toggleFavourite, favouriteIds } = useFavourites(event?.id ?? '');
 
   // ---------------------------------------------------------------------------
   // Auth check + initial state from URL
@@ -214,11 +218,32 @@ function GalleryContent() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-4 py-4">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-xl font-bold text-gray-900">{event.name}</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {event.bride_name} &amp; {event.groom_name}
-          </p>
+        <div className="max-w-6xl mx-auto flex items-start justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">{event.name}</h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {event.bride_name} &amp; {event.groom_name}
+            </p>
+          </div>
+          <div className="flex gap-2 items-center">
+            <Link
+              href={`/g/${slug}/search`}
+              className="px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors"
+            >
+              Find my photos
+            </Link>
+            <Link
+              href={`/g/${slug}/favourites`}
+              className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-full hover:bg-gray-50 transition-colors"
+            >
+              Favourites
+              {favouriteIds.size > 0 && (
+                <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full ml-1">
+                  {favouriteIds.size}
+                </span>
+              )}
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -252,6 +277,8 @@ function GalleryContent() {
                 photo={photo}
                 eventId={event.id}
                 onClick={() => openLightbox(index)}
+                isFavourited={isFavourited(photo.id)}
+                onToggleFavourite={() => toggleFavourite(photo.id)}
               />
             ))}
             {/* Skeleton placeholders while loading */}
@@ -289,6 +316,8 @@ function GalleryContent() {
           onClose={closeLightbox}
           onNavigate={handleLightboxNavigate}
           onFetchMore={loadMore}
+          isFavourited={isFavourited(photos[lightboxIndex]?.id ?? '')}
+          onToggleFavourite={() => toggleFavourite(photos[lightboxIndex]?.id ?? '')}
         />
       )}
     </div>
