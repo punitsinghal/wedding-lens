@@ -3,12 +3,13 @@ import logging
 import math
 import shutil
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -163,7 +164,7 @@ async def initiate_upload(
         status="in_progress",
     )
     db.add(session)
-    await db.flush()
+    await db.commit()
 
     # Create tmp directory for chunks
     tmp_dir = Path(settings.STORAGE_PATH) / "tmp" / str(session.id)
@@ -255,9 +256,6 @@ async def upload_chunk(
     chunk_path.write_bytes(chunk_bytes)
 
     # Update received_chunks — load, append, write back (works on both PostgreSQL and SQLite)
-    from sqlalchemy import update as sa_update
-    from datetime import datetime, timezone
-
     new_chunks = list(received) + [chunk_index]
     await db.execute(
         sa_update(UploadSession)
@@ -361,9 +359,6 @@ async def complete_upload(
     db.add(photo)
 
     # Mark session complete
-    from sqlalchemy import update as sa_update
-    from datetime import datetime, timezone
-
     await db.execute(
         sa_update(UploadSession)
         .where(UploadSession.id == session_id)

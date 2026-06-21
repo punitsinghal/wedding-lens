@@ -72,7 +72,7 @@ async def get_progress(
             )
             yield f"event: progress\ndata: {data}\n\n"
 
-            if total > 0 and indexed == total:
+            if total > 0 and pending == 0:
                 yield f"event: gallery_ready\ndata: {data}\n\n"
                 return
 

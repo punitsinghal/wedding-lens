@@ -36,7 +36,7 @@ async def get_current_user(
     try:
         user_id_str = decode_access_token(token)
         user_id = uuid.UUID(user_id_str)
-    except (ValueError, Exception):
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
@@ -132,7 +132,7 @@ async def get_current_user_from_query_token(
     try:
         user_id_str = decode_access_token(token)
         user_id = uuid.UUID(user_id_str)
-    except (ValueError, Exception):
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",

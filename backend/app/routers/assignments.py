@@ -1,5 +1,6 @@
 """Photographer-to-event assignment and revocation endpoints."""
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
@@ -28,8 +29,18 @@ class AssignPhotographerResponse(BaseModel):
     email: str
 
 
+class AssignedEventOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    slug: str
+    status: str
+    bride_name: str | None
+    groom_name: str | None
+    created_at: datetime
+
+
 class AssignedEventsResponse(BaseModel):
-    events: list[dict]
+    events: list[AssignedEventOut]
 
 
 # ---------------------------------------------------------------------------
@@ -144,15 +155,15 @@ async def list_my_assigned_events(
 
     return AssignedEventsResponse(
         events=[
-            {
-                "id": str(e.id),
-                "name": e.name,
-                "slug": e.slug,
-                "status": e.status,
-                "bride_name": e.bride_name,
-                "groom_name": e.groom_name,
-                "created_at": e.created_at.isoformat(),
-            }
+            AssignedEventOut(
+                id=e.id,
+                name=e.name,
+                slug=e.slug,
+                status=e.status,
+                bride_name=e.bride_name,
+                groom_name=e.groom_name,
+                created_at=e.created_at,
+            )
             for e in events
         ]
     )

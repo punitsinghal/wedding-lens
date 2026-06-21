@@ -45,6 +45,16 @@ class PhotoAlbumsPut(BaseModel):
     album_ids: list[uuid.UUID] = []
 
 
+class PhotoAlbumsOut(BaseModel):
+    photo_id: uuid.UUID
+    album_ids: list[uuid.UUID]
+
+
+class ReprocessOut(BaseModel):
+    photo_id: uuid.UUID
+    status: str
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -110,16 +120,13 @@ async def upload_photo(
         processing_status="pending",
     )
     db.add(photo)
+    if album_id is not None:
+        db.add(PhotoAlbum(photo_id=photo_id, album_id=album_id))
     try:
-        await db.flush()  # get photo into DB before BackgroundTask runs
+        await db.commit()
     except IntegrityError:
         await db.rollback()
         raise HTTPException(status_code=422, detail="Invalid album_id")
-
-    # Sync photo_albums join table if album assigned
-    if album_id is not None:
-        db.add(PhotoAlbum(photo_id=photo_id, album_id=album_id))
-        await db.flush()
 
     background_tasks.add_task(process_photo, photo_id, event_id)
 
@@ -206,14 +213,14 @@ async def update_photo_album(
     return _photo_to_out(photo, event_id)
 
 
-@router.put("/{photo_id}/albums")
+@router.put("/{photo_id}/albums", response_model=PhotoAlbumsOut)
 async def set_photo_albums(
     event_id: uuid.UUID,
     photo_id: uuid.UUID,
     body: PhotoAlbumsPut,
     event: Event = Depends(get_event_with_photographer_access),
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> PhotoAlbumsOut:
     """Replace all album assignments for a photo (many-to-many)."""
     result = await db.execute(
         select(Photo).where(Photo.id == photo_id, Photo.event_id == event_id)
@@ -254,17 +261,17 @@ async def set_photo_albums(
         await db.rollback()
         raise HTTPException(status_code=422, detail="Invalid album assignment")
 
-    return {"photo_id": str(photo_id), "album_ids": [str(a) for a in body.album_ids]}
+    return PhotoAlbumsOut(photo_id=photo_id, album_ids=body.album_ids)
 
 
-@router.post("/{photo_id}/reprocess", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/{photo_id}/reprocess", response_model=ReprocessOut, status_code=status.HTTP_202_ACCEPTED)
 async def reprocess_photo(
     event_id: uuid.UUID,
     photo_id: uuid.UUID,
     background_tasks: BackgroundTasks,
     event: Event = Depends(get_event_with_photographer_access),
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> ReprocessOut:
     """Re-enqueue face processing for a failed photo."""
     result = await db.execute(
         select(Photo).where(Photo.id == photo_id, Photo.event_id == event_id)
@@ -286,7 +293,7 @@ async def reprocess_photo(
 
     background_tasks.add_task(process_photo, photo_id, event_id)
 
-    return {"photo_id": str(photo_id), "status": "pending"}
+    return ReprocessOut(photo_id=photo_id, status="pending")
 
 
 @router.get("/{photo_id}/preview")
