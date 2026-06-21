@@ -1,4 +1,5 @@
 import uuid
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -7,7 +8,7 @@ class PhotoUploadResponse(BaseModel):
     id: uuid.UUID
     event_id: uuid.UUID
     filename: str
-    processing_status: str
+    processing_status: Literal["pending"]
 
 
 class ProcessingStatusCounts(BaseModel):
