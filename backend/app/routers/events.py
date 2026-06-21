@@ -166,10 +166,8 @@ async def unpublish_event(
 @router.get("/{event_id}/qr-code")
 async def get_qr_code(
     event_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    event: Event = Depends(get_event_with_photographer_access),
 ) -> StreamingResponse:
-    event = await _get_owned_event(event_id, db, current_user)
     png_bytes = qr_svc.generate_qr_png(event.slug)
     return StreamingResponse(
         iter([png_bytes]),

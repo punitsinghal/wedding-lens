@@ -32,7 +32,7 @@ export default function SlugField({
         disabled={disabled}
         placeholder="e.g. priya-rahul"
         maxLength={50}
-        className={`w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 ${
+        className={`w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default ${
           validationError
             ? 'border-red-400 focus:ring-red-400'
             : 'border-gray-300'

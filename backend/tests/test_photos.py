@@ -365,3 +365,94 @@ async def test_preview_thumbnail_url_in_list(
     item = resp.json()["items"][0]
     expected = f"/api/v1/events/{event.id}/photos/{p.id}/preview"
     assert item["thumbnail_url"] == expected
+
+
+# ---------------------------------------------------------------------------
+# PATCH "/{photo_id}/photographer-choice"
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_photographer_choice_field_in_list(
+    client: AsyncClient, owner_headers: dict, event: Event, photo: Photo
+):
+    """is_photographer_choice defaults to False and appears in list response."""
+    resp = await client.get(f"/api/v1/events/{event.id}/photos", headers=owner_headers)
+    assert resp.status_code == 200
+    item = resp.json()["items"][0]
+    assert item["is_photographer_choice"] is False
+
+
+@pytest.mark.asyncio
+async def test_set_photographer_choice_true(
+    client: AsyncClient, owner_headers: dict, event: Event, photo: Photo
+):
+    """Owner can set is_photographer_choice to True."""
+    resp = await client.patch(
+        f"/api/v1/events/{event.id}/photos/{photo.id}/photographer-choice",
+        headers=owner_headers,
+        json={"is_photographer_choice": True},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["is_photographer_choice"] is True
+    assert body["id"] == str(photo.id)
+
+
+@pytest.mark.asyncio
+async def test_set_photographer_choice_false(
+    client: AsyncClient, owner_headers: dict, event: Event, photo: Photo
+):
+    """Owner can toggle is_photographer_choice back to False."""
+    # Set True first
+    await client.patch(
+        f"/api/v1/events/{event.id}/photos/{photo.id}/photographer-choice",
+        headers=owner_headers,
+        json={"is_photographer_choice": True},
+    )
+    # Now set False
+    resp = await client.patch(
+        f"/api/v1/events/{event.id}/photos/{photo.id}/photographer-choice",
+        headers=owner_headers,
+        json={"is_photographer_choice": False},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["is_photographer_choice"] is False
+
+
+@pytest.mark.asyncio
+async def test_set_photographer_choice_photo_not_found(
+    client: AsyncClient, owner_headers: dict, event: Event
+):
+    """Returns 404 when the photo does not exist."""
+    resp = await client.patch(
+        f"/api/v1/events/{event.id}/photos/{uuid.uuid4()}/photographer-choice",
+        headers=owner_headers,
+        json={"is_photographer_choice": True},
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_set_photographer_choice_requires_auth(
+    client: AsyncClient, event: Event, photo: Photo
+):
+    """Unauthenticated requests are rejected."""
+    resp = await client.patch(
+        f"/api/v1/events/{event.id}/photos/{photo.id}/photographer-choice",
+        json={"is_photographer_choice": True},
+    )
+    assert resp.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
+async def test_set_photographer_choice_requires_ownership(
+    client: AsyncClient, other_headers: dict, event: Event, photo: Photo
+):
+    """Non-owner/non-photographer is rejected."""
+    resp = await client.patch(
+        f"/api/v1/events/{event.id}/photos/{photo.id}/photographer-choice",
+        headers=other_headers,
+        json={"is_photographer_choice": True},
+    )
+    assert resp.status_code in (403, 404)

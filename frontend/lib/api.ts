@@ -385,6 +385,17 @@ export async function updatePhotoAlbum(
   });
 }
 
+export async function setPhotographerChoice(
+  eventId: string,
+  photoId: string,
+  value: boolean
+): Promise<Photo> {
+  return apiFetch<Photo>(
+    `/api/v1/events/${eventId}/photos/${photoId}/photographer-choice`,
+    { method: 'PATCH', body: { is_photographer_choice: value } }
+  );
+}
+
 export async function ownerFetchBlob(path: string): Promise<Blob> {
   const token = getToken();
   const headers: Record<string, string> = {};

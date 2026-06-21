@@ -8,6 +8,7 @@ import {
   getAlbums,
   getPhotos,
   updatePhotoAlbum,
+  setPhotographerChoice,
   ownerFetchBlob,
   hashFile,
   initiateUpload,
@@ -75,12 +76,14 @@ function PhotoCard({
   eventId,
   onAlbumChange,
   onRetry,
+  onChoiceToggle,
 }: {
   photo: Photo;
   albums: Album[];
   eventId: string;
   onAlbumChange: (photoId: string, albumId: string | null) => void;
   onRetry: (photoId: string) => void;
+  onChoiceToggle: (photoId: string, value: boolean) => void;
 }) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [isChangingAlbum, setIsChangingAlbum] = useState(false);
@@ -159,6 +162,17 @@ function PhotoCard({
             </button>
           )}
         </div>
+        <button
+          onClick={() => onChoiceToggle(photo.id, !photo.is_photographer_choice)}
+          title={photo.is_photographer_choice ? "Remove Photographer's Choice" : "Mark as Photographer's Choice"}
+          className={`text-sm leading-none focus:outline-none transition-colors ${
+            photo.is_photographer_choice
+              ? 'text-amber-500 hover:text-amber-600'
+              : 'text-gray-300 hover:text-amber-400'
+          }`}
+        >
+          {photo.is_photographer_choice ? '★' : '☆'}
+        </button>
         <select
           value={photo.album_id ?? ''}
           onChange={handleAlbumChange}
@@ -193,6 +207,8 @@ export default function PhotosPage() {
   const [offset, setOffset] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+
+  const [filterAlbumId, setFilterAlbumId] = useState<string>('');
 
   // Upload state
   const [selectedAlbumId, setSelectedAlbumId] = useState<string>('');
@@ -285,12 +301,19 @@ export default function PhotosPage() {
   }, [eventId]);
 
   const loadPhotos = useCallback(
-    async (newOffset: number) => {
+    async (newOffset: number, albumId?: string) => {
       setIsLoading(true);
       try {
-        const res = await getPhotos(eventId, { limit: LIMIT, offset: newOffset });
-        setPhotos(res.items);
-        setTotal(res.total);
+        const res = await getPhotos(eventId, {
+          limit: LIMIT,
+          offset: newOffset,
+          ...(albumId && albumId !== '__choice__' ? { albumId } : {}),
+        });
+        const items = albumId === '__choice__'
+          ? res.items.filter((p) => p.is_photographer_choice)
+          : res.items;
+        setPhotos(items);
+        setTotal(albumId === '__choice__' ? items.length : res.total);
         setOffset(newOffset);
       } catch (err: unknown) {
         const apiErr = err as { detail?: string };
@@ -303,8 +326,8 @@ export default function PhotosPage() {
   );
 
   useEffect(() => {
-    loadPhotos(0);
-  }, [loadPhotos]);
+    loadPhotos(0, filterAlbumId || undefined);
+  }, [loadPhotos, filterAlbumId]);
 
   // ---------------------------------------------------------------------------
   // File selection and validation
@@ -456,7 +479,7 @@ export default function PhotosPage() {
 
     setIsUploading(false);
     // Refresh photo grid
-    await loadPhotos(0);
+    await loadPhotos(0, filterAlbumId || undefined);
     // Clear done/duplicate items, keep errors so user can see what failed
     setUploadQueue((prev) =>
       prev.filter((item) => item.status === 'error')
@@ -473,6 +496,15 @@ export default function PhotosPage() {
       setPhotos((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
     } catch {
       // error surfaces via PhotoCard's select revert; no additional UI needed
+    }
+  }
+
+  async function handleChoiceToggle(photoId: string, value: boolean) {
+    try {
+      const updated = await setPhotographerChoice(eventId, photoId, value);
+      setPhotos((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    } catch {
+      // silently ignore — optimistic update not needed, user can retry
     }
   }
 
@@ -711,6 +743,20 @@ export default function PhotosPage() {
           <h2 className="text-sm font-semibold text-gray-800">
             {isLoading ? 'Loading...' : `${total} photo${total !== 1 ? 's' : ''}`}
           </h2>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600 whitespace-nowrap">Filter:</label>
+            <select
+              value={filterAlbumId}
+              onChange={(e) => setFilterAlbumId(e.target.value)}
+              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All photos</option>
+              <option value="__choice__">{"Photographer's Choice"}</option>
+              {albums.map((a) => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {isLoading ? (
@@ -740,6 +786,7 @@ export default function PhotosPage() {
                 eventId={eventId}
                 onAlbumChange={handleAlbumChange}
                 onRetry={handleRetry}
+                onChoiceToggle={handleChoiceToggle}
               />
             ))}
           </div>
@@ -749,7 +796,7 @@ export default function PhotosPage() {
         {totalPages > 1 && (
           <div className="mt-6 flex items-center justify-center gap-3">
             <button
-              onClick={() => loadPhotos(offset - LIMIT)}
+              onClick={() => loadPhotos(offset - LIMIT, filterAlbumId || undefined)}
               disabled={offset === 0}
               className="px-3 py-1.5 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
             >
@@ -759,7 +806,7 @@ export default function PhotosPage() {
               Page {currentPage} of {totalPages}
             </span>
             <button
-              onClick={() => loadPhotos(offset + LIMIT)}
+              onClick={() => loadPhotos(offset + LIMIT, filterAlbumId || undefined)}
               disabled={offset + LIMIT >= total}
               className="px-3 py-1.5 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
             >

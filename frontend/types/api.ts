@@ -175,6 +175,7 @@ export interface Photo {
   filename: string;
   processing_status: string;
   thumbnail_url: string | null;
+  is_photographer_choice: boolean;
   created_at: string;
 }
 

@@ -33,6 +33,7 @@ class PhotoOut(BaseModel):
     filename: str
     processing_status: str
     thumbnail_url: str | None
+    is_photographer_choice: bool
     created_at: datetime
 
 
