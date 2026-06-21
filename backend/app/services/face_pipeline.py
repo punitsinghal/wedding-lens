@@ -1,4 +1,5 @@
 """Face detection + embedding pipeline using InsightFace/ArcFace."""
+import asyncio
 import io
 import logging
 import uuid
@@ -6,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 
 from app.config import settings
 from app.database import AsyncSessionLocal
@@ -149,65 +150,73 @@ async def _run_pipeline(photo_id: uuid.UUID, event_id: uuid.UUID) -> None:
                 str(thumb_exc),
             )
 
-        async with AsyncSessionLocal() as db:
-            if not faces:
-                # Zero faces — mark complete
+        if not faces:
+            async with AsyncSessionLocal() as db:
                 await db.execute(
                     update(Photo)
                     .where(Photo.id == photo_id)
-                    .values(face_count=0, processing_status="complete", thumbnail_path=thumb_path)
-                )
-                await db.commit()
-                logger.info(
-                    '{"event": "face_pipeline_complete", "photo_id": "%s", "face_count": 0}',
-                    photo_id,
-                )
-                return
-
-            # Ensure Qdrant collection exists
-            ensure_collection(event_id)
-
-            # Build Qdrant points and face_record rows
-            qdrant_points = []
-            face_record_objs = []
-            for face in faces:
-                record_id = uuid.uuid4()
-                bbox = face["bbox"]
-                embedding: np.ndarray = face["embedding"]
-                enc = encrypt_embedding(embedding, settings.SECRET_KEY)
-
-                qdrant_points.append({
-                    "id": record_id,
-                    "vector": embedding.tolist(),
-                    "payload": {
-                        "photo_id": str(photo_id),
-                        "event_id": str(event_id),
-                        "bbox": bbox,
-                    },
-                })
-                face_record_objs.append(
-                    FaceRecord(
-                        id=record_id,
-                        photo_id=photo_id,
-                        event_id=event_id,
-                        qdrant_point_id=record_id,
-                        bbox_x=bbox[0],
-                        bbox_y=bbox[1],
-                        bbox_w=bbox[2],
-                        bbox_h=bbox[3],
-                        embedding_enc=enc,
+                    .values(
+                        face_count=0,
+                        processing_status="complete",
+                        thumbnail_path=thumb_path,
+                        updated_at=func.now(),
                     )
                 )
+                await db.commit()
+            logger.info(
+                '{"event": "face_pipeline_complete", "photo_id": "%s", "face_count": 0}',
+                photo_id,
+            )
+            return
 
-            # Single Qdrant upsert — all faces for this photo
-            upsert_face_vectors(event_id, qdrant_points)
+        # Build Qdrant points and face_record rows outside any DB session
+        qdrant_points = []
+        face_record_objs = []
+        for face in faces:
+            record_id = uuid.uuid4()
+            bbox = face["bbox"]
+            embedding: np.ndarray = face["embedding"]
+            enc = encrypt_embedding(embedding, settings.SECRET_KEY)
 
-            # Batch insert face_records + mark photo complete
+            qdrant_points.append({
+                "id": record_id,
+                "vector": embedding.tolist(),
+                "payload": {
+                    "photo_id": str(photo_id),
+                    "event_id": str(event_id),
+                    "bbox": bbox,
+                },
+            })
+            face_record_objs.append(
+                FaceRecord(
+                    id=record_id,
+                    photo_id=photo_id,
+                    event_id=event_id,
+                    qdrant_point_id=record_id,
+                    bbox_x=bbox[0],
+                    bbox_y=bbox[1],
+                    bbox_w=bbox[2],
+                    bbox_h=bbox[3],
+                    embedding_enc=enc,
+                )
+            )
+
+        # Qdrant network calls run in a thread pool — keeps event loop free
+        await asyncio.to_thread(ensure_collection, event_id)
+        await asyncio.to_thread(upsert_face_vectors, event_id, qdrant_points)
+
+        # Short-lived session for DB writes only
+        async with AsyncSessionLocal() as db:
             db.add_all(face_record_objs)
             await db.execute(
                 update(Photo)
                 .where(Photo.id == photo_id)
-                .values(face_count=len(faces), processing_status="complete", thumbnail_path=thumb_path)
+                .values(
+                    face_count=len(faces),
+                    processing_status="complete",
+                    thumbnail_path=thumb_path,
+                    updated_at=func.now(),
+                )
             )
             await db.commit()
 
@@ -232,6 +241,6 @@ async def _run_pipeline(photo_id: uuid.UUID, event_id: uuid.UUID) -> None:
             await db.execute(
                 update(Photo)
                 .where(Photo.id == photo_id)
-                .values(processing_status=next_status)
+                .values(processing_status=next_status, updated_at=func.now())
             )
             await db.commit()

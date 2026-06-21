@@ -33,13 +33,17 @@ def ensure_collection(event_id: uuid.UUID) -> None:
     """Create collection if it does not exist. Idempotent."""
     client = get_qdrant_client()
     name = collection_name(event_id)
-    existing = {c.name for c in client.get_collections().collections}
-    if name not in existing:
+    try:
         client.create_collection(
             collection_name=name,
             vectors_config=VectorParams(size=512, distance=Distance.COSINE),
         )
         logger.info('{"event": "qdrant_collection_created", "collection": "%s"}', name)
+    except UnexpectedResponse as exc:
+        if exc.status_code == 409:
+            # Collection already exists — concurrent create or previous run; safe to ignore
+            return
+        raise
 
 
 def upsert_face_vectors(
