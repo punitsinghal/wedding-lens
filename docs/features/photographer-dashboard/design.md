@@ -1,8 +1,8 @@
 # Photographer Dashboard — Design
 
 **Feature:** photographer-dashboard
-**Status:** Approved
-**Date:** 2026-06-19
+**Status:** Approved — ready for /build
+**Date:** 2026-06-19 (OQ-D1 resolved 2026-06-21)
 **ADRs:** see references section
 
 ---
@@ -261,13 +261,56 @@ sequenceDiagram
 
 ---
 
+## Chunk Assembly (OQ-D1 resolved)
+
+**Decision:** Stream-assemble from SSD temp files — Option C.
+
+Chunks are written to SSD as they arrive; `/complete` streams them in order into the final file path using a 2 MB read buffer. Memory ceiling is one chunk (2 MB) regardless of total file size. The DB `upload_sessions` table tracks chunk indices only (no blob storage).
+
+### Temp-file layout
+
+```
+<STORAGE_PATH>/
+  tmp/
+    <session_id>/
+      0.bin
+      1.bin
+      …
+      N.bin
+  events/
+    <event_id>/
+      <photo_id>.<ext>    ← assembled final file
+```
+
+### Assembly on `/complete`
+
+```python
+# pseudocode — implementation detail for /build
+final_path = storage_path / "events" / event_id / photo_id
+with open(final_path, "wb") as out:
+    for i in range(total_chunks):
+        chunk_path = storage_path / "tmp" / session_id / f"{i}.bin"
+        with open(chunk_path, "rb") as src:
+            shutil.copyfileobj(src, out, length=CHUNK_SIZE)
+shutil.rmtree(storage_path / "tmp" / session_id)
+```
+
+### Abandonment cleanup (OQ-D2 resolved)
+
+APScheduler job at 02:00 daily:
+1. Query `upload_sessions` where `status = 'in_progress'` and `updated_at < now() - interval '24 hours'`
+2. Delete `<STORAGE_PATH>/tmp/<session_id>/` for each
+3. Set `status = 'abandoned'` on each session row
+
+---
+
 ## Open Questions
 
-| # | Question | Owner | Blocked? |
-|---|----------|-------|----------|
-| OQ-D1 | Chunk assembly strategy on `/complete` — stream chunks from DB to SSD or buffer all in memory? | Engineering | Blocks build |
-| OQ-D2 | SSE connection timeout — how long should the server hold the SSE connection before the client reconnects? (Suggested: 60s, client reconnects automatically) | Engineering | Low priority |
-| OQ-D3 | Upload session abandonment — how long before an `in_progress` session is marked `abandoned` and temp chunks cleaned up? (Suggested: 24h via APScheduler job) | Engineering | Low priority |
+| # | Question | Owner | Status |
+|---|----------|-------|--------|
+| ~~OQ-D1~~ | ~~Chunk assembly strategy~~ | Engineering | **Resolved 2026-06-21 — Option C (SSD temp files, stream assembly)** |
+| ~~OQ-D2~~ | ~~Upload session abandonment period~~ | Engineering | **Resolved 2026-06-21 — 24h, cleaned by APScheduler** |
+| OQ-D3 | SSE connection timeout — how long before client must reconnect? (Suggested: 60s) | Engineering | Low priority — does not block build |
 
 ---
 
