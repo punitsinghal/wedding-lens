@@ -1,3 +1,5 @@
+**Status:** Groomed — ready for /design
+
 ## Epic
 docs/epics/ai-face-processing/EPIC.md
 
@@ -26,7 +28,7 @@ Automatically detect faces in every imported wedding photo, generate ArcFace emb
 ### Scenario 1 — Asynchronous face processing after upload
 1. REQ-1 (Scenario 1): After a photo file is persisted to storage and metadata is recorded in PostgreSQL, the backend must enqueue a face-processing job as a FastAPI `BackgroundTask` before returning the upload HTTP response.
 2. REQ-2 (Scenario 1): The upload HTTP response must not wait for face detection or embedding to complete — the pipeline runs entirely after the response is sent.
-3. REQ-3 (Scenario 1): Each newly enqueued photo must be recorded in `face_records` with a status of `pending` at enqueue time.
+3. REQ-3 (Scenario 1): Each newly enqueued photo must have its `processing_status` set to `pending` on the `photos` record at enqueue time. `face_records` rows are only created after processing completes successfully.
 4. REQ-4 (Scenario 1): Face detection must use InsightFace with ArcFace embedding (512-dimensional vectors); faces smaller than 40×40 pixels must be skipped.
 
 ### Scenario 2 — Multiple faces per photo
@@ -84,13 +86,13 @@ Automatically detect faces in every imported wedding photo, generate ArcFace emb
 - Face clustering or automatic grouping of the same person across photos
 
 ## Open questions
-- [ ] Should the Qdrant collection be named by `event_id` slug (e.g. `event_<uuid>`) or by a human-readable event name? If the name changes, does the collection need to be renamed? — owner: Engineering
-- [ ] What AES encryption mode is used for embedding encryption — CBC (with IV) or GCM (with authentication tag)? — owner: Engineering
-- [ ] Should failed photos surface a visible per-photo error status to the photographer in the dashboard, or appear only as an aggregate failed count? — owner: Product Team
-- [ ] What is the retry cap — how many consecutive failures before a photo is permanently marked `error` and excluded from future APScheduler runs? — owner: Engineering
+- [x] Should the Qdrant collection be named by `event_id` slug (e.g. `event_<uuid>`) or by a human-readable event name? — owner: Engineering — **resolved:** `event_<uuid_no_dashes>` (stable across event slug renames). See design.md.
+- [x] What AES encryption mode is used for embedding encryption — CBC (with IV) or GCM (with authentication tag)? — owner: Engineering — **resolved:** AES-256-GCM; 96-bit nonce prepended to ciphertext. See design.md.
+- [x] Should failed photos surface a visible per-photo error status to the photographer in the dashboard, or appear only as an aggregate failed count? — owner: Product Team — **resolved:** per-photo `failed`/`error` status exposed via the status endpoint; not aggregate-only.
+- [x] What is the retry cap — how many consecutive failures before a photo is permanently marked `error` and excluded from future APScheduler runs? — owner: Engineering — **resolved:** 5 attempts; `processing_attempts >= 5` → permanent `error` state, excluded from all future APScheduler runs.
 
 ## Acceptance criteria
-- AC-1 (Scenario 1): Given a photo is uploaded and stored, the upload HTTP response is returned before face detection begins, and a `face_records` entry with status `pending` exists for that photo within the same request lifecycle.
+- AC-1 (Scenario 1): Given a photo is uploaded and stored, the upload HTTP response is returned before face detection begins, and the `photos` record has `processing_status = "pending"` within the same request lifecycle. No `face_records` row exists yet at this point.
 - AC-1b (Scenario 1): Given a photo is enqueued for processing, face detection runs via InsightFace with ArcFace in the background after the response is sent.
 - AC-2 (Scenario 2): Given a photo containing three distinct faces, processing produces exactly three `face_records` rows and three Qdrant vector points, all linked to the same `photo_id`.
 - AC-2b (Scenario 2): Given processing completes successfully for a multi-face photo, the `photos` record shows `face_count = 3` and processing status `complete`.
