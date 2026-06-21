@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_current_user, get_db
+from app.dependencies import get_current_user, get_db, get_event_with_photographer_access
 from app.models.event import Event, SlugRedirect
 from app.models.user import User
 from app.schemas.event import EventCreate, EventOut, EventPublicOut, EventUpdate
@@ -100,10 +100,8 @@ async def create_event(
 @router.get("/{event_id}", response_model=EventOut)
 async def get_event(
     event_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    event: Event = Depends(get_event_with_photographer_access),
 ) -> EventOut:
-    event = await _get_owned_event(event_id, db, current_user)
     return EventOut.model_validate(event)
 
 
