@@ -51,7 +51,7 @@ export default function PhotoThumbnail({
     <div className="relative aspect-square w-full overflow-hidden rounded-sm bg-gray-200 group">
       <button
         onClick={onClick}
-        className="absolute inset-0 w-full h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gray-900"
+        className="absolute inset-0 w-full h-full hover:opacity-90 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gray-900"
         aria-label="View photo"
       >
         {blobUrl ? (

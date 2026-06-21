@@ -126,7 +126,7 @@ export default function Lightbox({
         </span>
         <div className="flex items-center gap-3">
           <FavouriteToggle isFavourited={isFavourited} onToggle={onToggleFavourite} />
-          {photo?.id && <ShareButton eventId={eventId} photoId={photo.id} />}
+          <ShareButton eventId={eventId} photoId={photo.id} />
           <button
             onClick={handleDownload}
             disabled={downloading}

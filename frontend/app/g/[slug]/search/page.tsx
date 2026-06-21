@@ -35,6 +35,7 @@ function SearchContent() {
       .then((ev) => {
         if (ev.access_mode !== 'public' && !isGuestAuthenticated(ev.id)) {
           router.replace(`/g/${slug}`);
+          setIsChecking(false);
           return;
         }
         setEventId(ev.id);
@@ -43,6 +44,7 @@ function SearchContent() {
       })
       .catch(() => {
         router.replace(`/g/${slug}`);
+        setIsChecking(false);
       });
     // Only run on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
