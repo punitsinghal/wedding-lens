@@ -60,10 +60,11 @@ function GalleryContent() {
         return;
       }
 
-      // Public events skip the entry-page auth flow, so auto-issue a guest token
-      // here if one isn't already stored — the gallery API requires a valid JWT
-      // regardless of access_mode.
-      if (ev.access_mode === 'public' && !isGuestAuthenticated(ev.id)) {
+      // Public events skip the entry-page code form so no guest JWT is stored.
+      // Always refresh the token for public events — isGuestAuthenticated only
+      // checks expiry, not signature validity, so a stale token from a previous
+      // backend instance would pass the client check but be rejected with 401.
+      if (ev.access_mode === 'public') {
         try {
           const { access_token } = await guestAuth(ev.id, '');
           setGuestToken(ev.id, access_token);
