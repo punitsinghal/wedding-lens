@@ -434,6 +434,7 @@ async def test_complete_upload_returns_201(
         mock_settings.STORAGE_PATH = str(tmp_path)
         resp = await client.post(
             f"/api/v1/events/{event.id}/uploads/{session.id}/complete",
+            json={},
             headers=owner_headers,
         )
 
@@ -476,6 +477,7 @@ async def test_complete_upload_creates_photo_record(
         mock_settings.STORAGE_PATH = str(tmp_path)
         resp = await client.post(
             f"/api/v1/events/{event.id}/uploads/{session.id}/complete",
+            json={},
             headers=owner_headers,
         )
 
@@ -515,6 +517,7 @@ async def test_complete_upload_missing_chunks_returns_422(
         mock_settings.STORAGE_PATH = str(tmp_path)
         resp = await client.post(
             f"/api/v1/events/{event.id}/uploads/{session.id}/complete",
+            json={},
             headers=owner_headers,
         )
 
@@ -551,6 +554,7 @@ async def test_complete_upload_rejects_invalid_image(
         mock_settings.STORAGE_PATH = str(tmp_path)
         resp = await client.post(
             f"/api/v1/events/{event.id}/uploads/{session.id}/complete",
+            json={},
             headers=owner_headers,
         )
 
@@ -680,6 +684,7 @@ async def test_complete_upload_accepts_png(
         mock_settings.STORAGE_PATH = str(tmp_path)
         resp = await client.post(
             f"/api/v1/events/{event.id}/uploads/{session.id}/complete",
+            json={},
             headers=owner_headers,
         )
 

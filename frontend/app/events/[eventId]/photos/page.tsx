@@ -354,7 +354,7 @@ export default function PhotosPage() {
     );
   }
 
-  async function uploadFile(item: UploadItem): Promise<void> {
+  async function uploadFile(item: UploadItem, albumId?: string | null): Promise<void> {
     const { id, file } = item;
 
     // 1. Hash
@@ -433,7 +433,7 @@ export default function PhotosPage() {
 
     // 4. Complete
     try {
-      await completeUpload(eventId, sessionId);
+      await completeUpload(eventId, sessionId, albumId);
       updateItem(id, { status: 'done', progress: 100 });
     } catch {
       updateItem(id, { status: 'error', error: 'Failed to finalize upload' });
@@ -448,9 +448,10 @@ export default function PhotosPage() {
     setIsUploading(true);
 
     // Process files in batches of CONCURRENCY
+    const albumId = selectedAlbumId || null;
     for (let i = 0; i < queued.length; i += CONCURRENCY) {
       const batch = queued.slice(i, i + CONCURRENCY);
-      await Promise.all(batch.map((item) => uploadFile(item)));
+      await Promise.all(batch.map((item) => uploadFile(item, albumId)));
     }
 
     setIsUploading(false);

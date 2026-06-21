@@ -75,6 +75,10 @@ class ChunkUploadResponse(BaseModel):
     received: bool
 
 
+class CompleteUploadRequest(BaseModel):
+    album_id: uuid.UUID | None = None
+
+
 class CompleteUploadResponse(BaseModel):
     photo_id: uuid.UUID
 
@@ -275,6 +279,7 @@ async def upload_chunk(
 async def complete_upload(
     event_id: uuid.UUID,
     session_id: uuid.UUID,
+    body: CompleteUploadRequest,
     background_tasks: BackgroundTasks,
     event: Event = Depends(get_event_with_photographer_access),
     db: AsyncSession = Depends(get_db),
@@ -349,7 +354,7 @@ async def complete_upload(
     photo = Photo(
         id=photo_id,
         event_id=event_id,
-        album_id=None,
+        album_id=body.album_id,
         filename=session.filename,
         storage_path=final_rel,
         file_size=session.file_size_bytes,

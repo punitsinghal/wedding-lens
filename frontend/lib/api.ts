@@ -585,9 +585,13 @@ export async function uploadChunk(
 
 export async function completeUpload(
   eventId: string,
-  sessionId: string
+  sessionId: string,
+  albumId?: string | null
 ): Promise<{ photo_id: string }> {
-  return apiFetch(`/api/v1/events/${eventId}/uploads/${sessionId}/complete`, { method: 'POST' });
+  return apiFetch(`/api/v1/events/${eventId}/uploads/${sessionId}/complete`, {
+    method: 'POST',
+    body: { album_id: albumId ?? null },
+  });
 }
 
 // SSE progress — caller must close the returned EventSource when done
