@@ -102,5 +102,16 @@ Give photographers a dedicated dashboard to upload photos directly to an event v
 - AC-6b (Scenario 6): After the event owner removes the photographer's assignment, the photographer can no longer access the event dashboard or upload photos to it.
 - AC-6c (Scenario 6): A photographer cannot access the upload or album management pages for an event they have not been assigned to.
 
+## Build status
+
+| Scenario | Backend | Frontend | Notes |
+|----------|---------|----------|-------|
+| 1 — Photo upload | ✅ Shipped (PR #27) | ✅ Shipped (PR #27) | Chunked upload, dedup, per-file progress |
+| 2 — Upload resume | ✅ Shipped (PR #27) | ✅ Shipped (PR #27) | Auto-resume on reconnect |
+| 3 — Processing progress | ✅ Shipped (PR #27) | ✅ Shipped (PR #27) | SSE panel, gallery-ready banner |
+| 4 — Album management | ✅ Shipped (PR #27) | ✅ Existing albums page | Multi-album PUT endpoint shipped; multi-select UI pending |
+| 5 — Photographer Choice | ✅ Shipped (PR #27) | ✅ Shipped (PR #27) | Toggle accessible to owner + assigned photographer |
+| 6 — Photographer assignment | ✅ Shipped | ✅ Shipped | GET /events/{id}/photographers added; 6a (event detail) + 6b (dashboard) built |
+
 ## Status
-Groomed — ready for /design
+Fully shipped

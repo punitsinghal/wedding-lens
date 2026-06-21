@@ -1,8 +1,8 @@
 # Photographer Dashboard — Design
 
 **Feature:** photographer-dashboard
-**Status:** Approved — ready for /build
-**Date:** 2026-06-19 (OQ-D1 resolved 2026-06-21)
+**Status:** Fully shipped
+**Date:** 2026-06-19 (OQ-D1 resolved 2026-06-21; Scenario 6 frontend groomed 2026-06-21)
 **ADRs:** see references section
 
 ---
@@ -304,6 +304,173 @@ APScheduler job at 02:00 daily:
 
 ---
 
+---
+
+## Scenario 6 — Frontend Design
+
+> **Build status:** Fully shipped. `GET /api/v1/events/{event_id}/photographers` added; 6a and 6b frontend surfaces built.
+
+---
+
+### 6a — "Manage Photographers" section on the Event Detail page
+
+**Where:** `app/events/[eventId]/page.tsx` — new section card between "Event Details" form and "Danger Zone".
+
+**Visible to:** Event owner only. Assigned photographers cannot view event settings and are redirected to the photos page (see §6b).
+
+#### Required backend addition
+
+`GET /api/v1/events/{event_id}/photographers` is missing. The UI needs to list current assignees on page load. This endpoint must be added to `routers/assignments.py` before the frontend can be built.
+
+Response shape (new):
+```json
+{
+  "photographers": [
+    { "photographer_id": "<uuid>", "email": "...", "assigned_at": "<iso8601>" }
+  ]
+}
+```
+
+Add a corresponding `getEventPhotographers(eventId)` function to `lib/api.ts`.
+
+#### UI layout
+
+```
+┌─ Photographers ───────────────────────────────────────────┐
+│                                                            │
+│  Assign a photographer                                     │
+│  ┌──────────────────────────────────┐  ┌──────────────┐   │
+│  │  photographer@studio.com         │  │   Assign     │   │
+│  └──────────────────────────────────┘  └──────────────┘   │
+│  [inline error if email not found or already assigned]     │
+│                                                            │
+│  Currently assigned                                        │
+│  ┌────────────────────────────────────────────────────┐    │
+│  │  jane@studio.com          Assigned 21 Jun   Remove │    │
+│  │  ravi@photos.in           Assigned 20 Jun   Remove │    │
+│  └────────────────────────────────────────────────────┘    │
+│  (empty state: "No photographers assigned yet.")           │
+└────────────────────────────────────────────────────────────┘
+```
+
+#### Interactions
+
+| Action | API call | Success | Error |
+|--------|----------|---------|-------|
+| Page load | `GET /events/{id}/photographers` | Populate list | Show inline error in section |
+| Assign (submit) | `POST /events/{id}/photographers` `{email}` | Append row, clear input | "No account found for this email" / "Already assigned" |
+| Remove | `DELETE /events/{id}/photographers/{pid}` | Remove row | Inline error on row |
+
+- The Assign button is disabled while a request is in flight.
+- Removing requires no confirmation dialog (revocation is immediate per REQ-24; the owner can re-assign).
+- The section is only rendered when `event.owner_id === currentUser.id`; assigned photographers do not see it.
+
+#### State
+
+```ts
+const [photographers, setPhotographers]   = useState<AssignedPhotographerRow[]>([]);
+const [assignEmail, setAssignEmail]       = useState('');
+const [assignError, setAssignError]       = useState('');
+const [isAssigning, setIsAssigning]       = useState(false);
+const [removingId, setRemovingId]         = useState<string | null>(null);
+
+interface AssignedPhotographerRow {
+  photographer_id: string;
+  email: string;
+  assigned_at: string;
+}
+```
+
+#### Acceptance criteria (UI)
+
+- **AC-6-UI-1:** On page load, the section renders the list of currently assigned photographers (email + assigned date). An empty list shows "No photographers assigned yet."
+- **AC-6-UI-2:** Submitting a valid email that maps to a registered user appends that user to the list without a full page reload.
+- **AC-6-UI-3:** Submitting an email with no matching account shows "No account found for this email" inline; the list is unchanged.
+- **AC-6-UI-4:** Submitting an email that is already assigned shows "Already assigned to this event" inline; no duplicate row appears.
+- **AC-6-UI-5:** Clicking Remove on a row removes it immediately. The backend revokes access; a subsequent upload attempt by that photographer returns 403.
+- **AC-6-UI-6:** The section is not rendered when the page is viewed by an assigned photographer (non-owner).
+
+---
+
+### 6b — "Assigned Events" section on the Photographer Dashboard
+
+**Where:** `app/dashboard/page.tsx` — new section rendered below the "My Events" grid.
+
+**Visible to:** Any authenticated user who has at least one assigned event. Hidden when `assignedEvents` is empty.
+
+**API:** `GET /api/v1/photographers/me/events` → `getMyAssignedEvents()` (already in `lib/api.ts`).
+
+#### UI layout
+
+```
+My Events                                          + New Event
+┌──────────────────────┐  ┌──────────────────────┐
+│  Smith & Jones       │  │  Patel & Sharma       │
+│  ...                 │  │  ...                  │
+└──────────────────────┘  └──────────────────────┘
+
+Events I'm Photographing
+┌──────────────────────┐  ┌──────────────────────┐
+│  Kumar Wedding       │  │  Mehta Reception      │
+│  Photographer        │  │  Photographer         │
+│  [Manage Photos →]   │  │  [Manage Photos →]    │
+└──────────────────────┘  └──────────────────────┘
+```
+
+#### Interactions
+
+- On mount, call `getMyAssignedEvents()` alongside `getDashboardEvents()` — both are independent; run with `Promise.all`.
+- If the call fails, show a subtle inline error ("Could not load assigned events") in the section; do not affect the owned-events section.
+- Each assigned event card links to `/events/[id]/photos` (not `/events/[id]` — assigned photographers cannot access event settings, which would 403).
+- Cards show: event name, a "Photographer" role badge, and a "Manage Photos →" link.
+- The section heading "Events I'm Photographing" is not rendered if `assignedEvents.length === 0`.
+
+#### Assigned event card design
+
+Reuse `EventCard` component structure but:
+- Add a `role` prop (`"owner" | "photographer"`) — if `"photographer"`, render a small grey "Photographer" badge instead of the status badge.
+- The card's primary action link points to `/events/[id]/photos` rather than `/events/[id]`.
+- Do not show "Edit" or event settings affordances.
+
+If `EventCard` cannot easily accept a `role` prop, create a lightweight `AssignedEventCard` component alongside it.
+
+#### State additions to `dashboard/page.tsx`
+
+```ts
+const [assignedEvents, setAssignedEvents]     = useState<AssignedEvent[]>([]);
+const [assignedEventsError, setAssignedEventsError] = useState('');
+
+interface AssignedEvent {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  bride_name: string | null;
+  groom_name: string | null;
+  created_at: string;
+}
+```
+
+Load both lists together:
+```ts
+Promise.all([getDashboardEvents(), getMyAssignedEvents()])
+  .then(([owned, { events: assigned }]) => {
+    setEvents(owned);
+    setAssignedEvents(assigned);
+  })
+  ...
+```
+
+#### Acceptance criteria (UI)
+
+- **AC-6b-UI-1:** A photographer assigned to two events sees both under "Events I'm Photographing" on the dashboard, in addition to any events they own.
+- **AC-6b-UI-2:** Each assigned event card shows the event name and a "Photographer" role badge; clicking "Manage Photos" navigates to `/events/[id]/photos`.
+- **AC-6b-UI-3:** The "Events I'm Photographing" section is not rendered for users who have no assigned events.
+- **AC-6b-UI-4:** An owned event does not appear in the assigned-events section even if the owner is also in the `event_photographers` table.
+- **AC-6b-UI-5:** After an assignment is revoked by the event owner, the card disappears from the photographer's dashboard on next load.
+
+---
+
 ## Open Questions
 
 | # | Question | Owner | Status |
@@ -311,6 +478,7 @@ APScheduler job at 02:00 daily:
 | ~~OQ-D1~~ | ~~Chunk assembly strategy~~ | Engineering | **Resolved 2026-06-21 — Option C (SSD temp files, stream assembly)** |
 | ~~OQ-D2~~ | ~~Upload session abandonment period~~ | Engineering | **Resolved 2026-06-21 — 24h, cleaned by APScheduler** |
 | OQ-D3 | SSE connection timeout — how long before client must reconnect? (Suggested: 60s) | Engineering | Low priority — does not block build |
+| ~~OQ-D4~~ | ~~`GET /events/{id}/photographers` — response should include the assigner's name/email for auditability, or just photographer email?~~ | Engineering | **Resolved — photographer email + assigned_at only; UI requires no assigner info** |
 
 ---
 

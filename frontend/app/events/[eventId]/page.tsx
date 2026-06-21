@@ -13,8 +13,12 @@ import {
   unpublishEvent,
   revokeGuestAccess,
   enableGuestAccess,
+  getEventPhotographers,
+  assignPhotographer,
+  removePhotographer,
 } from '@/lib/api';
-import { isAuthenticated } from '@/lib/auth';
+import type { AssignedPhotographerRow } from '@/lib/api';
+import { isAuthenticated, getCurrentUserId } from '@/lib/auth';
 import { isSlugTakenError } from '@/types/api';
 import type { Event, AccessMode, Photo } from '@/types/api';
 import SlugField from '@/components/SlugField';
@@ -68,12 +72,20 @@ export default function EventDetailPage() {
   const [settingEventCover, setSettingEventCover] = useState(false);
   const [coverError, setCoverError] = useState('');
 
+  // Photographer management
+  const [photographers, setPhotographers] = useState<AssignedPhotographerRow[]>([]);
+  const [assignEmail, setAssignEmail] = useState('');
+  const [assignError, setAssignError] = useState('');
+  const [isAssigning, setIsAssigning] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+
   useEffect(() => {
     Promise.all([
       getEvent(eventId),
       getPhotos(eventId, { limit: 100 }),
+      getEventPhotographers(eventId),
     ])
-      .then(([ev, photoList]) => {
+      .then(([ev, photoList, photographersResult]) => {
         setEvent(ev);
         setName(ev.name);
         setBrideName(ev.bride_name);
@@ -82,6 +94,8 @@ export default function EventDetailPage() {
         setAccessMode(ev.access_mode);
         setAccessCode(ev.access_code ?? '');
         setSlug(ev.slug);
+
+        setPhotographers(photographersResult.photographers);
 
         // Only show photos that belong to an album
         const albumPhotos = photoList.items.filter((p) => p.album_id != null);
@@ -213,6 +227,41 @@ export default function EventDetailPage() {
       setCoverError(apiErr?.detail ?? 'Failed to set cover photo.');
     } finally {
       setSettingEventCover(false);
+    }
+  }
+
+  async function handleAssignPhotographer(e: FormEvent) {
+    e.preventDefault();
+    setAssignError('');
+    setIsAssigning(true);
+    try {
+      const result = await assignPhotographer(eventId, assignEmail.trim());
+      setPhotographers(prev => [...prev, { ...result, assigned_at: new Date().toISOString() }]);
+      setAssignEmail('');
+    } catch (err: unknown) {
+      const apiErr = err as { detail?: string };
+      if (apiErr?.detail?.includes('already assigned')) {
+        setAssignError('Already assigned to this event');
+      } else if (apiErr?.detail?.includes('No user found')) {
+        setAssignError('No account found for this email');
+      } else {
+        setAssignError(apiErr?.detail ?? 'Failed to assign photographer');
+      }
+    } finally {
+      setIsAssigning(false);
+    }
+  }
+
+  async function handleRemovePhotographer(photographerId: string) {
+    setRemovingId(photographerId);
+    try {
+      await removePhotographer(eventId, photographerId);
+      setPhotographers(prev => prev.filter(p => p.photographer_id !== photographerId));
+    } catch (err: unknown) {
+      // Could show a per-row error but keep it simple — just log
+      console.error('Remove failed', err);
+    } finally {
+      setRemovingId(null);
     }
   }
 
@@ -565,6 +614,60 @@ export default function EventDetailPage() {
           </button>
         </div>
       </form>
+
+      {/* Photographers — owner only */}
+      {event.owner_id === getCurrentUserId() && (
+        <div className="mt-6 p-4 bg-white border border-gray-200 rounded-lg">
+          <h2 className="text-base font-semibold text-gray-800 mb-4">Photographers</h2>
+
+          <form onSubmit={handleAssignPhotographer} className="flex gap-2 mb-4">
+            <input
+              type="email"
+              value={assignEmail}
+              onChange={(e) => { setAssignEmail(e.target.value); setAssignError(''); }}
+              placeholder="photographer@studio.com"
+              required
+              className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              type="submit"
+              disabled={isAssigning}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {isAssigning ? 'Assigning...' : 'Assign'}
+            </button>
+          </form>
+
+          {assignError && (
+            <p className="mb-3 text-xs text-red-600">{assignError}</p>
+          )}
+
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Currently assigned</p>
+          {photographers.length === 0 ? (
+            <p className="text-sm text-gray-400">No photographers assigned yet.</p>
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {photographers.map((p) => (
+                <li key={p.photographer_id} className="flex items-center justify-between py-2 gap-4">
+                  <div className="min-w-0">
+                    <span className="text-sm text-gray-800 truncate">{p.email}</span>
+                    <span className="ml-3 text-xs text-gray-400">
+                      Assigned {new Date(p.assigned_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => handleRemovePhotographer(p.photographer_id)}
+                    disabled={removingId === p.photographer_id}
+                    className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 flex-shrink-0"
+                  >
+                    {removingId === p.photographer_id ? 'Removing...' : 'Remove'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* Danger zone */}
       <div className="mt-8 p-4 border border-red-200 bg-red-50 rounded-lg">

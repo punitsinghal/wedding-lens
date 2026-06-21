@@ -57,6 +57,13 @@ export function getCurrentUserEmail(): string | null {
   return payload?.email ?? payload?.sub ?? null;
 }
 
+export function getCurrentUserId(): string | null {
+  const token = getToken();
+  if (!token) return null;
+  const payload = decodeJwtPayload(token);
+  return payload?.sub ?? null;
+}
+
 export function isAdmin(): boolean {
   const token = getToken();
   if (!token) return false;

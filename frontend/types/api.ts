@@ -213,3 +213,18 @@ export interface ShareTokenResponse {
   event_id: string;
   event_slug: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Photographer assignment types
+// ---------------------------------------------------------------------------
+
+export interface AssignedEvent {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  bride_name: string | null;
+  groom_name: string | null;
+  created_at: string;
+  event_date?: string | null;
+}
