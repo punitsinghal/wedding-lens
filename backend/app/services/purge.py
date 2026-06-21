@@ -22,6 +22,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.event import Event
+from app.models.upload_session import UploadSession
 
 logger = logging.getLogger("weddinglens.purge")
 
@@ -113,3 +114,66 @@ def _stub_qdrant_delete(event_id: uuid.UUID) -> None:
         event_id,
         event_id,
     )
+
+
+UPLOAD_SESSION_ABANDON_HOURS = 24
+
+
+async def purge_abandoned_upload_sessions() -> None:
+    """
+    Mark upload sessions as 'abandoned' and clean up their temp files
+    if they have been in_progress for more than UPLOAD_SESSION_ABANDON_HOURS.
+
+    Called daily at 02:00 by APScheduler (registered in app lifespan).
+    Idempotent: re-running on the same session is safe.
+    """
+    threshold = datetime.now(timezone.utc) - timedelta(hours=UPLOAD_SESSION_ABANDON_HOURS)
+    logger.info(
+        '{"event": "upload_purge_start", "threshold": "%s"}',
+        threshold.isoformat(),
+    )
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(UploadSession).where(
+                UploadSession.status == "in_progress",
+                UploadSession.updated_at < threshold,
+            )
+        )
+        sessions = list(result.scalars().all())
+
+    logger.info(
+        '{"event": "upload_purge_found", "count": %d}',
+        len(sessions),
+    )
+
+    for session in sessions:
+        tmp_dir = Path(settings.STORAGE_PATH) / "tmp" / str(session.id)
+        if tmp_dir.exists():
+            try:
+                shutil.rmtree(tmp_dir)
+                logger.info(
+                    '{"event": "upload_purge_tmp_deleted", "session_id": "%s"}',
+                    session.id,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    '{"event": "upload_purge_tmp_error", "session_id": "%s", "error": "%s"}',
+                    session.id,
+                    str(exc),
+                )
+
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(UploadSession).where(UploadSession.id == session.id)
+            )
+            s = result.scalar_one_or_none()
+            if s:
+                s.status = "abandoned"
+                await db.commit()
+                logger.info(
+                    '{"event": "upload_purge_abandoned", "session_id": "%s"}',
+                    session.id,
+                )
+
+    logger.info('{"event": "upload_purge_done"}')

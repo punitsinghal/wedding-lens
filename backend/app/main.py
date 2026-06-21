@@ -14,11 +14,14 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.routers import auth, events, albums, admin, guest_auth
+from app.routers.assignments import router as assignments_router
 from app.routers.gallery import router as gallery_router
 from app.routers.photo_actions import router as photo_actions_router
 from app.routers.photos import router as photos_router, status_router as face_status_router
+from app.routers.progress import router as progress_router
 from app.routers.search import router as search_router
 from app.routers.share import router as share_router
+from app.routers.uploads import router as uploads_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -88,7 +91,7 @@ async def _assert_schema_current() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Import jobs here to avoid circular imports at module level
-    from app.services.purge import purge_expired_events
+    from app.services.purge import purge_abandoned_upload_sessions, purge_expired_events
     from app.services.retry import retry_failed_photos
 
     await _assert_schema_current()
@@ -100,6 +103,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         hour=2,
         minute=0,
         id="purge_expired_events",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        purge_abandoned_upload_sessions,
+        trigger="cron",
+        hour=2,
+        minute=0,
+        id="purge_abandoned_upload_sessions",
         replace_existing=True,
     )
     scheduler.add_job(
@@ -143,6 +154,9 @@ app.include_router(gallery_router)
 app.include_router(search_router)
 app.include_router(photo_actions_router)
 app.include_router(share_router)
+app.include_router(uploads_router)
+app.include_router(progress_router)
+app.include_router(assignments_router)
 
 
 @app.get("/health", tags=["health"])

@@ -4,7 +4,7 @@ import uuid
 from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -64,6 +64,88 @@ async def require_admin(
 
 
 from app.models.event import Event as EventModel  # noqa: E402
+from app.models.assignment import EventPhotographer  # noqa: E402
+
+
+async def get_event_with_photographer_access(
+    event_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> EventModel:
+    """
+    Return the event if the current_user is the owner OR an assigned photographer.
+    Raises 404 if event not found/deleted, 403 if neither.
+    """
+    result = await db.execute(select(EventModel).where(EventModel.id == event_id))
+    event = result.scalar_one_or_none()
+    if event is None or event.status == "deleted":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    if event.owner_id == current_user.id:
+        return event
+
+    assignment_result = await db.execute(
+        select(EventPhotographer).where(
+            EventPhotographer.event_id == event_id,
+            EventPhotographer.photographer_id == current_user.id,
+        )
+    )
+    if assignment_result.scalar_one_or_none() is not None:
+        return event
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Access denied: not the event owner or an assigned photographer",
+    )
+
+
+async def get_event_owner_only(
+    event_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> EventModel:
+    """
+    Return the event only if the current_user is the owner.
+    Raises 404 if event not found/deleted, 403 if not the owner.
+    """
+    result = await db.execute(select(EventModel).where(EventModel.id == event_id))
+    event = result.scalar_one_or_none()
+    if event is None or event.status == "deleted":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    if event.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: not the event owner",
+        )
+    return event
+
+
+async def get_current_user_from_query_token(
+    token: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """
+    Validate a JWT passed as ?token= query param.
+    Used for SSE endpoints where browsers cannot send Authorization headers.
+    """
+    try:
+        user_id_str = decode_access_token(token)
+        user_id = uuid.UUID(user_id_str)
+    except (ValueError, Exception):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+    return user
 
 
 async def get_validated_guest_event(

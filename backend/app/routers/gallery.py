@@ -10,10 +10,9 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.dependencies import get_current_user, get_db, get_validated_guest_event
+from app.dependencies import get_db, get_event_with_photographer_access, get_validated_guest_event
 from app.models.event import Event
 from app.models.photo import Photo
-from app.models.user import User
 from app.schemas.gallery import (
     AlbumTabOut,
     GalleryListResponse,
@@ -164,17 +163,10 @@ async def toggle_photographer_choice(
     event_id: uuid.UUID,
     photo_id: uuid.UUID,
     body: PhotographerChoicePatch,
-    current_user: User = Depends(get_current_user),
+    event: Event = Depends(get_event_with_photographer_access),
     db: AsyncSession = Depends(get_db),
 ) -> PhotographerChoiceOut:
-    # Verify event ownership
-    event_result = await db.execute(
-        select(Event).where(Event.id == event_id, Event.owner_id == current_user.id)
-    )
-    event = event_result.scalar_one_or_none()
-    if event is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
-
+    # Access is already verified by get_event_with_photographer_access (owner or assigned photographer)
     result = await db.execute(
         select(Photo).where(Photo.id == photo_id, Photo.event_id == event_id)
     )

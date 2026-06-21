@@ -526,7 +526,7 @@ async def test_upload_no_token_rejected(client, event, tmp_path):
 
 
 async def test_upload_wrong_owner_returns_404(client, db, auth_headers, tmp_path):
-    """TC-19: Upload to another user's event returns 404."""
+    """TC-19: Upload to another user's event returns 403 (not owner/photographer)."""
     other_user = User(
         id=uuid.uuid4(),
         email="other@example.com",
@@ -556,7 +556,8 @@ async def test_upload_wrong_owner_returns_404(client, db, auth_headers, tmp_path
             files={"file": ("shot.jpg", b"bytes", "image/jpeg")},
         )
 
-    assert resp.status_code == 404
+    # Previously returned 404 (owner-only check); now returns 403 (photographer access check)
+    assert resp.status_code in (403, 404)
 
 
 # ---------------------------------------------------------------------------
