@@ -43,6 +43,16 @@ class AssignedEventsResponse(BaseModel):
     events: list[AssignedEventOut]
 
 
+class EventPhotographerOut(BaseModel):
+    photographer_id: uuid.UUID
+    email: str
+    assigned_at: datetime
+
+
+class EventPhotographersResponse(BaseModel):
+    photographers: list[EventPhotographerOut]
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -96,6 +106,36 @@ async def assign_photographer(
     return AssignPhotographerResponse(
         photographer_id=target_user.id,
         email=target_user.email,
+    )
+
+
+@router.get(
+    "/events/{event_id}/photographers",
+    response_model=EventPhotographersResponse,
+)
+async def list_event_photographers(
+    event_id: uuid.UUID,
+    event: Event = Depends(get_event_owner_only),
+    db: AsyncSession = Depends(get_db),
+) -> EventPhotographersResponse:
+    """List all photographers assigned to an event (owner only)."""
+    result = await db.execute(
+        select(EventPhotographer, User)
+        .join(User, User.id == EventPhotographer.photographer_id)
+        .where(EventPhotographer.event_id == event_id)
+        .order_by(EventPhotographer.assigned_at)
+    )
+    rows = result.all()
+
+    return EventPhotographersResponse(
+        photographers=[
+            EventPhotographerOut(
+                photographer_id=assignment.photographer_id,
+                email=user.email,
+                assigned_at=assignment.assigned_at,
+            )
+            for assignment, user in rows
+        ]
     )
 
 

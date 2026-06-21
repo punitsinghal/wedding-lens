@@ -638,6 +638,18 @@ export async function getMyAssignedEvents(): Promise<{ events: Event[] }> {
   return apiFetch('/api/v1/photographers/me/events');
 }
 
+export interface AssignedPhotographerRow {
+  photographer_id: string;
+  email: string;
+  assigned_at: string;
+}
+
+export async function getEventPhotographers(
+  eventId: string
+): Promise<{ photographers: AssignedPhotographerRow[] }> {
+  return apiFetch(`/api/v1/events/${eventId}/photographers`);
+}
+
 export async function downloadFavouritesZip(eventId: string): Promise<void> {
   const token = getGuestToken(eventId);
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
