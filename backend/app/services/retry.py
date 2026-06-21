@@ -2,7 +2,7 @@
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 
 from app.database import AsyncSessionLocal
 from app.models.photo import Photo
@@ -28,7 +28,7 @@ async def _reset_stuck_jobs() -> None:
                 Photo.processing_status == "processing",
                 Photo.last_processed_at < threshold,
             )
-            .values(processing_status="pending")
+            .values(processing_status="pending", updated_at=func.now())
             .returning(Photo.id)
         )
         await db.commit()
