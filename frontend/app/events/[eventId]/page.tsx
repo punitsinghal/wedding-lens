@@ -83,9 +83,8 @@ export default function EventDetailPage() {
     Promise.all([
       getEvent(eventId),
       getPhotos(eventId, { limit: 100 }),
-      getEventPhotographers(eventId),
     ])
-      .then(([ev, photoList, photographersResult]) => {
+      .then(([ev, photoList]) => {
         setEvent(ev);
         setName(ev.name);
         setBrideName(ev.bride_name);
@@ -95,7 +94,12 @@ export default function EventDetailPage() {
         setAccessCode(ev.access_code ?? '');
         setSlug(ev.slug);
 
-        setPhotographers(photographersResult.photographers);
+        // Only the owner can list assigned photographers
+        if (ev.owner_id === getCurrentUserId()) {
+          getEventPhotographers(eventId).then((result) => {
+            setPhotographers(result.photographers);
+          });
+        }
 
         // Only show photos that belong to an album
         const albumPhotos = photoList.items.filter((p) => p.album_id != null);
@@ -286,6 +290,8 @@ export default function EventDetailPage() {
     );
   }
 
+  const isOwner = event.owner_id === getCurrentUserId();
+
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
       {/* Header */}
@@ -336,24 +342,26 @@ export default function EventDetailPage() {
               <p className="text-xs text-red-600 mt-1">{publishError}</p>
             )}
           </div>
-          <button
-            onClick={handlePublishToggle}
-            disabled={isPublishing || event.status === 'suspended' || event.status === 'deleted'}
-            className={`flex-shrink-0 px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed ${
-              event.status === 'published'
-                ? 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-400'
-                : 'bg-green-600 text-white hover:bg-green-700 focus:ring-green-500'
-            }`}
-          >
-            {isPublishing
-              ? 'Updating...'
-              : event.status === 'published'
-              ? 'Unpublish'
-              : 'Publish'}
-          </button>
+          {isOwner && (
+            <button
+              onClick={handlePublishToggle}
+              disabled={isPublishing || event.status === 'suspended' || event.status === 'deleted'}
+              className={`flex-shrink-0 px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                event.status === 'published'
+                  ? 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-400'
+                  : 'bg-green-600 text-white hover:bg-green-700 focus:ring-green-500'
+              }`}
+            >
+              {isPublishing
+                ? 'Updating...'
+                : event.status === 'published'
+                ? 'Unpublish'
+                : 'Publish'}
+            </button>
+          )}
         </div>
 
-        {event.status === 'published' && (
+        {isOwner && event.status === 'published' && (
           <div className="mt-3 pt-3 border-t border-gray-200">
             <div className="flex items-center justify-between gap-4">
               <div>
@@ -384,7 +392,7 @@ export default function EventDetailPage() {
       </div>
 
       {/* Cover Photo */}
-      <div className="mb-6 p-4 bg-white border border-gray-200 rounded-lg">
+      {isOwner && (<div className="mb-6 p-4 bg-white border border-gray-200 rounded-lg">
         <div className="flex items-center justify-between mb-3">
           <div>
             <h2 className="text-sm font-semibold text-gray-800">Event Cover Photo</h2>
@@ -461,9 +469,14 @@ export default function EventDetailPage() {
             })}
           </div>
         )}
-      </div>
+      </div>)}
 
       {/* Edit form */}
+      {!isOwner && (
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-700">
+          You have view-only access to this event as an assigned photographer.
+        </div>
+      )}
       {saveError && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
           {saveError}
@@ -491,7 +504,8 @@ export default function EventDetailPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={!isOwner}
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
           />
         </div>
 
@@ -506,7 +520,8 @@ export default function EventDetailPage() {
               value={brideName}
               onChange={(e) => setBrideName(e.target.value)}
               required
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={!isOwner}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
             />
           </div>
           <div>
@@ -519,7 +534,8 @@ export default function EventDetailPage() {
               value={groomName}
               onChange={(e) => setGroomName(e.target.value)}
               required
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={!isOwner}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
             />
           </div>
         </div>
@@ -534,7 +550,8 @@ export default function EventDetailPage() {
             value={eventDate}
             onChange={(e) => setEventDate(e.target.value)}
             required
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={!isOwner}
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
           />
         </div>
 
@@ -546,7 +563,8 @@ export default function EventDetailPage() {
             id="accessMode"
             value={accessMode}
             onChange={(e) => setAccessMode(e.target.value as AccessMode)}
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={!isOwner}
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
           >
             <option value="public">Public — anyone with the link</option>
             <option value="access-code">Access Code — guests enter a code</option>
@@ -565,7 +583,8 @@ export default function EventDetailPage() {
               value={accessCode}
               onChange={(e) => setAccessCode(e.target.value)}
               required
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={!isOwner}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
             />
           </div>
         )}
@@ -602,17 +621,20 @@ export default function EventDetailPage() {
             setSlug(s);
             setSlugSuggestions([]);
           }}
+          disabled={!isOwner}
         />
 
-        <div className="flex justify-end pt-2">
-          <button
-            type="submit"
-            disabled={isSaving}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {isSaving ? 'Saving...' : 'Save Changes'}
-          </button>
-        </div>
+        {isOwner && (
+          <div className="flex justify-end pt-2">
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {isSaving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        )}
       </form>
 
       {/* Photographers — owner only */}
@@ -670,21 +692,23 @@ export default function EventDetailPage() {
       )}
 
       {/* Danger zone */}
-      <div className="mt-8 p-4 border border-red-200 bg-red-50 rounded-lg">
-        <h3 className="text-sm font-semibold text-red-800 mb-1">Danger Zone</h3>
-        <p className="text-xs text-red-700 mb-3">
-          Deleting this event starts a 30-day grace period. During this time the event is
-          inaccessible to guests but data is retained and can be recovered by an admin.
-          After 30 days all photos, face embeddings, and records are permanently deleted.
-        </p>
-        <button
-          onClick={() => setShowDeleteDialog(true)}
-          disabled={isDeleting}
-          className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-60"
-        >
-          Delete Event
-        </button>
-      </div>
+      {isOwner && (
+        <div className="mt-8 p-4 border border-red-200 bg-red-50 rounded-lg">
+          <h3 className="text-sm font-semibold text-red-800 mb-1">Danger Zone</h3>
+          <p className="text-xs text-red-700 mb-3">
+            Deleting this event starts a 30-day grace period. During this time the event is
+            inaccessible to guests but data is retained and can be recovered by an admin.
+            After 30 days all photos, face embeddings, and records are permanently deleted.
+          </p>
+          <button
+            onClick={() => setShowDeleteDialog(true)}
+            disabled={isDeleting}
+            className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-60"
+          >
+            Delete Event
+          </button>
+        </div>
+      )}
 
       <ConfirmDialog
         isOpen={showDeleteDialog}

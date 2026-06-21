@@ -55,6 +55,10 @@ class ReprocessOut(BaseModel):
     status: str
 
 
+class PhotoChoicePatch(BaseModel):
+    is_photographer_choice: bool
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -71,6 +75,7 @@ def _photo_to_out(photo: Photo, event_id: uuid.UUID) -> PhotoOut:
         filename=photo.filename,
         processing_status=photo.processing_status,
         thumbnail_url=thumbnail_url,
+        is_photographer_choice=photo.is_photographer_choice,
         created_at=photo.created_at,
     )
 
@@ -210,6 +215,26 @@ async def update_photo_album(
         raise HTTPException(status_code=422, detail="Invalid album_id")
     await db.refresh(photo)
 
+    return _photo_to_out(photo, event_id)
+
+
+@router.patch("/{photo_id}/photographer-choice", response_model=PhotoOut)
+async def set_photographer_choice(
+    event_id: uuid.UUID,
+    photo_id: uuid.UUID,
+    body: PhotoChoicePatch,
+    event: Event = Depends(get_event_with_photographer_access),
+    db: AsyncSession = Depends(get_db),
+) -> PhotoOut:
+    result = await db.execute(
+        select(Photo).where(Photo.id == photo_id, Photo.event_id == event_id)
+    )
+    photo = result.scalar_one_or_none()
+    if photo is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found")
+    photo.is_photographer_choice = body.is_photographer_choice
+    await db.commit()
+    await db.refresh(photo)
     return _photo_to_out(photo, event_id)
 
 
