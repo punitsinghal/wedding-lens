@@ -1,8 +1,8 @@
 # Face Recognition Search
 
-**Status:** Draft
+**Status:** Done
 **Owner:** Product Team
-**Last Updated:** 2026-06-19
+**Last Updated:** 2026-06-22
 
 ## Summary
 Let wedding guests upload a selfie on the wedding portal and instantly see all photos from the event in which they appear, eliminating the need to manually browse thousands of images.
@@ -27,13 +27,13 @@ Let wedding guests upload a selfie on the wedding portal and instantly see all p
 ## Features
 | Feature | Status |
 |---------|--------|
-| Selfie upload UI (drag-drop / camera capture) | Backlog |
-| Selfie face extraction and embedding (client-side validation) | Backlog |
-| Vector similarity search against event's Qdrant collection | Backlog |
-| Results page: thumbnails with match confidence, download, share | Backlog |
-| Auto-delete selfie after search completes | Backlog |
-| Search result caching (same selfie hash → cached results) | Backlog |
-| No-face-detected error handling with helpful UX message | Backlog |
+| Selfie upload UI (drag-drop / camera capture) | ✅ Done (file picker; drag-drop and camera capture not implemented) |
+| Selfie face extraction and embedding (client-side validation) | ✅ Done |
+| Vector similarity search against event's Qdrant collection | ✅ Done |
+| Results page: thumbnails with match confidence, download, share | ✅ Done (match confidence score not displayed — results ranked by similarity internally) |
+| Auto-delete selfie after search completes | ✅ Done (in-memory only; selfies never written to disk) |
+| Search result caching (same selfie hash → cached results) | ✅ Done |
+| No-face-detected error handling with helpful UX message | ✅ Done |
 
 ## Success Metrics
 - Selfie-to-results latency under 5 seconds at p95.
@@ -47,4 +47,4 @@ Let wedding guests upload a selfie on the wedding portal and instantly see all p
 ## Open Questions
 - [ ] What similarity threshold determines a "match" vs a rejection? — owner: Engineering
 - [ ] Should results page show all matches or cap at top N (e.g. top 50)? — owner: Product Team
-- [ ] How is search handled if no face is detected in the uploaded selfie? — owner: Product Team
+- [x] ~~How is search handled if no face is detected in the uploaded selfie?~~ — Resolved: 422 with `no_face_detected` or `no_dominant_face` error code; `SearchError` component renders a user-friendly message.

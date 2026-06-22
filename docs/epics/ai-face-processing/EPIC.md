@@ -1,8 +1,8 @@
 # AI Face Processing Pipeline
 
-**Status:** Draft
+**Status:** Done
 **Owner:** Product Team
-**Last Updated:** 2026-06-19
+**Last Updated:** 2026-06-22
 
 ## Summary
 Build an automated pipeline that detects faces in every imported wedding photo, generates face embeddings, and stores them in a vector database so that guests can later find themselves using a selfie search.
@@ -28,13 +28,13 @@ Build an automated pipeline that detects faces in every imported wedding photo, 
 ## Features
 | Feature | Status |
 |---------|--------|
-| Face detection service (InsightFace integration) | Backlog |
-| Face embedding generation (ArcFace / InsightFace) | Backlog |
-| Qdrant vector database setup and collection-per-event schema | Backlog |
-| Async processing queue (face detection → embedding → store) | Backlog |
-| Embedding encryption at rest | Backlog |
-| Processing failure retry mechanism | Backlog |
-| Admin processing monitor (queue depth, error rate, throughput) | Backlog |
+| Face detection service (InsightFace integration) | ✅ Done |
+| Face embedding generation (ArcFace / InsightFace) | ✅ Done |
+| Qdrant vector database setup and collection-per-event schema | ✅ Done |
+| Async processing queue (face detection → embedding → store) | ✅ Done |
+| Embedding encryption at rest | ✅ Done |
+| Processing failure retry mechanism | ✅ Done |
+| Admin processing monitor (queue depth, error rate, throughput) | Backlog (Admin Platform epic) |
 
 ## Success Metrics
 - 100% of imported photos have their faces indexed before the gallery goes live.
@@ -43,9 +43,9 @@ Build an automated pipeline that detects faces in every imported wedding photo, 
 - Encryption verified on all stored vector records.
 
 ## Decisions
-- Recommended stack: InsightFace (detection + embedding) + Qdrant (vector DB).
+- Shipped stack: InsightFace (detection + embedding) + Qdrant (one collection per event) + AES-256-GCM embedding encryption via `app.utils.crypto`.
+- Minimum detectable face size: 40px in either dimension (`MIN_FACE_SIZE` constant in `face_pipeline.py`).
 
 ## Open Questions
-- [ ] Should Qdrant use one collection per event or one global collection with event_id filtering? — owner: Product Team
+- [x] ~~Should Qdrant use one collection per event or one global collection with event_id filtering?~~ — Resolved: one collection per event.
 - [ ] What is the GPU/CPU infrastructure plan for running InsightFace at scale? — owner: Engineering
-- [ ] What is the minimum detectable face size (pixels) in a group photo? — owner: Product Team

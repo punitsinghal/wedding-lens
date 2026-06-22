@@ -1,8 +1,8 @@
 # Album & Gallery Browsing
 
-**Status:** Draft
+**Status:** Done
 **Owner:** Product Team
-**Last Updated:** 2026-06-19
+**Last Updated:** 2026-06-22
 
 ## Summary
 Give wedding guests a fast, filterable photo gallery experience with ceremony-based album filters and multiple sorting options so they can browse the full set of photos without being overwhelmed.
@@ -26,13 +26,13 @@ Give wedding guests a fast, filterable photo gallery experience with ceremony-ba
 ## Features
 | Feature | Status |
 |---------|--------|
-| Responsive thumbnail grid with infinite scroll / pagination | Backlog |
-| Album filter tabs (Ceremony, Sangeet, Mehendi, Haldi, Reception, Family) | Backlog |
-| Sort controls (Latest, Popular, Photographer Choice) | Backlog |
-| Full-size lightbox with prev/next navigation | Backlog |
-| Album photo count indicators | Backlog |
-| URL-persisted filter and sort state | Backlog |
-| Photographer Choice flag on photos | Backlog |
+| Responsive thumbnail grid with infinite scroll / pagination | ✅ Done |
+| Album filter tabs (Ceremony, Sangeet, Mehendi, Haldi, Reception, Family) | ✅ Done |
+| Sort controls (Latest, Popular, Photographer Choice) | ✅ Done |
+| Full-size lightbox with prev/next navigation | ✅ Done |
+| Album photo count indicators | ✅ Done |
+| URL-persisted filter and sort state | ✅ Done |
+| Photographer Choice flag on photos | ✅ Done |
 
 ## Success Metrics
 - Thumbnail grid initial load under 1 second for 100-photo page.
@@ -40,9 +40,10 @@ Give wedding guests a fast, filterable photo gallery experience with ceremony-ba
 - 50,000-photo events browsable with no timeout or crash.
 
 ## Decisions
-<!-- Decisions made during this epic's lifetime -->
+- Page size: 50 photos per page (cursor-based pagination).
+- Album categories are fixed globally (Ceremony, Sangeet, Mehendi, Haldi, Reception, Family Photos).
 
 ## Open Questions
-- [ ] Should album categories be configurable per event or fixed globally? — owner: Product Team
-- [ ] What is the page size for pagination (e.g. 50 or 100 photos)? — owner: Engineering
+- [x] ~~Should album categories be configurable per event or fixed globally?~~ — Resolved: fixed globally for MVP.
+- [x] ~~What is the page size for pagination?~~ — Resolved: 50 photos per page.
 - [ ] Is "Popular" sort based on download count, favorites, or a combined score? — owner: Product Team
