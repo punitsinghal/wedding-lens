@@ -1,8 +1,10 @@
+**Status:** Groomed — ready for /design
+
 ## Epic
 docs/epics/privacy-security/EPIC.md
 
 ## Purpose
-Establish the user-facing consent and data governance layer for WeddingLens so that biometric face data is collected only with informed agreement, guests retain meaningful control over their data, and the platform meets its obligations under GDPR (the broadest applicable framework). Technical controls — embedding encryption and selfie auto-deletion — are implemented in the AI Face Processing and Face Recognition Search epics; this feature captures the governance requirements that surround them.
+Establish the user-facing consent and data governance layer for WeddingLens so that biometric face data is collected only with informed agreement, guests retain meaningful control over their data, and the platform meets its obligations under India's Digital Personal Data Protection Act, 2023 (DPDP Act). Under the DPDP Act the platform is the **Data Fiduciary** and guests are **Data Principals**. Technical controls — embedding encryption and selfie auto-deletion — are implemented in the AI Face Processing and Face Recognition Search epics; this feature captures the governance requirements that surround them.
 
 ## Scenarios in scope
 1. Event owner confirms guest consent before publishing the event (consent checkbox in publish pre-flight)
@@ -45,10 +47,11 @@ Establish the user-facing consent and data governance layer for WeddingLens so t
 4. REQ-4 (Scenario 1): If an event is unpublished and republished, the consent checkbox must be presented again and a new confirmation record must be stored.
 
 ### Scenario 2 — Guest privacy notice and acknowledgement
-5. REQ-5 (Scenario 2): The selfie upload screen must display a summary privacy notice before the camera activates, covering: what biometric data is collected (face embedding), the purpose (finding the guest in event photos), retention (selfie deleted immediately after search; embeddings deleted when the event is purged), and a link to the full platform privacy notice at `/privacy`.
+5. REQ-5 (Scenario 2): The selfie upload screen must display a summary privacy notice before the camera activates, covering: what biometric data is collected (face embedding), the purpose (finding the guest in event photos), retention (selfie deleted immediately after search; all event data including embeddings deleted within 30 days of the event end date), and a link to the full platform privacy notice at `/privacy`.
 6. REQ-6 (Scenario 2): The camera must not activate until the guest taps an explicit "I understand, continue" acknowledgement button.
 7. REQ-7 (Scenario 2): The full platform biometric data privacy notice must be published at the `/privacy` route and must be accessible without authentication.
-8. REQ-8 (Scenario 2): The privacy notice linked from the selfie screen must describe: data collected, legal basis (consent), data controller identity, retention periods, and how to submit a removal request.
+8. REQ-8 (Scenario 2): The privacy notice linked from the selfie screen must describe, in DPDP Act terms: the personal data collected (face embedding derived from the selfie), the purpose (finding the guest in event photos), the legal basis (the Data Principal's consent under DPDP §6), the Data Fiduciary's identity (the platform), the retention period (selfie deleted immediately after search; all event data — including embeddings — deleted within 30 days of the event end date), how to withdraw consent, and how to submit a removal request (the removal-request form also serves as the contact path for any grievance in MVP). Notice is English-only for MVP. A dedicated grievance officer/SLA and multi-language notice are deferred (see Out of scope).
+9. REQ-8a (Scenario 2): The "I understand, continue" acknowledgement (REQ-6) must also capture an explicit consent affirmation that the guest is 18 or older, or that a parent/guardian consents on the guest's behalf if the guest is under 18 (DPDP §9). The wording must make the affirmation clear; on affirmation the selfie upload proceeds normally. The platform does not block upload pending external verification — the affirmation is the consent record for MVP.
 
 ### Scenario 3 — Guest face data removal request submission
 9. REQ-9 (Scenario 3): The event page must include a "Remove my face data" link accessible to any guest who has reached the event (authenticated via event code or OTP).
@@ -90,9 +93,10 @@ Establish the user-facing consent and data governance layer for WeddingLens so t
 
 - Face embedding encryption at rest is implemented in the AI Face Processing epic. REQ-24 and REQ-25 add the audit surface only — this feature does not implement the encryption itself.
 - Selfie auto-deletion is implemented in the Face Recognition Search epic. REQ-5 and REQ-8 reference the retention period as a fact to be displayed to guests — this feature does not implement deletion.
+- **Retention (decided):** all event data — photos, face records, and embeddings — is deleted within 30 days of the event end date. This is the single retention rule the privacy notice and the event-purge job (APScheduler, see system.md) must align on. There is no separate "guest-access period vs purge grace period" distinction.
 - Guest session identity for rate limiting is the session token issued at event entry (QR + PIN or OTP flow). The rate limiter keys on this token; guests with no valid session cannot reach the selfie upload endpoint.
-- GDPR is the assumed compliance framework (broadest coverage; also satisfies PDPA and CCPA baseline requirements). This assumption must be confirmed with Legal — see Open Questions.
-- The designated Data Controller identity (platform vs event owner) is unresolved and affects the wording of the privacy notice. A placeholder is acceptable for MVP; see Open Questions.
+- **Compliance framework (decided):** India's Digital Personal Data Protection Act, 2023 (DPDP Act). The platform is the **Data Fiduciary**; guests are **Data Principals**. The `/privacy` notice and consent wording follow DPDP, not GDPR.
+- **Data Fiduciary (decided):** the platform (not the event owner). The privacy notice names the platform as the entity responsible for the face data; the event owner's consent checkbox (Scenario 1) is a confirmation that guests were informed, not a transfer of fiduciary responsibility.
 - Removal request fulfillment is a manual admin process for MVP. Automated deletion is deferred to a future phase.
 - TLS configuration (Nginx, Let's Encrypt certificate renewal, HSTS) is owned by the Ops/Deployment layer. This feature's REQ-21 through REQ-23 define the backend's responsibility within that layer.
 - The `/privacy` route is a Next.js static page. It does not require backend API integration.
@@ -100,18 +104,28 @@ Establish the user-facing consent and data governance layer for WeddingLens so t
 ## Out of scope
 - Automated face data removal (MVP fulfillment is manual; automation is a future phase)
 - Cookie consent banner — the platform uses no tracking cookies
-- Right to access / data portability (GDPR Article 15) — deferred to a future phase
+- Right to access summary of personal data (DPDP §11) and right to nominate (DPDP §14) — deferred to a future phase
 - Guest-facing "view my data" functionality — deferred to a future phase
 - DPIA (Data Protection Impact Assessment) documentation — Legal team responsibility, not a platform deliverable
 - Admin-level data audit logs (covered by the Admin Platform epic)
 - DPA (Data Processing Agreement) between the platform and event owners — Legal responsibility; see Open Questions
+- Dedicated grievance officer/channel and response SLA (DPDP §13) — post-MVP; removal-request form is the MVP contact path
+- Multi-language privacy notice (DPDP §5(3)) — post-MVP; English-only for MVP
+- Verifiable parental consent infrastructure (DPDP §9) — post-MVP; MVP uses a self-affirmation at the acknowledgement step (REQ-8a)
 
-## Open questions
-- [ ] Which privacy regulation framework applies (GDPR, PDPA, CCPA, all three)? — owner: Legal / Product Team. GDPR assumed as broadest; confirm with Legal before publishing the `/privacy` notice.
-- [ ] What is the retention policy for face embeddings after an event's guest-access period ends but before the owner deletes the event? — owner: Legal / Product Team. Current assumption: embeddings persist until event purge (30-day grace period after deletion).
-- [ ] Should the platform publish a biometric data DPA (Data Processing Agreement) for event owners to sign? — owner: Legal.
-- [ ] Who is the designated Data Controller — the platform or the event owner? — owner: Legal. Affects privacy notice wording and the consent checkbox framing.
-- [ ] Should guests receive a confirmation email when their face data removal request is submitted? — owner: Product Team. An email confirmation would improve trust but requires a transactional email service; not included in MVP scope.
+### Resolved (2026-06-22)
+- [x] **Compliance framework** → India's DPDP Act, 2023. Platform is the Data Fiduciary; guests are Data Principals. — Product
+- [x] **Data Fiduciary identity** → the platform (not the event owner). — Product
+- [x] **Retention policy** → all event data including embeddings deleted within 30 days of the event end date; no separate grace period. — Product
+- [x] **Children's data (§9)** → take a consent affirmation at the acknowledgement step (18+, or parent/guardian consents for under-18) and allow the selfie upload; no hard age block. See REQ-8a / AC-2e. — Product. *Residual note for Legal:* a self-affirmation is not strictly "verifiable" parental consent under §9; acceptable for MVP, flagged for Legal review.
+
+### Still open
+- [ ] Should the platform publish a biometric data DPA (Data Processing Agreement) for event owners to sign? — owner: Legal. (Design/process — not a build blocker.)
+- [ ] Should guests receive a confirmation email when their face data removal request is submitted? — owner: Product Team. MVP is on-screen confirmation only; email requires a transactional email service.
+
+### Parked for post-MVP (2026-06-22, Product)
+- Dedicated grievance officer/channel + response SLA (DPDP §13) — parked; the removal-request form is the MVP contact path.
+- Multi-language `/privacy` notice (DPDP §5(3)) — parked; English-only for MVP.
 
 ## Acceptance criteria
 
@@ -125,7 +139,8 @@ Establish the user-facing consent and data governance layer for WeddingLens so t
 - AC-2a: Given a guest navigates to the selfie upload screen, then the privacy notice summary is displayed before the camera component renders — the camera is not active.
 - AC-2b: Given the privacy notice is displayed, when the guest has not tapped "I understand, continue," then the camera activation control is not visible or is inert.
 - AC-2c: Given the guest taps "I understand, continue," then the camera activates and the selfie upload flow proceeds normally.
-- AC-2d: Given any unauthenticated user navigates to `/privacy`, then the full platform biometric data privacy notice is returned with HTTP 200 and contains retention periods, legal basis, data controller identification, and removal request instructions.
+- AC-2e: Given the acknowledgement step, then it includes an age/guardian consent affirmation (18+, or parent/guardian consents for an under-18 guest); when the guest affirms, the upload proceeds, and the affirmation is recorded as the consent for that selfie.
+- AC-2d: Given any unauthenticated user navigates to `/privacy`, then the full platform biometric data privacy notice is returned with HTTP 200 and contains: the 30-day retention rule, the legal basis (consent under DPDP §6), the Data Fiduciary's identity (the platform), consent-withdrawal instructions, and removal-request instructions. (English-only for MVP.)
 
 **Scenario 3 — Guest removal request submission**
 - AC-3a: Given a guest authenticated to an event navigates to the event page, then a "Remove my face data" link is visible.
