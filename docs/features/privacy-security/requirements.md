@@ -66,7 +66,7 @@ Establish the user-facing consent and data governance layer for WeddingLens so t
 16. REQ-16 (Scenario 4): Fulfilled requests must be retained in the database for audit purposes — they must not be deleted.
 
 ### Scenario 5 — Rate limiting
-17. REQ-17 (Scenario 5): The selfie upload endpoint (`POST /api/v1/search/upload` or equivalent) must enforce a limit of 10 requests per guest session per 5-minute sliding window.
+17. REQ-17 (Scenario 5): The selfie upload endpoint must enforce a limit of 10 requests per guest session per 5-minute sliding window. **Note (2026-06-22):** in the current implementation the selfie-upload path *is* the face-search endpoint (`POST /api/v1/events/{event_id}/search`) — REQ-17 and REQ-18 are satisfied by a single rate-limit rule on that one route.
 18. REQ-18 (Scenario 5): The face search endpoint (`POST /api/v1/search` or equivalent) must enforce the same limit: 10 requests per guest session per 5-minute sliding window.
 19. REQ-19 (Scenario 5): When the limit is exceeded, the backend must return HTTP 429 with a `Retry-After` header indicating when the window resets.
 20. REQ-20 (Scenario 5): The frontend must display a human-readable message when it receives a 429, informing the guest how long to wait before trying again.
@@ -77,7 +77,7 @@ Establish the user-facing consent and data governance layer for WeddingLens so t
 23. REQ-23 (Scenario 6): The `Strict-Transport-Security` (HSTS) header must be set on all responses with a minimum `max-age` of 31536000 seconds.
 
 ### Scenario 7 — Embedding encryption audit
-24. REQ-24 (Scenario 7): The backend must expose an internal health/audit endpoint (not publicly reachable) that returns a boolean confirming whether the Qdrant collection is configured with payload encryption enabled.
+24. REQ-24 (Scenario 7): The backend must expose an internal health/audit endpoint (not publicly reachable) that returns a boolean confirming that face embeddings are encrypted at rest — verified against the PostgreSQL `face_records.embedding_enc` column (AES-256-GCM), which is the application-controlled encryption artifact. **Amended 2026-06-22:** the original Qdrant-payload-encryption framing was dropped because Qdrant stores plaintext vectors by design (dual-storage ADR) and exposes no queryable encryption flag. See `docs/decisions/2026-06-22-encryption-audit-verifies-postgres.md`.
 25. REQ-25 (Scenario 7): The audit endpoint must be callable by the admin without affecting stored embeddings or guest-facing operations.
 
 ## Non-functional requirements
@@ -85,7 +85,7 @@ Establish the user-facing consent and data governance layer for WeddingLens so t
 - NFR-1: The consent checkbox must add no more than one additional screen or modal step to the event publish flow.
 - NFR-2: The selfie privacy notice acknowledgement must not require navigation away from the selfie upload screen.
 - NFR-3: A removal request form submission must complete within 2 seconds under normal load.
-- NFR-4: Rate limit counters must be stored in a structure that survives a backend restart within a rolling 5-minute window (implementation detail: Redis or in-process sliding-window keyed on session token).
+- NFR-4: Rate limit counters are stored in an in-process sliding-window structure keyed on the guest session token (`sid`). **Amended 2026-06-22:** the restart-survival clause was dropped — counters reset on backend restart (acceptable fail-open for the single-VM MVP). Redis is the documented upgrade path if the deployment ever goes multi-instance. See `docs/decisions/2026-06-22-guest-search-in-process-rate-limiter.md`.
 - NFR-5: The `/privacy` page must load without a backend API call — it is static content.
 - NFR-6: All consent confirmation records and removal request records must be retained for a minimum of 3 years for audit purposes, independent of event lifecycle.
 
@@ -165,5 +165,5 @@ Establish the user-facing consent and data governance layer for WeddingLens so t
 - AC-6c: Given a TLS handshake, then the negotiated protocol is TLS 1.2 or higher — TLS 1.0 and 1.1 connections are rejected.
 
 **Scenario 7 — Embedding encryption audit**
-- AC-7a: Given the internal audit endpoint is called by an admin, then it returns a JSON response with a field (e.g., `embeddings_encrypted: true`) confirming that the Qdrant collection is configured with encryption enabled.
+- AC-7a: Given the internal audit endpoint is called by an admin, then it returns a JSON response with a field (e.g., `embeddings_encrypted: true`) confirming that indexed `face_records` have non-null, decryptable `embedding_enc` values in PostgreSQL. (Amended 2026-06-22 — see REQ-24.)
 - AC-7b: Given the audit endpoint, when called from a public-facing network path, then the request is rejected (HTTP 403 or connection refused) — the endpoint is not externally accessible.
