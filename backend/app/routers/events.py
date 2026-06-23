@@ -144,7 +144,8 @@ async def publish_event(
 ) -> EventOut:
     event = await _get_owned_event(event_id, db, current_user)
     try:
-        event = await event_svc.publish_event(db, event)
+        # Pass current_user.id so publish_event records owner consent (D1 — REQ-3).
+        event = await event_svc.publish_event(db, event, confirmed_by=current_user.id)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)

@@ -6,8 +6,10 @@ import {
   adminSuspendEvent,
   adminUnsuspendEvent,
   adminDeleteEvent,
+  adminGetRemovalRequests,
+  adminFulfillRemovalRequest,
 } from '@/lib/api';
-import type { AdminEvent } from '@/types/api';
+import type { AdminEvent, RemovalRequest } from '@/types/api';
 import StatusBadge from '@/components/StatusBadge';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
@@ -26,6 +28,13 @@ export default function AdminPage() {
 
   // Delete confirm
   const [deletingEvent, setDeletingEvent] = useState<AdminEvent | null>(null);
+
+  // D6: Removal requests
+  const [removalRequests, setRemovalRequests] = useState<RemovalRequest[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [removalLoading, setRemovalLoading] = useState(true);
+  const [removalError, setRemovalError] = useState('');
+  const [fulfillingId, setFulfillingId] = useState<string | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -97,9 +106,47 @@ export default function AdminPage() {
     }
   }
 
+  // D6: load pending removal requests on mount
+  useEffect(() => {
+    setRemovalLoading(true);
+    setRemovalError('');
+    adminGetRemovalRequests('pending')
+      .then(({ items, pending_count }) => {
+        setRemovalRequests(items);
+        setPendingCount(pending_count);
+      })
+      .catch((err: unknown) => {
+        const apiErr = err as { detail?: string };
+        setRemovalError(apiErr?.detail ?? 'Failed to load removal requests.');
+      })
+      .finally(() => setRemovalLoading(false));
+  }, []);
+
+  async function handleFulfill(requestId: string) {
+    setFulfillingId(requestId);
+    try {
+      await adminFulfillRemovalRequest(requestId);
+      setRemovalRequests((prev) => prev.filter((r) => r.id !== requestId));
+      setPendingCount((c) => Math.max(0, c - 1));
+    } catch (err: unknown) {
+      const apiErr = err as { detail?: string };
+      setRemovalError(apiErr?.detail ?? 'Failed to mark request as fulfilled.');
+    } finally {
+      setFulfillingId(null);
+    }
+  }
+
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Admin — All Events</h1>
+      <div className="flex items-center gap-3 mb-2">
+        <h1 className="text-2xl font-bold text-gray-900">Admin — All Events</h1>
+        {/* D6: pending removal requests badge */}
+        {pendingCount > 0 && (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+            {pendingCount} removal {pendingCount === 1 ? 'request' : 'requests'}
+          </span>
+        )}
+      </div>
       <p className="text-sm text-gray-500 mb-6">
         {total > 0 ? `${total} total events` : 'No events found'}
       </p>
@@ -285,6 +332,111 @@ export default function AdminPage() {
           )}
         </>
       )}
+
+      {/* D6: Pending face data removal requests */}
+      <div className="mt-10">
+        <div className="flex items-center gap-3 mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">Face Data Removal Requests</h2>
+          {pendingCount > 0 && (
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+              {pendingCount} pending
+            </span>
+          )}
+        </div>
+
+        {removalError && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+            {removalError}
+          </div>
+        )}
+
+        {removalLoading ? (
+          <div className="text-center py-8 text-gray-400 text-sm">Loading removal requests...</div>
+        ) : removalRequests.length === 0 ? (
+          <div className="text-center py-8 text-gray-400 text-sm bg-gray-50 rounded-lg border border-gray-200">
+            No pending removal requests.
+          </div>
+        ) : (
+          <>
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50">
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Guest</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Event ID</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Submitted</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Description</th>
+                    <th className="text-right px-4 py-3 font-medium text-gray-600">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {removalRequests.map((req) => (
+                    <tr key={req.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-gray-900">{req.guest_name}</div>
+                        <div className="text-xs text-gray-400">{req.guest_email}</div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 font-mono text-xs">
+                        {req.event_id}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                        {new Date(req.submitted_at).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 max-w-xs">
+                        <p className="truncate">{req.description}</p>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => handleFulfill(req.id)}
+                          disabled={fulfillingId === req.id}
+                          className="text-xs text-green-700 hover:text-green-900 font-medium disabled:opacity-50"
+                        >
+                          {fulfillingId === req.id ? 'Marking...' : 'Mark fulfilled'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile card list */}
+            <div className="sm:hidden space-y-3">
+              {removalRequests.map((req) => (
+                <div key={req.id} className="bg-white border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div>
+                      <p className="font-medium text-gray-900">{req.guest_name}</p>
+                      <p className="text-xs text-gray-400">{req.guest_email}</p>
+                    </div>
+                    <button
+                      onClick={() => handleFulfill(req.id)}
+                      disabled={fulfillingId === req.id}
+                      className="text-xs text-green-700 hover:text-green-900 font-medium disabled:opacity-50 flex-shrink-0"
+                    >
+                      {fulfillingId === req.id ? 'Marking...' : 'Mark fulfilled'}
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 font-mono mb-1">{req.event_id}</p>
+                  <p className="text-xs text-gray-400 mb-2">
+                    {new Date(req.submitted_at).toLocaleDateString('en-IN', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
+                  </p>
+                  <p className="text-xs text-gray-600 line-clamp-2">{req.description}</p>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Admin delete confirmation — hard delete, no grace period */}
       <ConfirmDialog

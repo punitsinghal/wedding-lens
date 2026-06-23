@@ -8,7 +8,7 @@ from collections.abc import AsyncGenerator
 from alembic.config import Config as AlembicConfig
 from alembic.script import ScriptDirectory
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -16,9 +16,11 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from app.routers import auth, events, albums, admin, guest_auth
 from app.routers.assignments import router as assignments_router
 from app.routers.gallery import router as gallery_router
+from app.routers.internal import router as internal_router
 from app.routers.photo_actions import router as photo_actions_router
 from app.routers.photos import router as photos_router, status_router as face_status_router
 from app.routers.progress import router as progress_router
+from app.routers.removal_requests import router as removal_requests_router
 from app.routers.search import router as search_router
 from app.routers.share import router as share_router
 from app.routers.uploads import router as uploads_router
@@ -143,6 +145,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# D7 — HSTS header on all responses (REQ-23, AC-6b).
+# TLS termination, HTTP→HTTPS redirect, and TLS 1.2+ floor are the
+# Nginx/proxy responsibility. The backend's only job: emit HSTS.
+@app.middleware("http")
+async def add_hsts_header(request: Request, call_next: object) -> Response:
+    response: Response = await call_next(request)  # type: ignore[operator]
+    response.headers["Strict-Transport-Security"] = (
+        "max-age=31536000; includeSubDomains"
+    )
+    return response
+
+
 app.include_router(auth.router)
 app.include_router(events.router)
 app.include_router(albums.router)
@@ -157,6 +172,8 @@ app.include_router(share_router)
 app.include_router(uploads_router)
 app.include_router(progress_router)
 app.include_router(assignments_router)
+app.include_router(removal_requests_router)
+app.include_router(internal_router)
 
 
 @app.get("/health", tags=["health"])

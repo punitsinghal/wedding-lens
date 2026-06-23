@@ -14,6 +14,7 @@ from app.models.user import User
 from app.services.auth import hash_password
 from app.services.guest_auth import create_guest_token
 from app.services.search_cache import search_cache
+from app.services.search_rate_limit import search_rate_limiter
 
 
 # ---------------------------------------------------------------------------
@@ -23,10 +24,12 @@ from app.services.search_cache import search_cache
 
 @pytest.fixture(autouse=True)
 def clear_cache():
-    """Clear the search cache before and after each test."""
+    """Clear the search cache and rate limiter before and after each test."""
     search_cache.clear()
+    search_rate_limiter.clear_all()
     yield
     search_cache.clear()
+    search_rate_limiter.clear_all()
 
 
 @pytest_asyncio.fixture
@@ -104,6 +107,7 @@ async def test_search_missing_token(client: AsyncClient, event: Event):
     resp = await client.post(
         f"/api/v1/events/{event.id}/search",
         files={"selfie": ("selfie.jpg", _fake_selfie(), "image/jpeg")},
+        data={"consent_ack": "true"},
     )
     # FastAPI's HTTPBearer returns 403 when no Authorization header is provided
     assert resp.status_code == 403
@@ -119,6 +123,7 @@ async def test_search_bad_token(client: AsyncClient, event: Event):
     resp = await client.post(
         f"/api/v1/events/{event.id}/search",
         files={"selfie": ("selfie.jpg", _fake_selfie(), "image/jpeg")},
+        data={"consent_ack": "true"},
         headers={"Authorization": "Bearer not-a-real-token"},
     )
     assert resp.status_code == 401
@@ -135,6 +140,7 @@ async def test_search_oversized_selfie(client: AsyncClient, event: Event):
     resp = await client.post(
         f"/api/v1/events/{event.id}/search",
         files={"selfie": ("big.jpg", big_bytes, "image/jpeg")},
+        data={"consent_ack": "true"},
         headers=_guest_headers(event.id),
     )
     assert resp.status_code == 413
@@ -150,6 +156,7 @@ async def test_search_unsupported_content_type(client: AsyncClient, event: Event
     resp = await client.post(
         f"/api/v1/events/{event.id}/search",
         files={"selfie": ("file.pdf", b"%PDF-1.4", "application/pdf")},
+        data={"consent_ack": "true"},
         headers=_guest_headers(event.id),
     )
     assert resp.status_code == 422
@@ -167,6 +174,7 @@ async def test_search_no_face_detected(client: AsyncClient, event: Event):
         resp = await client.post(
             f"/api/v1/events/{event.id}/search",
             files={"selfie": ("selfie.jpg", _fake_selfie(), "image/jpeg")},
+            data={"consent_ack": "true"},
             headers=_guest_headers(event.id),
         )
     assert resp.status_code == 422
@@ -188,6 +196,7 @@ async def test_search_no_dominant_face(client: AsyncClient, event: Event):
         resp = await client.post(
             f"/api/v1/events/{event.id}/search",
             files={"selfie": ("selfie.jpg", _fake_selfie(), "image/jpeg")},
+            data={"consent_ack": "true"},
             headers=_guest_headers(event.id),
         )
     assert resp.status_code == 422
@@ -212,6 +221,7 @@ async def test_search_single_face_returns_results(
         resp = await client.post(
             f"/api/v1/events/{event.id}/search",
             files={"selfie": ("selfie.jpg", _fake_selfie(), "image/jpeg")},
+            data={"consent_ack": "true"},
             headers=_guest_headers(event.id),
         )
 
@@ -250,6 +260,7 @@ async def test_search_dominant_face_selected(
         resp = await client.post(
             f"/api/v1/events/{event.id}/search",
             files={"selfie": ("selfie.jpg", _fake_selfie(), "image/jpeg")},
+            data={"consent_ack": "true"},
             headers=_guest_headers(event.id),
         )
 
@@ -280,6 +291,7 @@ async def test_search_cache_hit_on_second_request(
         resp1 = await client.post(
             f"/api/v1/events/{event.id}/search",
             files={"selfie": ("selfie.jpg", selfie_bytes, "image/jpeg")},
+            data={"consent_ack": "true"},
             headers=headers,
         )
         assert resp1.status_code == 200
@@ -289,6 +301,7 @@ async def test_search_cache_hit_on_second_request(
         resp2 = await client.post(
             f"/api/v1/events/{event.id}/search",
             files={"selfie": ("selfie.jpg", selfie_bytes, "image/jpeg")},
+            data={"consent_ack": "true"},
             headers=headers,
         )
         assert resp2.status_code == 200
@@ -315,6 +328,7 @@ async def test_search_cache_miss_different_selfie(
         resp1 = await client.post(
             f"/api/v1/events/{event.id}/search",
             files={"selfie": ("selfie.jpg", _fake_selfie(100), "image/jpeg")},
+            data={"consent_ack": "true"},
             headers=headers,
         )
         assert resp1.status_code == 200
@@ -324,6 +338,7 @@ async def test_search_cache_miss_different_selfie(
         resp2 = await client.post(
             f"/api/v1/events/{event.id}/search",
             files={"selfie": ("selfie.jpg", _fake_selfie(200), "image/jpeg")},
+            data={"consent_ack": "true"},
             headers=headers,
         )
         assert resp2.status_code == 200
@@ -375,6 +390,7 @@ async def test_search_scoped_to_event_id(
         resp = await client.post(
             f"/api/v1/events/{event.id}/search",
             files={"selfie": ("selfie.jpg", _fake_selfie(), "image/jpeg")},
+            data={"consent_ack": "true"},
             headers=_guest_headers(event.id),
         )
 
@@ -405,6 +421,7 @@ async def test_search_cache_keyed_by_sid(
         resp1 = await client.post(
             f"/api/v1/events/{event.id}/search",
             files={"selfie": ("selfie.jpg", selfie_bytes, "image/jpeg")},
+            data={"consent_ack": "true"},
             headers=_guest_headers(event.id, sid=sid_a),
         )
         assert resp1.status_code == 200
@@ -414,6 +431,7 @@ async def test_search_cache_keyed_by_sid(
         resp2 = await client.post(
             f"/api/v1/events/{event.id}/search",
             files={"selfie": ("selfie.jpg", selfie_bytes, "image/jpeg")},
+            data={"consent_ack": "true"},
             headers=_guest_headers(event.id, sid=sid_a),
         )
         assert resp2.status_code == 200
@@ -423,6 +441,7 @@ async def test_search_cache_keyed_by_sid(
         resp3 = await client.post(
             f"/api/v1/events/{event.id}/search",
             files={"selfie": ("selfie.jpg", selfie_bytes, "image/jpeg")},
+            data={"consent_ack": "true"},
             headers=_guest_headers(event.id, sid=sid_b),
         )
         assert resp3.status_code == 200
