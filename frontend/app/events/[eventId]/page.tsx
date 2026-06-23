@@ -56,6 +56,7 @@ export default function EventDetailPage() {
   // Publish/Unpublish
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishError, setPublishError] = useState('');
+  const [consentChecked, setConsentChecked] = useState(false);
 
   // Delete
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -179,6 +180,8 @@ export default function EventDetailPage() {
         updated = await publishEvent(eventId);
       }
       setEvent(updated);
+      // Reset consent checkbox after publish or unpublish so republish requires re-checking (AC-1d)
+      setConsentChecked(false);
     } catch (err: unknown) {
       const apiErr = err as { detail?: string };
       setPublishError(apiErr?.detail ?? 'Failed to change publish status.');
@@ -345,7 +348,17 @@ export default function EventDetailPage() {
           {isOwner && (
             <button
               onClick={handlePublishToggle}
-              disabled={isPublishing || event.status === 'suspended' || event.status === 'deleted'}
+              disabled={
+                isPublishing ||
+                event.status === 'suspended' ||
+                event.status === 'deleted' ||
+                (event.status !== 'published' && !consentChecked)
+              }
+              title={
+                event.status !== 'published' && !consentChecked
+                  ? 'You must check the consent confirmation below before publishing.'
+                  : undefined
+              }
               className={`flex-shrink-0 px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed ${
                 event.status === 'published'
                   ? 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-400'
@@ -360,6 +373,28 @@ export default function EventDetailPage() {
             </button>
           )}
         </div>
+
+        {/* Consent checkbox — shown to owner when event is not yet published (AC-1a/1b) */}
+        {isOwner && event.status !== 'published' && event.status !== 'suspended' && event.status !== 'deleted' && (
+          <div className="mt-3 pt-3 border-t border-gray-200">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={consentChecked}
+                onChange={(e) => setConsentChecked(e.target.checked)}
+                className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-gray-300 text-green-600 focus:ring-green-500"
+              />
+              <span className="text-xs text-gray-700 leading-relaxed">
+                I confirm that guests attending this event have been informed that their photos will be processed using face recognition to help them find themselves in the gallery.
+              </span>
+            </label>
+            {!consentChecked && (
+              <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                Check the box above to enable the Publish button.
+              </p>
+            )}
+          </div>
+        )}
 
         {isOwner && event.status === 'published' && (
           <div className="mt-3 pt-3 border-t border-gray-200">

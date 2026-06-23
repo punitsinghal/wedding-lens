@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.event import Event, SlugRedirect
+from app.models.privacy import ConsentRecord
 from app.schemas.event import EventCreate, EventUpdate
 from app.services.guest_auth import generate_otp_code
 
@@ -198,8 +199,14 @@ async def soft_delete_event(db: AsyncSession, event: Event) -> None:
     await db.flush()
 
 
-async def publish_event(db: AsyncSession, event: Event) -> Event:
-    """Validate and publish an event (REQ-31)."""
+async def publish_event(
+    db: AsyncSession, event: Event, confirmed_by: uuid.UUID | None = None
+) -> Event:
+    """Validate and publish an event (REQ-31).
+
+    If confirmed_by is provided, inserts a ConsentRecord row (D1 — REQ-3/AC-1c).
+    Republishing (unpublish→publish) creates a NEW consent record each time (AC-1d).
+    """
     errors: list[str] = []
     if not event.slug:
         errors.append("slug is required")
@@ -216,6 +223,17 @@ async def publish_event(db: AsyncSession, event: Event) -> Event:
     event.updated_at = datetime.now(timezone.utc)
     db.add(event)
     await db.flush()
+
+    if confirmed_by is not None:
+        consent = ConsentRecord(
+            id=uuid.uuid4(),
+            event_id=event.id,
+            confirmed_by=confirmed_by,
+            confirmed_at=datetime.now(timezone.utc),
+        )
+        db.add(consent)
+        await db.flush()
+
     return event
 
 

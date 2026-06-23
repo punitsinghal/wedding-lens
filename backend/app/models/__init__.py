@@ -4,6 +4,7 @@ from app.models.album import Album
 from app.models.photo import Photo, FaceRecord, PhotoAlbum
 from app.models.upload_session import UploadSession
 from app.models.assignment import EventPhotographer
+from app.models.privacy import ConsentRecord, RemovalRequest
 
 __all__ = [
     "User",
@@ -15,4 +16,6 @@ __all__ = [
     "PhotoAlbum",
     "UploadSession",
     "EventPhotographer",
+    "ConsentRecord",
+    "RemovalRequest",
 ]

@@ -229,3 +229,37 @@ export interface AssignedEvent {
   created_at: string;
   event_date?: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Privacy / removal request types
+// ---------------------------------------------------------------------------
+
+export type RemovalRequestStatus = 'pending' | 'fulfilled';
+
+export interface RemovalRequest {
+  id: string;
+  event_id: string;
+  submitted_at: string;
+  guest_name: string;
+  guest_email: string;
+  description: string;
+  status: RemovalRequestStatus;
+  fulfilled_at: string | null;
+}
+
+export interface RemovalRequestCreateRequest {
+  name: string;
+  email: string;
+  description: string;
+}
+
+export interface RemovalRequestCreateResponse {
+  id: string;
+  status: RemovalRequestStatus;
+  message: string;
+}
+
+export interface AdminRemovalRequestsResponse {
+  items: RemovalRequest[];
+  pending_count: number;
+}
