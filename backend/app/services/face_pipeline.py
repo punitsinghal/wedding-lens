@@ -136,12 +136,15 @@ async def _run_pipeline(photo_id: uuid.UUID, event_id: uuid.UUID) -> None:
         image_path = Path(settings.STORAGE_PATH) / storage_path
         image_bytes = image_path.read_bytes()
 
-        faces = _detect_faces(image_bytes)
+        # CPU-bound ONNXRuntime inference — offload to a thread to keep the event loop free
+        faces = await asyncio.to_thread(_detect_faces, image_bytes)
 
         # Generate thumbnail (failure must not block face processing)
         thumb_path: str | None = None
         try:
-            thumb_path = _generate_thumbnail(image_bytes, photo_id, event_id)
+            thumb_path = await asyncio.to_thread(
+                _generate_thumbnail, image_bytes, photo_id, event_id
+            )
         except Exception as thumb_exc:
             logger.warning(
                 '{"event": "thumbnail_error", "photo_id": "%s", "exc_type": "%s", "detail": "%s"}',
