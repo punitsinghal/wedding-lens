@@ -96,7 +96,7 @@ Last updated: 2026-08-15
 - `app/services/face_pipeline.py` — `_detect_faces` now returns `det_score` alongside `bbox` and `embedding`
 
 **Frontend (`frontend/`):**
-- `app/events/[eventId]/search/page.tsx` — search page; state machine `idle → uploading → results | error`; clears stale results immediately on new upload
+- `app/g/[slug]/search/page.tsx` — search page (slug-keyed; supersedes the original `app/events/[eventId]/search/page.tsx`, removed as dead code); state machine `idle → uploading → results | error`; clears stale results immediately on new upload
 - `components/search/SelfieUpload.tsx` — file input (`image/jpeg,image/png`), `capture="user"` for mobile camera; client-side 20 MB pre-check; loading spinner during upload; raw `fetch` multipart POST; refreshes guest token from `X-Guest-Token` header
 - `components/search/SearchResults.tsx` — ranked photo grid (API order = match rank); authenticated blob URL thumbnails via `guestFetchBlob`; "no photos found" empty state; "Try another photo" button
 - `components/search/SearchError.tsx` — maps `no_face_detected`, `no_dominant_face`, `file_too_large`, and unknown codes to user-friendly messages

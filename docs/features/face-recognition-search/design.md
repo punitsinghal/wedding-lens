@@ -213,6 +213,8 @@ Zero results (`"results": []`) is a valid success response — it means no photo
 
 Entry point for the search flow. Reads `eventId` from the URL; guest token from session. Orchestrates state: `idle → uploading → results | error`.
 
+> **Superseded:** this eventId-keyed page was replaced by the slug-based `app/g/[slug]/search/page.tsx` (added in the album-gallery epic) and was removed as dead code — see [docs/features/product-ux/ux.md](../product-ux/ux.md). Kept here as a historical record of the original design.
+
 ### Component: `SelfieUpload`
 
 - File input accepting `image/jpeg, image/png`, max 20 MB (client-side pre-check)

@@ -99,7 +99,7 @@ flowchart LR
 | `/g/[slug]/search` | Privacy notice → selfie upload → personal results | Gallery header CTA | Results, retry loop |
 | `/g/[slug]/favourites` | Guest's saved photos, bulk ZIP | Gallery header | Gallery |
 | `/share/[token]` | Single shared photo, 72h expiry | External share link | Home, or entry page if unauthenticated |
-| `/events/[eventId]/search` | **Duplicate** of the guest search flow, keyed by `eventId` instead of slug | Not linked from anywhere found in this review | — |
+| `/events/[eventId]/search` | **Dead** — orphaned duplicate of the guest search flow, keyed by `eventId` instead of slug | None — no link, redirect, or generated URL reaches it anywhere in the codebase | — |
 | `/login`, `/register` | Owner/photographer auth | Nav, root redirect | Dashboard |
 | `/dashboard` | Owned + assigned events list | Nav, post-login | Create event, event detail |
 | `/events/new` | Create event | Dashboard | Event detail |
@@ -133,7 +133,7 @@ flowchart LR
 
 ## Open questions
 
-- [ ] Is `/events/[eventId]/search` dead code, or is it reachable from somewhere not surfaced in this review (e.g. a legacy link format still in guests' hands)? — owner: engineering
+- [x] ~~Is `/events/[eventId]/search` dead code?~~ **Confirmed dead.** Built in Epic 5 (`a27129e`) before slug-based guest routing existed; superseded by `/g/[slug]/search` in a later epic (`1975496`) and never removed. No link/redirect reaches it, and QR codes/guest links always encode the event slug (`backend/app/services/qr.py`), never the eventId. Safe to delete `frontend/app/events/[eventId]/search/page.tsx` — owner: engineering
 - [ ] Should the cover-photo requirement to publish be enforced in the UI's disabled-button logic, or does the backend already block it and the button just doesn't reflect that? — owner: engineering
 - [ ] Is silent failure on downloads/ZIP an accepted tradeoff (simplicity, low failure rate), or should these get the same inline-error treatment as every owner-facing form? — owner: product
 - [ ] For events with thousands of photos, is one-at-a-time album assignment an accepted v1 limitation, or should bulk-select be prioritized before it becomes a support burden? — owner: product
