@@ -4,10 +4,11 @@ import logging
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.models.album import Album
 from app.models.photo import Photo
 from app.services.face_pipeline import _detect_faces
 from app.services.qdrant import search_faces
@@ -76,10 +77,16 @@ async def run_search(
     # Sort by score descending
     ranked_ids = sorted(best.keys(), key=lambda pid: best[pid], reverse=True)
 
-    # Fetch photos from DB
+    # Fetch photos from DB, excluding photos in private albums (REQ-6)
     photo_ids = [uuid.UUID(pid) for pid in ranked_ids]
     result = await db.execute(
-        select(Photo).where(Photo.id.in_(photo_ids), Photo.event_id == event_id)
+        select(Photo)
+        .outerjoin(Album, Photo.album_id == Album.id)
+        .where(
+            Photo.id.in_(photo_ids),
+            Photo.event_id == event_id,
+            or_(Photo.album_id.is_(None), Album.visibility == "public"),
+        )
     )
     photos = {str(p.id): p for p in result.scalars().all()}
 

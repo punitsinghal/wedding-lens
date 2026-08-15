@@ -677,3 +677,170 @@ async def test_removal_request_survives_event_deletion(
     assert survivor is not None, (
         "RemovalRequest was deleted when event was deleted — violates ADR 2026-06-23"
     )
+
+
+# ===========================================================================
+# REQ-6 — Private album access control
+# ===========================================================================
+
+
+async def _make_event_and_album(
+    client: AsyncClient,
+    owner_headers: dict,
+    visibility: str = "public",
+) -> tuple[str, str]:
+    """Return (event_id, album_id) with given visibility."""
+    ev_resp = await client.post(
+        "/api/v1/events",
+        json={
+            "name": "Privacy Album Test Wedding",
+            "bride_name": "A",
+            "groom_name": "B",
+            "access_mode": "public",
+        },
+        headers=owner_headers,
+    )
+    assert ev_resp.status_code == 201, ev_resp.text
+    event_id = ev_resp.json()["id"]
+
+    alb_resp = await client.post(
+        f"/api/v1/events/{event_id}/albums",
+        json={"name": "Test Album", "ceremony_category": "Ceremony", "visibility": visibility},
+        headers=owner_headers,
+    )
+    assert alb_resp.status_code == 201, alb_resp.text
+    album_id = alb_resp.json()["id"]
+    return event_id, album_id
+
+
+@pytest.mark.asyncio
+async def test_private_album_excluded_from_guest_gallery_albums(
+    client: AsyncClient, owner: User
+):
+    """REQ-6: private album does not appear in guest gallery album tabs."""
+    headers = _owner_headers(owner)
+    event_id, _album_id = await _make_event_and_album(client, headers, visibility="private")
+
+    # Publish the event so guests can access it
+    await client.post(f"/api/v1/events/{event_id}/publish", headers=headers)
+
+    guest_headers = _guest_headers(uuid.UUID(event_id))
+    resp = await client.get(f"/api/v1/events/{event_id}/gallery/albums", headers=guest_headers)
+    assert resp.status_code == 200, resp.text
+
+    tabs = resp.json()
+    # Only the "All" tab should appear; the Ceremony tab (private album) must be absent
+    ceremony_tabs = [t for t in tabs if t["ceremony_category"] == "Ceremony"]
+    assert ceremony_tabs == [], (
+        "Private album ceremony tab exposed to guests — REQ-6 violation"
+    )
+
+
+@pytest.mark.asyncio
+async def test_photographer_sees_private_album_in_crud(
+    client: AsyncClient, owner: User
+):
+    """REQ-6: photographer CRUD lists private albums (they own them)."""
+    headers = _owner_headers(owner)
+    event_id, album_id = await _make_event_and_album(client, headers, visibility="private")
+
+    resp = await client.get(f"/api/v1/events/{event_id}/albums", headers=headers)
+    assert resp.status_code == 200, resp.text
+
+    ids = [a["id"] for a in resp.json()]
+    assert album_id in ids, "Photographer cannot see their own private album — unexpected"
+
+
+@pytest.mark.asyncio
+async def test_toggle_album_visibility_via_api(
+    client: AsyncClient, owner: User
+):
+    """REQ-6: visibility can be toggled from public to private and back."""
+    headers = _owner_headers(owner)
+    event_id, album_id = await _make_event_and_album(client, headers, visibility="public")
+
+    # Toggle to private
+    resp = await client.put(
+        f"/api/v1/events/{event_id}/albums/{album_id}",
+        json={"visibility": "private"},
+        headers=headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["visibility"] == "private"
+
+    # Toggle back to public
+    resp = await client.put(
+        f"/api/v1/events/{event_id}/albums/{album_id}",
+        json={"visibility": "public"},
+        headers=headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["visibility"] == "public"
+
+
+@pytest.mark.asyncio
+async def test_private_album_all_tab_count_excludes_photos(
+    client: AsyncClient, owner: User
+):
+    """REQ-6: All tab count does not include photos from private albums."""
+    headers = _owner_headers(owner)
+    event_id, _album_id = await _make_event_and_album(client, headers, visibility="private")
+    await client.post(f"/api/v1/events/{event_id}/publish", headers=headers)
+
+    # No photos uploaded — but the All count from a private album should be 0 not count
+    # private-album photos. We verify the "All" tab photo_count == 0 (no unalbumised photos
+    # or public-album photos exist yet).
+    guest_headers = _guest_headers(uuid.UUID(event_id))
+    resp = await client.get(f"/api/v1/events/{event_id}/gallery/albums", headers=guest_headers)
+    assert resp.status_code == 200, resp.text
+
+    all_tab = next((t for t in resp.json() if t["ceremony_category"] is None), None)
+    assert all_tab is not None
+    assert all_tab["photo_count"] == 0, (
+        "All tab photo_count includes private album photos — REQ-6 violation"
+    )
+
+
+@pytest.mark.asyncio
+async def test_private_album_excluded_from_face_search_results(
+    client: AsyncClient, owner: User, db: AsyncSession
+):
+    """REQ-6: face search must not return photos that live in a private album —
+    otherwise a guest could learn a private photo's id via search even though it
+    is hidden from the gallery listing.
+    """
+    headers = _owner_headers(owner)
+    event_id, album_id = await _make_event_and_album(client, headers, visibility="private")
+
+    photo = Photo(
+        id=uuid.uuid4(),
+        event_id=uuid.UUID(event_id),
+        album_id=uuid.UUID(album_id),
+        filename="private.jpg",
+        storage_path=f"events/{event_id}/{uuid.uuid4()}.jpg",
+        file_size=1024,
+        processing_status="complete",
+        thumbnail_path=f"events/{event_id}/thumbs/{uuid.uuid4()}.webp",
+    )
+    db.add(photo)
+    await db.commit()
+
+    emb = np.random.rand(512).astype(np.float32)
+    emb /= np.linalg.norm(emb)
+    faces = [{"bbox": [0, 0, 100, 100], "embedding": emb, "det_score": 0.99}]
+    qdrant_hits = [{"photo_id": str(photo.id), "score": 0.95}]
+
+    with patch("app.services.face_search._detect_faces", return_value=faces), \
+         patch("app.services.face_search.search_faces", return_value=qdrant_hits):
+        resp = await client.post(
+            f"/api/v1/events/{event_id}/search",
+            files={"selfie": ("selfie.jpg", b"x" * 100, "image/jpeg")},
+            data={"consent_ack": "true"},
+            headers=_guest_headers(uuid.UUID(event_id)),
+        )
+
+    assert resp.status_code == 200, resp.text
+    photo_ids = [r["photo_id"] for r in resp.json()["results"]]
+    assert str(photo.id) not in photo_ids, (
+        "Search returned a photo from a private album — REQ-6 violation"
+    )

@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.album import Album, CEREMONY_CATEGORIES
@@ -27,9 +27,14 @@ async def list_photos(
     base_q = select(Photo).where(Photo.event_id == event_id)
 
     if album is not None:
-        # Join albums and filter by ceremony_category
+        # Join albums and filter by ceremony_category; exclude private albums
         base_q = base_q.join(Album, Photo.album_id == Album.id).where(
-            Album.ceremony_category == album
+            Album.ceremony_category == album, Album.visibility == "public"
+        )
+    else:
+        # Photos with no album are always visible; exclude photos in private albums
+        base_q = base_q.outerjoin(Album, Photo.album_id == Album.id).where(
+            or_(Photo.album_id.is_(None), Album.visibility == "public")
         )
 
     # Sorting
@@ -60,20 +65,25 @@ async def list_album_tabs(db: AsyncSession, event_id: uuid.UUID) -> list[dict]:
     Returns the 'All' tab plus one tab per ceremony_category present in the event,
     with photo_count > 0 only.
     """
-    # Total all photos for event → All tab count
+    # Total all photos for event → All tab count (exclude private album photos)
     total_result = await db.execute(
-        select(func.count(Photo.id)).where(Photo.event_id == event_id)
+        select(func.count(Photo.id))
+        .select_from(Photo)
+        .outerjoin(Album, Photo.album_id == Album.id)
+        .where(Photo.event_id == event_id)
+        .where(or_(Photo.album_id.is_(None), Album.visibility == "public"))
     )
     total = total_result.scalar_one()
 
     tabs = [{"ceremony_category": None, "label": "All", "photo_count": total}]
 
-    # Join photos → albums, group by ceremony_category, count
+    # Join photos → albums, group by ceremony_category, count; skip private albums
     rows_result = await db.execute(
         select(Album.ceremony_category, func.count(Photo.id))
         .join(Photo, Photo.album_id == Album.id)
         .where(Photo.event_id == event_id)
         .where(Album.ceremony_category.isnot(None))
+        .where(Album.visibility == "public")
         .group_by(Album.ceremony_category)
     )
     category_counts: dict[str, int] = {}

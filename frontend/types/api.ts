@@ -84,6 +84,8 @@ export interface EventUpdateRequest {
   cover_photo_id?: string | null;
 }
 
+export type AlbumVisibility = 'public' | 'private';
+
 export interface Album {
   id: string;
   event_id: string;
@@ -91,6 +93,7 @@ export interface Album {
   ceremony_category: CeremonyCategory | null;
   cover_photo_id: string | null;
   sort_order: number;
+  visibility: AlbumVisibility;
   created_at: string;
   updated_at: string;
 }
@@ -98,12 +101,14 @@ export interface Album {
 export interface AlbumCreateRequest {
   name: string;
   ceremony_category?: CeremonyCategory;
+  visibility?: AlbumVisibility;
 }
 
 export interface AlbumUpdateRequest {
   name?: string;
   ceremony_category?: CeremonyCategory | null;
   cover_photo_id?: string | null;
+  visibility?: AlbumVisibility;
 }
 
 export interface AdminEvent extends Event {

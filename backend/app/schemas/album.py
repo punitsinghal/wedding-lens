@@ -1,15 +1,19 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.models.album import CEREMONY_CATEGORIES
+
+AlbumVisibility = Literal["public", "private"]
 
 
 class AlbumCreate(BaseModel):
     name: str
     ceremony_category: str | None = None
     sort_order: int = 0
+    visibility: AlbumVisibility = "public"
 
     @field_validator("ceremony_category")
     @classmethod
@@ -24,6 +28,7 @@ class AlbumUpdate(BaseModel):
     ceremony_category: str | None = None
     sort_order: int | None = None
     cover_photo_id: uuid.UUID | None = None
+    visibility: AlbumVisibility | None = None
 
     @field_validator("ceremony_category")
     @classmethod
@@ -42,5 +47,6 @@ class AlbumOut(BaseModel):
     ceremony_category: str | None
     sort_order: int
     cover_photo_id: uuid.UUID | None
+    visibility: str
     created_at: datetime
     updated_at: datetime
