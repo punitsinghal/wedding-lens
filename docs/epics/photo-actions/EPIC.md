@@ -1,8 +1,8 @@
 # Photo Actions (Download, Share & Favorites)
 
-**Status:** In Review
+**Status:** Done
 **Owner:** Product Team
-**Last Updated:** 2026-06-20
+**Last Updated:** 2026-08-15
 
 ## Summary
 Allow guests to download individual or bulk sets of photos, share photos via a generated link, and maintain a personal favourites list so they can curate and revisit their best memories from the wedding.
@@ -31,7 +31,7 @@ Allow guests to download individual or bulk sets of photos, share photos via a g
 | Shareable link generation per photo | ✅ Done |
 | Favourite / unfavourite toggle on photo | ✅ Done |
 | My Favourites page | ✅ Done |
-| Download tracking (for analytics) | Backlog (Admin Platform epic) |
+| Download tracking (for analytics) | ✅ Done — `download_events` table, written on single-photo and ZIP download completion (Admin Platform #39) |
 
 ## Success Metrics
 - Single photo download starts within 2 seconds of clicking.

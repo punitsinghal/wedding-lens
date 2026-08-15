@@ -1,6 +1,6 @@
 # Admin Platform & Analytics
 
-**Status:** In Review (built on `feature/admin-platform-analytics`, issue #38)
+**Status:** Done (shipped in #39, merged to `main`)
 **Owner:** Product Team
 **Last Updated:** 2026-08-15
 
