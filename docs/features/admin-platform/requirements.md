@@ -1,8 +1,9 @@
 ---
 feature: Admin Platform & Analytics
-status: Draft
+status: Groomed — ready for /design
 owner: Product Team
 created: 2026-06-19
+groomed: 2026-08-15
 ---
 
 # Admin Platform & Analytics — Requirements
@@ -67,6 +68,9 @@ The admin event detail view must display the event's photo count, storage used, 
 **REQ-3 (Scenario 3): Admin hard delete**
 The admin must be able to permanently delete any event (regardless of current status). A hard delete must remove: all photo files from disk, all face embedding vectors from Qdrant (scoped to the event's `event_id` collection/namespace), all PostgreSQL records for the event (photos, face records, analytics events), and the event row itself. The action must require explicit confirmation (separate confirmation step, not just a single click). The operation must be irreversible.
 
+**REQ-3a (Scenario 3, amended 2026-08-15): Real Qdrant deletion**
+`_stub_qdrant_delete` (`backend/app/services/purge.py`) must be replaced with an actual Qdrant delete call scoped to the event's `event_id` before this feature ships. This was a pre-existing stub discovered during grooming, not new scope creep — hard delete is not correct (and not DPDP-compliant for an erasure request) while it survives in Qdrant.
+
 **REQ-4a (Scenario 4): Per-event processing monitor**
 The admin must be able to view a processing monitor for any event showing job counts in four states: pending, in-progress, failed, and completed. Counts must reflect the current state of the face processing pipeline for that event.
 
@@ -77,7 +81,7 @@ The processing monitor must be accessible from the admin event detail view. Coun
 The system must calculate the face processing failure rate per event in a rolling 1-hour window. If the failure rate exceeds 10% (failed jobs / total completed + failed jobs in the window), the system must send an email notification to the platform administrator's registered email address.
 
 **REQ-5b (Scenario 5): Alert delivery**
-Alert emails must be sent via SMTP using no third-party alerting service. Each alert email must identify the affected event (event name and ID). Repeat alerts for the same event must not be sent more frequently than once per hour while the condition persists.
+Alert emails must be sent via SMTP using no third-party alerting service. Each alert email must identify the affected event (event name and ID) and include a direct link to that event's processing monitor page in the admin dashboard (decided 2026-08-15 — the point of the alert is fast intervention, not just notification). Repeat alerts for the same event must not be sent more frequently than once per hour while the condition persists.
 
 **REQ-5c (Scenario 5): Alert scheduling**
 The failure rate check must run on a scheduled basis using APScheduler (consistent with the existing background job architecture). The check interval must be no greater than 5 minutes to ensure timely detection within the 1-hour window.
@@ -92,7 +96,7 @@ Analytics events must be recorded in PostgreSQL in a `download_events` table (on
 An event owner must not be able to view analytics for events they do not own. The backend must enforce ownership on all analytics endpoints.
 
 **REQ-7a (Scenario 7): Platform health dashboard**
-The admin health dashboard must display: total number of events on the platform (all statuses), total number of photos across all events, total storage used in GB (sum of photo file sizes on disk), and the platform-wide face processing error rate for the past 24 hours (failed jobs / total jobs in window).
+The admin health dashboard must display: total number of events on the platform (all statuses), total number of photos across all events, total storage used in GB (sum of original photo file sizes on disk — see storage usage metric decision below), and the platform-wide face processing error rate for the past 24 hours (failed jobs / total jobs in window).
 
 **REQ-7b (Scenario 7): Health data source**
 All platform health metrics must be computed from PostgreSQL queries at request time (batch queries — no real-time streaming). Metrics must reflect the state at the time the page is loaded; there is no requirement for automatic refresh.
@@ -123,22 +127,31 @@ Setting `is_admin = true` is a manual database operation in MVP. There is no adm
 
 ## Context
 
-**Dependencies**
+**Already implemented (built under other epics, reconciled into this feature during grooming 2026-08-15)**
 
-- Event management (view / suspend / soft-delete) is partially built in the Event Management epic. This feature extends those capabilities with analytics context (Scenario 2) and adds hard delete (Scenario 3).
+- **Scenario 1 (event list):** `GET /api/v1/admin/events` (`backend/app/routers/admin.py`) already returns a paginated, `is_admin`-gated event list — shipped in Event Management (#12). It does **not** yet include per-event photo count, storage used, or last-activity — `EventOut` has no such fields. REQ-1 as written is the delta: add those three fields (and status/last-activity filtering+sorting) to the admin list response.
+- **Scenario 2 (suspend/unsuspend):** `POST /api/v1/admin/events/{id}/suspend` and `/unsuspend` already exist and are wired into the admin frontend (#12). The "context" (photo count, storage, processing summary) called for in REQ-2 does not exist yet — same gap as Scenario 1.
+- **Scenario 3 (hard delete):** `DELETE /api/v1/admin/events/{id}` already exists with a confirmation dialog in the frontend (#12), and already deletes local files and PostgreSQL rows. **Gap found during grooming:** the Qdrant deletion step is currently `_stub_qdrant_delete()` (`backend/app/services/purge.py`) — a stub that does not call Qdrant. A hard-deleted event's face embeddings survive in Qdrant today. **Decision (2026-08-15, Product):** closing this is pulled into this feature's scope — see REQ-3 below, which now requires a real Qdrant delete call, not the stub.
+- Removal-request admin endpoints (`/admin/removal-requests`, list + fulfill) already exist, shipped in Privacy & Security (#37). Not in scope here — they belong to that epic.
+
+**Net-new work (Scenarios 4–7 — nothing built yet)**
+
 - The face processing pipeline runs as FastAPI `BackgroundTask` workers, in-process. Job state (pending / in-progress / failed / completed) is tracked in PostgreSQL and is the source of truth for the processing monitor (Scenario 4) and failure rate alerting (Scenario 5).
 - APScheduler is already present in the architecture for background scheduling. The failure-rate check job (Scenario 5) must be registered with APScheduler on startup.
-- Qdrant Cloud is used for face embedding vector storage. Hard delete (Scenario 3) must call the Qdrant API to delete all vectors for the event's `event_id` namespace before the event record is removed from PostgreSQL.
 - Analytics tables (`download_events`, `search_events`) are new — they require new PostgreSQL migrations.
+
+**Dependencies**
+
+- Qdrant Cloud is used for face embedding vector storage. Hard delete (Scenario 3) must call the Qdrant API to delete all vectors for the event's `event_id` namespace before the event record is removed from PostgreSQL — replacing `_stub_qdrant_delete`.
 
 **Auth model**
 
 - Photographer / event owner authentication: email + password JWT (or Google OAuth — TBD in auth epic). The `is_admin` boolean lives on the same user table.
 - Guest access uses QR + optional PIN — guests are not authenticated users and must not be granted any admin or analytics access.
 
-**Storage usage metric**
+**Storage usage metric (decided 2026-08-15, Product)**
 
-- Storage used is the sum of photo file bytes on local disk for the event's photos directory. Whether thumbnails are included in this total is an open question (see below). For MVP the metric is best-effort — it does not need to be real-time to the byte.
+- Storage used is the sum of **original photo file bytes only** (`Photo.file_size`) for the event — thumbnails and other processed variants are excluded. This is the simplest query and matches what a photographer/owner thinks of as "their photos"; thumbnails are a small fraction of total bytes. For MVP the metric is best-effort — it does not need to be real-time to the byte.
 
 ---
 
@@ -155,11 +168,15 @@ Setting `is_admin = true` is a manual database operation in MVP. There is no adm
 
 ## Open Questions
 
-- [ ] What analytics are visible to event owners vs restricted to admins only — for example, is total storage usage for their event visible to the owner, or admin-only? — owner: Product Team
-- [ ] Should the processing failure alert email include a direct link to the affected event's monitor page in the admin dashboard? — owner: Product Team
-- [ ] What is the admin promotion flow — is a manual DB update acceptable long-term, or should an admin-promotion UI be added post-MVP? — owner: Engineering
-- [ ] Should `download_events` and `search_events` store a guest session ID (anonymous token, not identity) for deduplication, or is a raw count without deduplication acceptable? — owner: Legal / Product Team
-- [ ] What is the storage usage metric — total bytes on disk including thumbnails and processed variants, or original uploads only? — owner: Engineering
+### Resolved (2026-08-15, grooming session)
+- [x] **Qdrant hard-delete stub** → discovered during grooming, not a pre-existing open question: `_stub_qdrant_delete` must be replaced with a real Qdrant delete call as part of this feature (REQ-3a). — Product
+- [x] **Storage usage metric** → original photo file bytes only; thumbnails/processed variants excluded. — Product
+- [x] **Analytics dedup** → raw counts, no guest session token stored (REQ-6b unchanged) — consistent with the Privacy & Security epic's stance that no guest identity/session is ever recorded in analytics. — Product
+- [x] **Alert email link** → yes, include a direct link to the affected event's monitor page (REQ-5b). — Product
+- [x] **Analytics visibility split** → event owners see only views/downloads/searches (REQ-6a as written); storage usage and photo counts are admin-only surfaces (Scenario 1 list, Scenario 7 health dashboard). Already implicit in REQ-6a's scope — no doc change needed, just confirmed during grooming. — Product
+
+### Still open
+- [ ] What is the admin promotion flow long-term — is a manual DB update (NFR-5) acceptable indefinitely, or should an admin-promotion UI be added post-MVP? — owner: Engineering. Not a build blocker; NFR-5 stands for MVP.
 
 ---
 
@@ -181,6 +198,7 @@ Setting `is_admin = true` is a manual database operation in MVP. There is no adm
 - When the admin confirms, then all photo files are removed from disk, all Qdrant vectors for the event's `event_id` are deleted, and all PostgreSQL records (event, photos, face records, analytics events) are removed.
 - After deletion, any attempt to access the event by its ID returns HTTP 404.
 - A partial failure (e.g. Qdrant delete fails) is logged and does not silently succeed — the operation is flagged for remediation.
+- AC-3d (REQ-3a): After hard delete, querying Qdrant directly for the event's `event_id` returns zero vectors — `_stub_qdrant_delete` no longer being called anywhere in the delete path.
 
 **AC-4 (Scenario 4): Processing monitor**
 - Given the admin views an event's detail page, then a processing monitor section shows counts for pending, in-progress, failed, and completed face processing jobs for that event.
