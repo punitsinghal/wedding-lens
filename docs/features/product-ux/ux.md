@@ -20,7 +20,7 @@ The goal here is to describe what a user actually experiences today, flag fricti
 3. Land on `/g/[slug]/gallery`: photo grid, filterable by album tabs (Ceremony/Sangeet/Mehendi/...), sortable by Latest/Popular/Photographer's Choice, infinite "Load more".
 4. Tap **Find my photos** → one-time privacy notice ("your selfie is deleted immediately, embeddings purged within 30 days") they must acknowledge → native camera/file picker → results grid of just their photos.
 5. On any photo (gallery, results, or full-screen lightbox): heart to favourite, share icon to copy a 72-hour public link, download single or bulk ZIP (capped at 200).
-6. Optionally visits **Favourites** (persisted server-side per guest token) or submits a **Remove my face data** request from the gallery header.
+6. Optionally visits **Favourites** (server-side, keyed to the guest's session — not durable; see friction note below) or submits a **Remove my face data** request from the gallery header.
 
 ```mermaid
 flowchart LR
@@ -43,6 +43,7 @@ flowchart LR
 - Selfie upload has no preview/crop step — pick a file and the search fires immediately. If it's a bad shot, the guest only learns that after a full round trip via `SearchError`.
 - ZIP bulk-download and single-photo download in the lightbox fail **silently** on error (comment in code: *"download errors are silent — the browser will show nothing"*). Every other guest-facing action (search, code entry) shows an inline message on failure; downloads don't.
 - The code-entry form collapses most backend errors into a generic "Invalid code" — a guest who's actually rate-limited or whose access was revoked gets a distinguishable message only if the error string happens to contain "too many"/"lockout"/"revoked". There's no "N attempts remaining" warning before lockout.
+- Favourites are **not durably persisted** despite living server-side: `FavouritesStore` is an in-process, in-memory singleton with a 24-hour sliding TTL, explicitly designed to be lost on backend restart (`docs/decisions/2026-06-20-favourites-in-process-store.md`). A guest who favourites photos and comes back after 24h of inactivity, or after any server restart, finds an empty Favourites page with no explanation of what happened.
 
 ---
 
@@ -72,7 +73,7 @@ flowchart LR
 
 **Notable friction in this flow:**
 - **Event detail page carries seven distinct jobs on one screen**: analytics, publish/consent, guest-access revoke, cover photo, event-details form, photographer management, danger zone. There's no tab or section nav — it's one long scroll, and the destructive "Delete Event" action sits at the very bottom with no sticky context. For a first-time owner this is a lot to parse before they even get to uploading photos.
-- The publish button copy says a cover photo is "**Required to publish**," but the button's disabled logic only checks the consent checkbox and event status — not whether `cover_photo_id` is set. Worth verifying against the backend: either the UI should also gate on cover photo, or the copy overstates a rule the server doesn't actually enforce at that point.
+- **Confirmed gap:** the publish button copy says a cover photo is "**Required to publish**," and the backend does enforce this (`event-management/requirements.md` REQ-31/AC-19 — `POST /publish` validates slug, access_mode, and `cover_photo_id`, rejecting with a validation error if missing). But the button's client-side `disabled` logic only checks the consent checkbox and event status, not `cover_photo_id` — so an owner can click Publish with no cover set, round-trip to the server, and get rejected. An avoidable failed submission the UI could prevent client-side.
 - Album (re)assignment on the Photos page is one dropdown per photo, no multi-select. For an app whose own `CLAUDE.md` describes "thousands of wedding pictures," sorting a full event into albums one photo at a time is the single biggest scaling gap in the photographer experience.
 - SSE reconnect on drop is a silent 60-second fixed backoff — if the connection dies mid-upload, the processing panel just goes stale with no "reconnecting…" indicator.
 - Delete confirmations are inconsistent in weight: deleting an **event** requires typing `DELETE`; deleting an **album** (which can hold hundreds of photos, un-albuming them) is a single-click confirm dialog with no typed confirmation.
@@ -128,14 +129,17 @@ flowchart LR
 | Photo upload fails mid-chunk | Per-file red status + error text in the upload queue; file stays so the owner can retry | 3 retries with 1s delay per chunk before marking the item errored |
 | SSE processing stream drops | Panel silently stops updating | Reconnects automatically after a fixed 60s, no user-visible state change |
 | Album deleted while photos are in it | Single confirm dialog, no typed confirmation | Photos are moved to "uncategorized," not deleted |
+| Guest returns to Favourites after 24h idle or a server restart | Empty favourites list, no explanation | `FavouritesStore` is in-memory with a 24h sliding TTL; state does not survive a restart |
+| Owner clicks Publish with no cover photo set | Request round-trips and fails server-side | Backend rejects per REQ-31; the Publish button's disabled logic doesn't check for this client-side |
 
 ---
 
 ## Open questions
 
 - [x] ~~Is `/events/[eventId]/search` dead code?~~ **Confirmed dead.** Built in Epic 5 (`a27129e`) before slug-based guest routing existed; superseded by `/g/[slug]/search` in a later epic (`1975496`) and never removed. No link/redirect reaches it, and QR codes/guest links always encode the event slug (`backend/app/services/qr.py`), never the eventId. Safe to delete `frontend/app/events/[eventId]/search/page.tsx` — owner: engineering
-- [ ] Should the cover-photo requirement to publish be enforced in the UI's disabled-button logic, or does the backend already block it and the button just doesn't reflect that? — owner: engineering
+- [x] ~~Should the cover-photo requirement to publish be enforced in the UI's disabled-button logic, or does the backend already block it?~~ **Confirmed:** the backend enforces it (REQ-31/AC-19); the frontend doesn't check `cover_photo_id` before enabling Publish. Fixing the client-side check is a small, low-risk change — owner: engineering
 - [ ] Is silent failure on downloads/ZIP an accepted tradeoff (simplicity, low failure rate), or should these get the same inline-error treatment as every owner-facing form? — owner: product
+- [ ] Should the Favourites page warn guests that favourites aren't durable (24h TTL, lost on restart), or should the underlying store move to a persistent backing (e.g. Postgres) now that the guest base is growing past pilot scale? — owner: product/engineering
 - [ ] For events with thousands of photos, is one-at-a-time album assignment an accepted v1 limitation, or should bulk-select be prioritized before it becomes a support burden? — owner: product
 - [ ] Should the event detail page be split into tabs/sections (Overview / Publish & Access / Photographers / Danger Zone) now, or is single-scroll acceptable at current event sizes? — owner: product/design
 - [ ] Is there a password-reset path for owners that just isn't visible in the pages reviewed, or does it not exist yet? — owner: engineering
