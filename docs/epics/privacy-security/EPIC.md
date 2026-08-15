@@ -1,8 +1,8 @@
 # Privacy & Security
 
-**Status:** Draft
+**Status:** In Progress
 **Owner:** Product Team
-**Last Updated:** 2026-06-19
+**Last Updated:** 2026-08-15
 
 ## Summary
 Ensure the platform handles biometric face data responsibly by encrypting embeddings, auto-deleting uploaded selfies, enforcing event-scoped access, and giving guests meaningful control over their data — in compliance with privacy regulations.
@@ -28,14 +28,14 @@ Ensure the platform handles biometric face data responsibly by encrypting embedd
 ## Features
 | Feature | Status |
 |---------|--------|
-| Consent confirmation flow for event owner at activation | Backlog |
-| Face embedding encryption at rest (Qdrant + DB layer) | Backlog |
-| Auto-delete selfie after search pipeline completion | Backlog |
-| Guest data removal request endpoint and fulfilment | Backlog |
-| Event-scoped data isolation enforcement | Backlog |
-| TLS enforcement on all endpoints | Backlog |
-| Rate limiting on selfie upload and search endpoints | Backlog |
-| Private album access control | In progress (backend + toggle UI done; see below) |
+| Consent confirmation flow for event owner at activation | ✅ Done (#37) |
+| Face embedding encryption at rest (Qdrant + DB layer) | ✅ Done — Postgres `embedding_enc` (AES-256-GCM) is the app-level control; Qdrant relies on infra-level encryption at rest. See `docs/decisions/2026-06-19-face-embedding-dual-storage.md` and audit endpoint (#37) |
+| Auto-delete selfie after search pipeline completion | ✅ Done (Face Recognition Search epic; `face_search.py` deletes selfie bytes in a `finally` block) |
+| Guest data removal request endpoint and fulfilment | ✅ Done (#37) |
+| Event-scoped data isolation enforcement | ✅ Done (all Qdrant/Postgres queries scoped by `event_id`; see `test_search_scoped_to_event_id`) |
+| TLS enforcement on all endpoints | Partial — backend emits HSTS and is configured to trust the proxy; actual Nginx + Let's Encrypt termination/cert renewal is Ops/Deployment work and not confirmed deployed |
+| Rate limiting on selfie upload and search endpoints | ✅ Done (#37) |
+| Private album access control | ✅ Done — backend visibility filter (gallery, album tabs, face search) + photographer toggle UI (commit `0f847b9`, part of #37); not part of the originally groomed requirements/design doc, tracked via EPIC requirement 6 only |
 
 ## Success Metrics
 - 100% of uploaded selfies deleted within 60 seconds of search completion.
@@ -50,6 +50,8 @@ Ensure the platform handles biometric face data responsibly by encrypting embedd
   `docs/decisions/2026-08-15-private-album-query-time-filtering.md`.
 
 ## Open Questions
-- [ ] Which privacy regulation framework applies (GDPR, PDPA, CCPA)? — owner: Legal / Product Team
-- [ ] What is the retention policy for face embeddings after the event period ends? — owner: Legal / Product Team
-- [ ] Should the platform publish a biometric data privacy notice visible to guests before selfie upload? — owner: Legal
+- [x] Which privacy regulation framework applies? → India's DPDP Act, 2023 (platform is Data Fiduciary, guests are Data Principals). — Product, resolved 2026-06-22
+- [x] What is the retention policy for face embeddings after the event period ends? → All event data (photos, face records, embeddings) deleted within 30 days of the event end date. — Product, resolved 2026-06-22
+- [x] Should the platform publish a biometric data privacy notice visible to guests before selfie upload? → Yes, static `/privacy` page, English-only for MVP. — resolved 2026-06-22, shipped in #37
+- [ ] Should the platform publish a biometric data DPA (Data Processing Agreement) for event owners to sign? — owner: Legal (design/process, not a build blocker)
+- [ ] Should guests receive a confirmation email when their face data removal request is submitted? — owner: Product Team; MVP is on-screen confirmation only, email requires a transactional email service

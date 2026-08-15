@@ -1,8 +1,8 @@
 # Photographer Dashboard
 
-**Status:** In Progress
+**Status:** Done
 **Owner:** Product Team
-**Last Updated:** 2026-06-19
+**Last Updated:** 2026-08-15
 
 ## Summary
 Provide photographers with a dedicated dashboard to upload photos via multiple methods, monitor processing progress in real time, and manage albums — so they can deliver a complete indexed gallery to the couple with minimal friction.
@@ -27,7 +27,12 @@ Provide photographers with a dedicated dashboard to upload photos via multiple m
 ## Features
 | Feature | Status |
 |---------|--------|
-| photographer-dashboard | Groomed — ready for /design |
+| Photo upload — drag-and-drop / folder picker, JPEG/PNG ≤ 25 MB, async face processing | ✅ Done (#21, #27) |
+| Upload resume — chunked transfer with offset tracking and automatic resume | ✅ Done (#27) |
+| Real-time processing progress (total / indexed / pending / failed, "Gallery ready") | ✅ Done — SSE (#27) |
+| Album management (create, rename, delete, multi-album assignment) | ✅ Done (#21) |
+| "Photographer Choice" flag toggle | ✅ Done (#34) |
+| Photographer assignment by event owner (assign/revoke by email, scoped access) | ✅ Done (#27, #28, #34) |
 | Google Drive sync | Deferred — Photo Source Integration epic |
 | Google Photos sync | Deferred — Photo Source Integration epic |
 
