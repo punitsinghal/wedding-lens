@@ -26,6 +26,8 @@ import SlugField from '@/components/SlugField';
 import StatusBadge from '@/components/StatusBadge';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
+type TabKey = 'overview' | 'publish' | 'photographers' | 'danger';
+
 export default function EventDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -39,6 +41,7 @@ export default function EventDetailPage() {
   const [event, setEvent] = useState<Event | null>(null);
   const [isLoadingEvent, setIsLoadingEvent] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [activeTab, setActiveTab] = useState<TabKey>('overview');
 
   // Form state
   const [name, setName] = useState('');
@@ -317,6 +320,14 @@ export default function EventDetailPage() {
   // photo is set. Mirror that here so the button doesn't invite a doomed submit.
   const missingCoverPhoto = event.status !== 'published' && !event.cover_photo_id;
 
+  const TABS: { key: TabKey; label: string }[] = [
+    { key: 'overview', label: 'Overview' },
+    { key: 'publish', label: 'Publish & Access' },
+  ];
+  if (isOwner) {
+    TABS.push({ key: 'photographers', label: 'Photographers' }, { key: 'danger', label: 'Danger Zone' });
+  }
+
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
       {/* Header */}
@@ -351,225 +362,34 @@ export default function EventDetailPage() {
         </Link>
       </div>
 
-      {/* Analytics (S6) — owner only */}
-      {isOwner && (
-        <div className="mb-6 p-4 bg-white border border-gray-200 rounded-lg">
-          <h2 className="text-sm font-semibold text-gray-800 mb-3">Analytics</h2>
-          {analyticsError && (
-            <p className="text-xs text-red-600 mb-2">{analyticsError}</p>
-          )}
-          {analytics ? (
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <p className="text-xs text-gray-500">Views</p>
-                <p className="text-xl font-semibold text-gray-900">{analytics.total_views}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Downloads</p>
-                <p className="text-xl font-semibold text-gray-900">{analytics.total_downloads}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Searches</p>
-                <p className="text-xl font-semibold text-gray-900">{analytics.total_searches}</p>
-              </div>
-            </div>
-          ) : !analyticsError ? (
-            <p className="text-xs text-gray-400">Loading analytics...</p>
-          ) : null}
-        </div>
-      )}
-
-      {/* Publish / Unpublish */}
-      <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-medium text-gray-700">
-              {event.status === 'published' ? 'Event is published' : 'Event is not published'}
-            </p>
-            <p className="text-xs text-gray-400 mt-0.5">
-              {event.status === 'published'
-                ? 'Guests can access this event via its QR code or URL.'
-                : 'Guests cannot access this event yet.'}
-            </p>
-            {publishError && (
-              <p className="text-xs text-red-600 mt-1">{publishError}</p>
-            )}
-          </div>
-          {isOwner && (
-            <button
-              onClick={handlePublishToggle}
-              disabled={
-                isPublishing ||
-                event.status === 'suspended' ||
-                event.status === 'deleted' ||
-                (event.status !== 'published' && !consentChecked) ||
-                missingCoverPhoto
-              }
-              title={
-                event.status !== 'published' && !consentChecked
-                  ? 'You must check the consent confirmation below before publishing.'
-                  : missingCoverPhoto
-                  ? 'Set a cover photo below before publishing.'
-                  : undefined
-              }
-              className={`flex-shrink-0 px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed ${
-                event.status === 'published'
-                  ? 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-400'
-                  : 'bg-green-600 text-white hover:bg-green-700 focus:ring-green-500'
-              }`}
-            >
-              {isPublishing
-                ? 'Updating...'
-                : event.status === 'published'
-                ? 'Unpublish'
-                : 'Publish'}
-            </button>
-          )}
-        </div>
-
-        {/* Consent checkbox — shown to owner when event is not yet published (AC-1a/1b) */}
-        {isOwner && event.status !== 'published' && event.status !== 'suspended' && event.status !== 'deleted' && (
-          <div className="mt-3 pt-3 border-t border-gray-200">
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={consentChecked}
-                onChange={(e) => setConsentChecked(e.target.checked)}
-                className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-gray-300 text-green-600 focus:ring-green-500"
-              />
-              <span className="text-xs text-gray-700 leading-relaxed">
-                I confirm that guests attending this event have been informed that their photos will be processed using face recognition to help them find themselves in the gallery.
-              </span>
-            </label>
-            {!consentChecked && (
-              <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
-                Check the box above to enable the Publish button.
-              </p>
-            )}
-            {missingCoverPhoto && (
-              <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
-                Set a cover photo (below) to enable the Publish button.
-              </p>
-            )}
-          </div>
-        )}
-
-        {isOwner && event.status === 'published' && (
-          <div className="mt-3 pt-3 border-t border-gray-200">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-medium text-gray-700">
-                  Guest Access: {event.guest_access_enabled ? 'Active' : 'Revoked'}
-                </p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {event.guest_access_enabled
-                    ? 'Guests with valid sessions can access the gallery.'
-                    : 'All guest sessions are invalidated. Re-enable to allow access again.'}
-                </p>
-              </div>
-              <button
-                onClick={handleGuestAccessToggle}
-                disabled={isRevoking}
-                className={`flex-shrink-0 px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed ${
-                  event.guest_access_enabled
-                    ? 'bg-red-50 border border-red-300 text-red-700 hover:bg-red-100 focus:ring-red-400'
-                    : 'bg-green-600 text-white hover:bg-green-700 focus:ring-green-500'
-                }`}
-              >
-                {isRevoking ? 'Updating...' : event.guest_access_enabled ? 'Revoke Access' : 'Enable Access'}
-              </button>
-            </div>
-            {revokeError && <p className="mt-2 text-xs text-red-600">{revokeError}</p>}
-          </div>
-        )}
-      </div>
-
-      {/* Cover Photo */}
-      {isOwner && (<div className="mb-6 p-4 bg-white border border-gray-200 rounded-lg">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h2 className="text-sm font-semibold text-gray-800">Event Cover Photo</h2>
-            <p className="text-xs text-gray-400 mt-0.5">
-              Required to publish. Shown as the event thumbnail for guests.
-            </p>
-          </div>
-          {event.cover_photo_id && (
-            <span className="text-xs text-green-700 bg-green-50 border border-green-200 px-2 py-1 rounded-full">
-              Cover set
-            </span>
-          )}
-        </div>
-
-        {coverError && (
-          <p className="mb-3 text-xs text-red-600">{coverError}</p>
-        )}
-
-        {photosLoading && allPhotos.length === 0 ? (
-          <p className="text-xs text-gray-400 py-4 text-center">Loading photos...</p>
-        ) : allPhotos.length === 0 ? (
-          <p className="text-xs text-gray-400 py-4 text-center">
-            No photos in albums yet.{' '}
-            <Link href={`/events/${eventId}/albums`} className="text-blue-600 hover:underline">
-              Add photos to an album
-            </Link>{' '}
-            to set a cover.
-          </p>
-        ) : (
-          <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-            {allPhotos.map((photo) => {
-              const isCover = event.cover_photo_id === photo.id;
-              const thumbSrc = coverBlobUrls[photo.id];
-              return (
-                <button
-                  key={photo.id}
-                  onClick={() => handleSetEventCover(photo.id)}
-                  disabled={settingEventCover}
-                  className={[
-                    'relative aspect-square rounded-md overflow-hidden',
-                    'transition-all duration-150 focus:outline-none',
-                    isCover
-                      ? 'ring-2 ring-blue-500 ring-offset-1'
-                      : 'hover:ring-2 hover:ring-gray-400 hover:ring-offset-1',
-                    settingEventCover ? 'opacity-50 cursor-wait' : 'cursor-pointer',
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}
-                  title={isCover ? 'Current event cover' : `Set as event cover`}
-                >
-                  {thumbSrc ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={thumbSrc}
-                      alt={photo.filename}
-                      className="absolute inset-0 w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center bg-gray-100 text-gray-400">
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                  )}
-                  {isCover && (
-                    <span className="absolute top-1 right-1 flex items-center justify-center w-4 h-4 bg-blue-500 rounded-full shadow">
-                      <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 12 12" fill="none">
-                        <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>)}
-
-      {/* Edit form */}
       {!isOwner && (
         <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-700">
           You have view-only access to this event as an assigned photographer.
         </div>
       )}
+
+      {/* Tabs */}
+      <div className="mb-6 border-b border-gray-200">
+        <nav className="flex gap-1 -mb-px" aria-label="Event settings sections">
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === tab.key
+                  ? tab.key === 'danger'
+                    ? 'border-red-500 text-red-700'
+                    : 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
       {saveError && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
           {saveError}
@@ -581,158 +401,399 @@ export default function EventDetailPage() {
         </div>
       )}
 
-      <form
-        onSubmit={handleSave}
-        className="space-y-5 bg-white border border-gray-200 rounded-lg p-6"
-      >
-        <h2 className="text-base font-semibold text-gray-800">Event Details</h2>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="name">
-            Event Name <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            disabled={!isOwner}
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="brideName">
-              Bride&apos;s Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              id="brideName"
-              type="text"
-              value={brideName}
-              onChange={(e) => setBrideName(e.target.value)}
-              required
-              disabled={!isOwner}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="groomName">
-              Groom&apos;s Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              id="groomName"
-              type="text"
-              value={groomName}
-              onChange={(e) => setGroomName(e.target.value)}
-              required
-              disabled={!isOwner}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
-            />
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="eventDate">
-            Event Date <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="eventDate"
-            type="date"
-            value={eventDate}
-            onChange={(e) => setEventDate(e.target.value)}
-            required
-            disabled={!isOwner}
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="accessMode">
-            Guest Access Mode <span className="text-red-500">*</span>
-          </label>
-          <select
-            id="accessMode"
-            value={accessMode}
-            onChange={(e) => setAccessMode(e.target.value as AccessMode)}
-            disabled={!isOwner}
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
-          >
-            <option value="public">Public — anyone with the link</option>
-            <option value="access-code">Access Code — guests enter a code</option>
-            <option value="magic-link-otp">Magic Link / OTP — guests verify by email</option>
-          </select>
-        </div>
-
-        {accessMode === 'access-code' && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="accessCode">
-              Access Code <span className="text-red-500">*</span>
-            </label>
-            <input
-              id="accessCode"
-              type="text"
-              value={accessCode}
-              onChange={(e) => setAccessCode(e.target.value)}
-              required
-              disabled={!isOwner}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
-            />
-          </div>
-        )}
-
-        {accessMode === 'magic-link-otp' && event.otp_code && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              OTP Code (share with guests)
-            </label>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm bg-gray-50 font-mono tracking-widest">
-                {event.otp_code}
-              </code>
-              <button
-                type="button"
-                onClick={() => navigator.clipboard.writeText(event.otp_code!)}
-                className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
-              >
-                Copy
-              </button>
+      {/* Overview tab: analytics + event identity */}
+      {activeTab === 'overview' && (
+        <>
+          {isOwner && (
+            <div className="mb-6 p-4 bg-white border border-gray-200 rounded-lg">
+              <h2 className="text-sm font-semibold text-gray-800 mb-3">Analytics</h2>
+              {analyticsError && (
+                <p className="text-xs text-red-600 mb-2">{analyticsError}</p>
+              )}
+              {analytics ? (
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <p className="text-xs text-gray-500">Views</p>
+                    <p className="text-xl font-semibold text-gray-900">{analytics.total_views}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Downloads</p>
+                    <p className="text-xl font-semibold text-gray-900">{analytics.total_downloads}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Searches</p>
+                    <p className="text-xl font-semibold text-gray-900">{analytics.total_searches}</p>
+                  </div>
+                </div>
+              ) : !analyticsError ? (
+                <p className="text-xs text-gray-400">Loading analytics...</p>
+              ) : null}
             </div>
-            <p className="mt-1 text-xs text-gray-400">Share this code with guests via WhatsApp or email.</p>
+          )}
+
+          <form
+            onSubmit={handleSave}
+            className="space-y-5 bg-white border border-gray-200 rounded-lg p-6"
+          >
+            <h2 className="text-base font-semibold text-gray-800">Event Details</h2>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="name">
+                Event Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                disabled={!isOwner}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="brideName">
+                  Bride&apos;s Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="brideName"
+                  type="text"
+                  value={brideName}
+                  onChange={(e) => setBrideName(e.target.value)}
+                  required
+                  disabled={!isOwner}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="groomName">
+                  Groom&apos;s Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="groomName"
+                  type="text"
+                  value={groomName}
+                  onChange={(e) => setGroomName(e.target.value)}
+                  required
+                  disabled={!isOwner}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="eventDate">
+                Event Date <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="eventDate"
+                type="date"
+                value={eventDate}
+                onChange={(e) => setEventDate(e.target.value)}
+                required
+                disabled={!isOwner}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
+              />
+            </div>
+
+            <SlugField
+              value={slug}
+              onChange={(v) => {
+                setSlug(v);
+                setSlugSuggestions([]);
+              }}
+              suggestions={slugSuggestions}
+              onSelectSuggestion={(s) => {
+                setSlug(s);
+                setSlugSuggestions([]);
+              }}
+              disabled={!isOwner}
+            />
+
+            {isOwner && (
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isSaving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            )}
+          </form>
+        </>
+      )}
+
+      {/* Publish & Access tab: cover photo, access mode, publish/consent, guest-access toggle */}
+      {activeTab === 'publish' && (
+        <>
+          {isOwner && (
+            <div className="mb-6 p-4 bg-white border border-gray-200 rounded-lg">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-gray-800">Event Cover Photo</h2>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Required to publish. Shown as the event thumbnail for guests.
+                  </p>
+                </div>
+                {event.cover_photo_id && (
+                  <span className="text-xs text-green-700 bg-green-50 border border-green-200 px-2 py-1 rounded-full">
+                    Cover set
+                  </span>
+                )}
+              </div>
+
+              {coverError && (
+                <p className="mb-3 text-xs text-red-600">{coverError}</p>
+              )}
+
+              {photosLoading && allPhotos.length === 0 ? (
+                <p className="text-xs text-gray-400 py-4 text-center">Loading photos...</p>
+              ) : allPhotos.length === 0 ? (
+                <p className="text-xs text-gray-400 py-4 text-center">
+                  No photos in albums yet.{' '}
+                  <Link href={`/events/${eventId}/albums`} className="text-blue-600 hover:underline">
+                    Add photos to an album
+                  </Link>{' '}
+                  to set a cover.
+                </p>
+              ) : (
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                  {allPhotos.map((photo) => {
+                    const isCover = event.cover_photo_id === photo.id;
+                    const thumbSrc = coverBlobUrls[photo.id];
+                    return (
+                      <button
+                        key={photo.id}
+                        onClick={() => handleSetEventCover(photo.id)}
+                        disabled={settingEventCover}
+                        className={[
+                          'relative aspect-square rounded-md overflow-hidden',
+                          'transition-all duration-150 focus:outline-none',
+                          isCover
+                            ? 'ring-2 ring-blue-500 ring-offset-1'
+                            : 'hover:ring-2 hover:ring-gray-400 hover:ring-offset-1',
+                          settingEventCover ? 'opacity-50 cursor-wait' : 'cursor-pointer',
+                        ]
+                          .filter(Boolean)
+                          .join(' ')}
+                        title={isCover ? 'Current event cover' : `Set as event cover`}
+                      >
+                        {thumbSrc ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={thumbSrc}
+                            alt={photo.filename}
+                            className="absolute inset-0 w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center bg-gray-100 text-gray-400">
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                        )}
+                        {isCover && (
+                          <span className="absolute top-1 right-1 flex items-center justify-center w-4 h-4 bg-blue-500 rounded-full shadow">
+                            <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 12 12" fill="none">
+                              <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          <form
+            onSubmit={handleSave}
+            className="mb-6 space-y-5 bg-white border border-gray-200 rounded-lg p-6"
+          >
+            <h2 className="text-base font-semibold text-gray-800">Guest Access</h2>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="accessMode">
+                Guest Access Mode <span className="text-red-500">*</span>
+              </label>
+              <select
+                id="accessMode"
+                value={accessMode}
+                onChange={(e) => setAccessMode(e.target.value as AccessMode)}
+                disabled={!isOwner}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
+              >
+                <option value="public">Public — anyone with the link</option>
+                <option value="access-code">Access Code — guests enter a code</option>
+                <option value="magic-link-otp">Magic Link / OTP — guests verify by email</option>
+              </select>
+            </div>
+
+            {accessMode === 'access-code' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="accessCode">
+                  Access Code <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="accessCode"
+                  type="text"
+                  value={accessCode}
+                  onChange={(e) => setAccessCode(e.target.value)}
+                  required
+                  disabled={!isOwner}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
+                />
+              </div>
+            )}
+
+            {accessMode === 'magic-link-otp' && event.otp_code && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  OTP Code (share with guests)
+                </label>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm bg-gray-50 font-mono tracking-widest">
+                    {event.otp_code}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard.writeText(event.otp_code!)}
+                    className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
+                  >
+                    Copy
+                  </button>
+                </div>
+                <p className="mt-1 text-xs text-gray-400">Share this code with guests via WhatsApp or email.</p>
+              </div>
+            )}
+
+            {isOwner && (
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isSaving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            )}
+          </form>
+
+          <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-gray-700">
+                  {event.status === 'published' ? 'Event is published' : 'Event is not published'}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {event.status === 'published'
+                    ? 'Guests can access this event via its QR code or URL.'
+                    : 'Guests cannot access this event yet.'}
+                </p>
+                {publishError && (
+                  <p className="text-xs text-red-600 mt-1">{publishError}</p>
+                )}
+              </div>
+              {isOwner && (
+                <button
+                  onClick={handlePublishToggle}
+                  disabled={
+                    isPublishing ||
+                    event.status === 'suspended' ||
+                    event.status === 'deleted' ||
+                    (event.status !== 'published' && !consentChecked) ||
+                    missingCoverPhoto
+                  }
+                  title={
+                    event.status !== 'published' && !consentChecked
+                      ? 'You must check the consent confirmation below before publishing.'
+                      : missingCoverPhoto
+                      ? 'Set a cover photo above before publishing.'
+                      : undefined
+                  }
+                  className={`flex-shrink-0 px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                    event.status === 'published'
+                      ? 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-400'
+                      : 'bg-green-600 text-white hover:bg-green-700 focus:ring-green-500'
+                  }`}
+                >
+                  {isPublishing
+                    ? 'Updating...'
+                    : event.status === 'published'
+                    ? 'Unpublish'
+                    : 'Publish'}
+                </button>
+              )}
+            </div>
+
+            {/* Consent checkbox — shown to owner when event is not yet published (AC-1a/1b) */}
+            {isOwner && event.status !== 'published' && event.status !== 'suspended' && event.status !== 'deleted' && (
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={consentChecked}
+                    onChange={(e) => setConsentChecked(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                  />
+                  <span className="text-xs text-gray-700 leading-relaxed">
+                    I confirm that guests attending this event have been informed that their photos will be processed using face recognition to help them find themselves in the gallery.
+                  </span>
+                </label>
+                {!consentChecked && (
+                  <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                    Check the box above to enable the Publish button.
+                  </p>
+                )}
+                {missingCoverPhoto && (
+                  <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                    Set a cover photo (above) to enable the Publish button.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {isOwner && event.status === 'published' && (
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">
+                      Guest Access: {event.guest_access_enabled ? 'Active' : 'Revoked'}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {event.guest_access_enabled
+                        ? 'Guests with valid sessions can access the gallery.'
+                        : 'All guest sessions are invalidated. Re-enable to allow access again.'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleGuestAccessToggle}
+                    disabled={isRevoking}
+                    className={`flex-shrink-0 px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                      event.guest_access_enabled
+                        ? 'bg-red-50 border border-red-300 text-red-700 hover:bg-red-100 focus:ring-red-400'
+                        : 'bg-green-600 text-white hover:bg-green-700 focus:ring-green-500'
+                    }`}
+                  >
+                    {isRevoking ? 'Updating...' : event.guest_access_enabled ? 'Revoke Access' : 'Enable Access'}
+                  </button>
+                </div>
+                {revokeError && <p className="mt-2 text-xs text-red-600">{revokeError}</p>}
+              </div>
+            )}
           </div>
-        )}
+        </>
+      )}
 
-        <SlugField
-          value={slug}
-          onChange={(v) => {
-            setSlug(v);
-            setSlugSuggestions([]);
-          }}
-          suggestions={slugSuggestions}
-          onSelectSuggestion={(s) => {
-            setSlug(s);
-            setSlugSuggestions([]);
-          }}
-          disabled={!isOwner}
-        />
-
-        {isOwner && (
-          <div className="flex justify-end pt-2">
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {isSaving ? 'Saving...' : 'Save Changes'}
-            </button>
-          </div>
-        )}
-      </form>
-
-      {/* Photographers — owner only */}
-      {event.owner_id === getCurrentUserId() && (
-        <div className="mt-6 p-4 bg-white border border-gray-200 rounded-lg">
+      {/* Photographers tab — owner only */}
+      {activeTab === 'photographers' && isOwner && (
+        <div className="p-4 bg-white border border-gray-200 rounded-lg">
           <h2 className="text-base font-semibold text-gray-800 mb-4">Photographers</h2>
 
           <form onSubmit={handleAssignPhotographer} className="flex gap-2 mb-4">
@@ -784,9 +845,9 @@ export default function EventDetailPage() {
         </div>
       )}
 
-      {/* Danger zone */}
-      {isOwner && (
-        <div className="mt-8 p-4 border border-red-200 bg-red-50 rounded-lg">
+      {/* Danger Zone tab — owner only */}
+      {activeTab === 'danger' && isOwner && (
+        <div className="p-4 border border-red-200 bg-red-50 rounded-lg">
           <h3 className="text-sm font-semibold text-red-800 mb-1">Danger Zone</h3>
           <p className="text-xs text-red-700 mb-3">
             Deleting this event starts a 30-day grace period. During this time the event is
