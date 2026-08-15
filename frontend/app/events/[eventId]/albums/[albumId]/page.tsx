@@ -101,10 +101,10 @@ export default function AlbumDetailPage() {
           {error || 'Album not found.'}
         </div>
         <Link
-          href={`/events/${eventId}/albums`}
+          href="/dashboard"
           className="mt-4 inline-block text-sm text-blue-600 hover:underline"
         >
-          Back to Albums
+          Back to Dashboard
         </Link>
       </div>
     );
