@@ -313,6 +313,9 @@ export default function EventDetailPage() {
   }
 
   const isOwner = event.owner_id === getCurrentUserId();
+  // REQ-31/AC-19 (event-management): the backend rejects publish when no cover
+  // photo is set. Mirror that here so the button doesn't invite a doomed submit.
+  const missingCoverPhoto = event.status !== 'published' && !event.cover_photo_id;
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
@@ -399,11 +402,14 @@ export default function EventDetailPage() {
                 isPublishing ||
                 event.status === 'suspended' ||
                 event.status === 'deleted' ||
-                (event.status !== 'published' && !consentChecked)
+                (event.status !== 'published' && !consentChecked) ||
+                missingCoverPhoto
               }
               title={
                 event.status !== 'published' && !consentChecked
                   ? 'You must check the consent confirmation below before publishing.'
+                  : missingCoverPhoto
+                  ? 'Set a cover photo below before publishing.'
                   : undefined
               }
               className={`flex-shrink-0 px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed ${
@@ -438,6 +444,11 @@ export default function EventDetailPage() {
             {!consentChecked && (
               <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
                 Check the box above to enable the Publish button.
+              </p>
+            )}
+            {missingCoverPhoto && (
+              <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                Set a cover photo (below) to enable the Publish button.
               </p>
             )}
           </div>

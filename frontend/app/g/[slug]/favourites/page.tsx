@@ -109,6 +109,12 @@ export default function FavouritesPage() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-4">
+        {visiblePhotos.length > 0 && (
+          <p className="mb-4 text-xs text-gray-400">
+            Favourites aren&apos;t permanent — they may disappear after a period of inactivity.
+            Download or share the photos you want to keep.
+          </p>
+        )}
         {visiblePhotos.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <svg className="h-12 w-12 text-gray-300 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">

@@ -47,5 +47,8 @@ None.
 Not applicable in the usual sense (no `requirements.md`/`design.md` exists for a "product-ux" feature, since this is a cross-cutting audit rather than a scoped feature). In lieu of that checklist, every factual claim the audit makes about existing epics' behavior was spot-checked against those epics' own `requirements.md`/ADRs — see Positive observations above for the full list of confirmed cross-checks.
 
 ## Sign-off
-- [ ] Both non-blocking findings resolved (favourites-persistence wording, cover-photo open-question promotion) — optional, doesn't block keeping the doc as merged
+- [x] Both non-blocking findings resolved:
+  - Cover-photo publish gap — fixed in code: `frontend/app/events/[eventId]/page.tsx` now checks `event.cover_photo_id` in the Publish button's `disabled` logic, with a matching amber hint, mirroring the backend's REQ-31/AC-19 enforcement.
+  - Favourites durability — mitigated in code: `frontend/app/g/[slug]/favourites/page.tsx` now shows a notice that favourites aren't permanent. `FavouritesStore` itself is unchanged (in-memory, per ADR) — moving it to persistent storage was scoped out as a separate, larger decision (see `docs/features/product-ux/ux.md` open questions).
+  - Both changes verified with `npm run lint` and `npm run build` (pass, no new warnings).
 - Reviewer: Punit Singhal — 2026-08-15
