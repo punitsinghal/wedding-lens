@@ -1,6 +1,6 @@
 # Product Capabilities
 
-Last updated: 2026-06-21
+Last updated: 2026-06-23
 
 ---
 
@@ -114,3 +114,30 @@ Last updated: 2026-06-21
 - `components/gallery/Lightbox.tsx`: FavouriteToggle and ShareButton added to top bar alongside the existing Download button; isFavourited/onToggleFavourite props thread through from the gallery page
 - `app/g/[slug]/gallery/page.tsx`: wired `useFavourites` hook; gallery header extended with "Find my photos" blue pill link (→ search page) and "Favourites" link with live count badge; isFavourited + toggle callbacks passed to every PhotoThumbnail and the Lightbox
 - `app/g/[slug]/search/page.tsx`: new guest face search page; auth guard (redirects unauthenticated guests to event entry); state machine renders SelfieUpload → SearchResults | SearchError; token refresh persisted to both localStorage and local state; Suspense wrapper matching gallery pattern
+
+---
+
+## Privacy & Security (Epic: privacy-security)
+
+**Status:** Shipped — `feature/privacy-security-design`
+
+Governance layer over the existing encryption + selfie-deletion controls. Compliance frame: India's DPDP Act 2023 (platform = Data Fiduciary, guests = Data Principals).
+
+### What was added
+
+**Backend (`backend/`):**
+- Owner consent at publish: `publish_event` writes a `consent_records` row (event_id, confirmed_by, confirmed_at) server-side using the authenticated owner identity — no API contract change; republish writes a fresh record
+- Guest face-search rate limiting: in-process sliding-window limiter (10 req / 5 min) keyed on the JWT `sid`, enforced as a route dependency on `POST /events/{id}/search`; returns 429 + `Retry-After` on breach (selfie-upload ≡ search is one endpoint)
+- Consent precondition: `/search` now requires a `consent_ack` form field (422 `consent_required` if absent/false); emits a non-PII structured audit log line (event_id, sid, timestamp only)
+- Face-data removal requests: guest-authenticated `POST /events/{id}/removal-requests` (name, email, description); admin `GET /admin/removal-requests` (with pending count) and `POST /admin/removal-requests/{id}/fulfill`; records never deleted, retained ≥3y
+- Encryption audit endpoint: admin-only `GET /internal/audit/embedding-encryption` (off the public `/api/v1` prefix) verifies PostgreSQL `face_records.embedding_enc` is non-null + decryptable (not Qdrant — see ADR)
+- HSTS: `Strict-Transport-Security` header (max-age 1y) on all responses; TLS termination is the proxy's responsibility
+- New tables `consent_records` / `removal_requests` use bare UUID columns with NO foreign key, so they survive the 30-day event purge cascade (ADR 2026-06-23)
+
+**Frontend (`frontend/`):**
+- Publish pre-flight consent checkbox (unchecked, gates the publish button; re-required on republish)
+- Selfie screen privacy notice + "I understand, continue" gate carrying the 18+/guardian affirmation; camera inert until acknowledged; sends `consent_ack=true`
+- `SelfieUpload` 429 handling: reads `Retry-After`, shows a human-readable wait message (no raw status code)
+- "Remove my face data" link + form (name, email, description) on the guest gallery page with on-screen confirmation
+- Static `/privacy` page (no API call): DPDP §6 legal basis, Data Fiduciary identity, 30-day retention, consent-withdrawal + removal instructions
+- Admin dashboard: pending removal-request count badge + list with "Mark fulfilled" action

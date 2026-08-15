@@ -46,6 +46,7 @@ async def create_album(
         name=data.name,
         ceremony_category=data.ceremony_category,
         sort_order=data.sort_order,
+        visibility=data.visibility,
     )
     db.add(album)
     await db.flush()
@@ -63,6 +64,8 @@ async def update_album(
         album.sort_order = data.sort_order
     if data.cover_photo_id is not None:
         album.cover_photo_id = data.cover_photo_id
+    if data.visibility is not None:
+        album.visibility = data.visibility
     album.updated_at = datetime.now(timezone.utc)
     db.add(album)
     await db.flush()

@@ -1,6 +1,7 @@
 'use client';
 
-import { useRef, ChangeEvent } from 'react';
+import { useRef, useState, ChangeEvent } from 'react';
+import Link from 'next/link';
 
 export interface SearchResultItem {
   photo_id: string;
@@ -35,6 +36,10 @@ export default function SelfieUpload({
   onUploadEnd,
 }: SelfieUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  // S2: gate — user must acknowledge the privacy notice before the camera activates
+  const [acknowledged, setAcknowledged] = useState(false);
+  // S5: rate-limit wait message
+  const [rateLimitMessage, setRateLimitMessage] = useState<string | null>(null);
 
   async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -43,16 +48,19 @@ export default function SelfieUpload({
     // Client-side file size check
     if (file.size > MAX_FILE_SIZE_BYTES) {
       onError('file_too_large');
-      // Reset the input so the same file can be re-selected after correction
       if (inputRef.current) inputRef.current.value = '';
       return;
     }
 
+    // Clear any previous rate-limit message
+    setRateLimitMessage(null);
     onUploadStart();
 
     try {
       const formData = new FormData();
       formData.append('selfie', file);
+      // S2: append consent_ack as required by the search endpoint
+      formData.append('consent_ack', 'true');
 
       const token = guestToken;
       const headers: Record<string, string> = {};
@@ -71,6 +79,18 @@ export default function SelfieUpload({
       const refreshedToken = response.headers.get('X-Guest-Token');
       if (refreshedToken) {
         onTokenRefresh(refreshedToken);
+      }
+
+      // S5: handle 429 rate-limit response
+      if (response.status === 429) {
+        const retryAfterHeader = response.headers.get('Retry-After');
+        const seconds = retryAfterHeader ? parseInt(retryAfterHeader, 10) : null;
+        const waitText =
+          seconds != null && !isNaN(seconds)
+            ? `Too many attempts. Please wait about ${seconds} second${seconds === 1 ? '' : 's'} before trying again.`
+            : 'Too many attempts. Please wait a few minutes before trying again.';
+        setRateLimitMessage(waitText);
+        return;
       }
 
       if (!response.ok) {
@@ -95,6 +115,59 @@ export default function SelfieUpload({
     }
   }
 
+  // S2: show privacy notice until guest acknowledges (AC-2a/2b)
+  if (!acknowledged) {
+    return (
+      <div className="flex flex-col items-center gap-6 px-4 py-8 max-w-md mx-auto">
+        <div className="text-center">
+          <h2 className="text-lg font-semibold text-gray-900">Before we continue</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Please read this notice about how your data will be used.
+          </p>
+        </div>
+
+        <div className="w-full bg-blue-50 border border-blue-200 rounded-xl px-5 py-5 text-sm text-gray-700 space-y-3">
+          <div>
+            <span className="font-semibold text-gray-900">What we collect:</span>{' '}
+            A face embedding (a mathematical representation of your face) is derived from
+            your selfie. Your actual selfie image is never stored.
+          </div>
+          <div>
+            <span className="font-semibold text-gray-900">Why:</span>{' '}
+            To find the photos you appear in within this event&apos;s gallery.
+          </div>
+          <div>
+            <span className="font-semibold text-gray-900">How long we keep it:</span>{' '}
+            Your selfie is deleted immediately after the search. All event data, including
+            face embeddings, is deleted within 30 days of the event end date.
+          </div>
+          <div>
+            <Link
+              href="/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 underline hover:text-blue-800 font-medium"
+            >
+              Read the full platform privacy notice
+            </Link>
+          </div>
+        </div>
+
+        {/* AC-2e: age/guardian affirmation included in the acknowledgement button */}
+        <button
+          onClick={() => setAcknowledged(true)}
+          className="w-full max-w-xs py-3 px-6 text-sm font-semibold text-white bg-blue-600 rounded-full hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-colors"
+        >
+          I understand, continue
+        </button>
+        <p className="text-xs text-gray-400 text-center max-w-xs">
+          By continuing, you also confirm that you are 18 or older, or that a
+          parent or guardian is consenting on behalf of an under-18 guest.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-center gap-6 px-4 py-8">
       <div className="text-center">
@@ -103,6 +176,13 @@ export default function SelfieUpload({
           Upload a clear selfie and we&apos;ll find all the photos you appear in.
         </p>
       </div>
+
+      {/* S5: rate-limit message (AC-5c) */}
+      {rateLimitMessage && (
+        <div className="w-full max-w-xs p-3 bg-amber-50 border border-amber-300 rounded-lg text-sm text-amber-800 text-center">
+          {rateLimitMessage}
+        </div>
+      )}
 
       <label
         htmlFor="selfie-input"

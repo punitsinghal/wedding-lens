@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import type { Album, AlbumCreateRequest, CeremonyCategory } from '@/types/api';
+import type { Album, AlbumCreateRequest, AlbumVisibility, CeremonyCategory } from '@/types/api';
 import { createAlbum, updateAlbum, deleteAlbum } from '@/lib/api';
 import ConfirmDialog from './ConfirmDialog';
 
@@ -38,6 +38,9 @@ export default function AlbumList({ eventId, initialAlbums }: Props) {
 
   // Delete confirm
   const [deletingAlbum, setDeletingAlbum] = useState<Album | null>(null);
+
+  // Visibility toggle
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -78,6 +81,20 @@ export default function AlbumList({ eventId, initialAlbums }: Props) {
     } catch (err: unknown) {
       const apiErr = err as { detail?: string };
       setError(apiErr?.detail ?? 'Failed to update album.');
+    }
+  }
+
+  async function handleToggleVisibility(album: Album) {
+    setTogglingId(album.id);
+    const next: AlbumVisibility = album.visibility === 'public' ? 'private' : 'public';
+    try {
+      const updated = await updateAlbum(eventId, album.id, { visibility: next });
+      setAlbums((prev) => prev.map((a) => (a.id === album.id ? updated : a)));
+    } catch (err: unknown) {
+      const apiErr = err as { detail?: string };
+      setError(apiErr?.detail ?? 'Failed to update album visibility.');
+    } finally {
+      setTogglingId(null);
     }
   }
 
@@ -250,8 +267,21 @@ export default function AlbumList({ eventId, initialAlbums }: Props) {
                       Cover set
                     </span>
                   )}
+                  {album.visibility === 'private' && (
+                    <span className="ml-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                      Private
+                    </span>
+                  )}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
+                  <button
+                    onClick={() => handleToggleVisibility(album)}
+                    disabled={togglingId === album.id}
+                    title={album.visibility === 'private' ? 'Make public (visible to guests)' : 'Make private (hidden from guests)'}
+                    className="text-xs text-gray-500 hover:text-gray-700 font-medium disabled:opacity-50"
+                  >
+                    {album.visibility === 'private' ? '🔒 Private' : '🌐 Public'}
+                  </button>
                   <Link
                     href={`/events/${eventId}/albums/${album.id}`}
                     className="text-xs text-gray-600 hover:text-gray-800 font-medium"

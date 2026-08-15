@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     FACE_SEARCH_RESULT_CAP: int = 50
     FACE_SEARCH_CACHE_TTL_SECONDS: int = 3600
     APP_HOST: str = "http://localhost:3000"
+    # D3 — Sliding-window rate limiter for /search (REQ-17/18, ADR 2026-06-22)
+    SEARCH_RATE_LIMIT_MAX: int = 10
+    SEARCH_RATE_LIMIT_WINDOW_SECONDS: int = 300  # 5 minutes
 
 
 settings = Settings()

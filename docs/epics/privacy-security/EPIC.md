@@ -35,7 +35,7 @@ Ensure the platform handles biometric face data responsibly by encrypting embedd
 | Event-scoped data isolation enforcement | Backlog |
 | TLS enforcement on all endpoints | Backlog |
 | Rate limiting on selfie upload and search endpoints | Backlog |
-| Private album access control | Backlog |
+| Private album access control | In progress (backend + toggle UI done; see below) |
 
 ## Success Metrics
 - 100% of uploaded selfies deleted within 60 seconds of search completion.
@@ -45,6 +45,9 @@ Ensure the platform handles biometric face data responsibly by encrypting embedd
 
 ## Decisions
 <!-- Decisions made during this epic's lifetime -->
+- 2026-08-15: Private album visibility is enforced by query-time filtering at every guest-facing
+  read path (gallery listing, album tabs, and face search) rather than in Qdrant. See
+  `docs/decisions/2026-08-15-private-album-query-time-filtering.md`.
 
 ## Open Questions
 - [ ] Which privacy regulation framework applies (GDPR, PDPA, CCPA)? — owner: Legal / Product Team

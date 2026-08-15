@@ -22,6 +22,9 @@ import type {
   ShareLinkResponse,
   FavouritesResponse,
   ShareTokenResponse,
+  RemovalRequestCreateRequest,
+  RemovalRequestCreateResponse,
+  AdminRemovalRequestsResponse,
 } from '@/types/api';
 
 function baseUrl(): string {
@@ -624,6 +627,50 @@ export async function assignPhotoAlbums(
 
 export async function reprocessPhoto(eventId: string, photoId: string): Promise<void> {
   return apiFetch(`/api/v1/events/${eventId}/photos/${photoId}/reprocess`, { method: 'POST' });
+}
+
+// ---------------------------------------------------------------------------
+// Removal requests — guest-authenticated
+// ---------------------------------------------------------------------------
+
+export async function submitRemovalRequest(
+  eventId: string,
+  data: RemovalRequestCreateRequest
+): Promise<RemovalRequestCreateResponse> {
+  const token = getGuestToken(eventId);
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const response = await fetch(`${baseUrl()}/api/v1/events/${eventId}/removal-requests`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    let errorBody: unknown;
+    try { errorBody = await response.json(); } catch { errorBody = { detail: response.statusText }; }
+    throw errorBody;
+  }
+
+  return response.json() as Promise<RemovalRequestCreateResponse>;
+}
+
+// ---------------------------------------------------------------------------
+// Removal requests — admin
+// ---------------------------------------------------------------------------
+
+export async function adminGetRemovalRequests(
+  status?: string
+): Promise<AdminRemovalRequestsResponse> {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+  return apiFetch<AdminRemovalRequestsResponse>(`/api/v1/admin/removal-requests${qs}`);
+}
+
+export async function adminFulfillRemovalRequest(requestId: string): Promise<void> {
+  return apiFetch<void>(`/api/v1/admin/removal-requests/${requestId}/fulfill`, {
+    method: 'POST',
+  });
 }
 
 // ---------------------------------------------------------------------------
