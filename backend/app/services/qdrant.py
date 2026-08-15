@@ -92,8 +92,23 @@ def search_faces(
 
 
 def delete_collection(event_id: uuid.UUID) -> None:
-    """Delete the Qdrant collection for an event."""
+    """Delete the Qdrant collection for an event. Idempotent (REQ-3a, D2).
+
+    Treats a 404 (collection already gone, or never created because the
+    event had no photos) as success — matching the same idempotency pattern
+    as search_faces() above. Without this, re-running the purge job (or a
+    hard delete) on an event whose collection was already deleted would
+    raise instead of no-op, violating this module's idempotency guarantee.
+    """
     client = get_qdrant_client()
     name = collection_name(event_id)
-    client.delete_collection(name)
+    try:
+        client.delete_collection(name)
+    except UnexpectedResponse as exc:
+        if exc.status_code == 404:
+            logger.info(
+                '{"event": "qdrant_collection_already_gone", "collection": "%s"}', name
+            )
+            return
+        raise
     logger.info('{"event": "qdrant_collection_deleted", "collection": "%s"}', name)

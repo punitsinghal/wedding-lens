@@ -1,17 +1,33 @@
 """Gallery endpoint tests."""
 
 import uuid
+from unittest.mock import patch
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.album import Album
+from app.models.analytics import DownloadEvent, ViewEvent
 from app.models.event import Event
 from app.models.photo import Photo
 from app.models.user import User
 from app.services.auth import create_access_token
 from app.services.guest_auth import create_guest_token
+from tests.conftest import TestSessionLocal
+
+
+@pytest.fixture(autouse=True)
+def patch_analytics_session():
+    """Redirect the fire-and-forget analytics writes to the test SQLite session.
+
+    Mirrors the pattern in test_face_pipeline.py — background tasks open
+    their own AsyncSessionLocal(), which by default is bound to the
+    production engine, not the per-test SQLite session.
+    """
+    with patch("app.services.analytics.AsyncSessionLocal", TestSessionLocal):
+        yield
 
 
 # ---------------------------------------------------------------------------
@@ -343,3 +359,84 @@ async def test_thumbnail_404_when_path_is_null(
         headers=_guest_headers(event.id),
     )
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Test 10: download writes a download_events row (D5, S6) — separate from
+# Photo.download_count above.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_download_writes_download_event(
+    client: AsyncClient, db: AsyncSession, regular_user: User
+):
+    import os
+    from pathlib import Path
+
+    event = await _make_event(db, regular_user)
+
+    storage_dir = Path(os.environ["STORAGE_PATH"]) / f"events/{event.id}"
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    photo_filename = f"{uuid.uuid4()}.jpg"
+    storage_path = f"events/{event.id}/{photo_filename}"
+    (storage_dir / photo_filename).write_bytes(b"fake-image-data")
+
+    photo = Photo(
+        id=uuid.uuid4(),
+        event_id=event.id,
+        filename="test.jpg",
+        storage_path=storage_path,
+        file_size=16,
+        processing_status="complete",
+        download_count=0,
+    )
+    db.add(photo)
+    await db.commit()
+    await db.refresh(photo)
+
+    resp = await client.get(
+        f"/api/v1/events/{event.id}/photos/{photo.id}/download",
+        headers=_guest_headers(event.id),
+    )
+    assert resp.status_code == 200
+
+    result = await db.execute(
+        select(DownloadEvent).where(DownloadEvent.event_id == event.id)
+    )
+    rows = list(result.scalars().all())
+    assert len(rows) == 1
+
+
+# ---------------------------------------------------------------------------
+# Test 11: POST /photos/{id}/view — guest view beacon (S6, D5)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_view_beacon_returns_204_and_writes_view_event(
+    client: AsyncClient, db: AsyncSession, regular_user: User
+):
+    event = await _make_event(db, regular_user)
+    photo = await _make_photo(db, event)
+
+    resp = await client.post(
+        f"/api/v1/events/{event.id}/photos/{photo.id}/view",
+        headers=_guest_headers(event.id),
+    )
+    assert resp.status_code == 204
+
+    result = await db.execute(select(ViewEvent).where(ViewEvent.event_id == event.id))
+    rows = list(result.scalars().all())
+    assert len(rows) == 1
+
+
+@pytest.mark.asyncio
+async def test_view_beacon_requires_guest_auth(client: AsyncClient, db: AsyncSession, regular_user: User):
+    event = await _make_event(db, regular_user)
+    photo = await _make_photo(db, event)
+
+    resp = await client.post(
+        f"/api/v1/events/{event.id}/photos/{photo.id}/view",
+    )
+    assert resp.status_code == 403

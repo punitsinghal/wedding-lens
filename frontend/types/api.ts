@@ -114,6 +114,8 @@ export interface AlbumUpdateRequest {
 export interface AdminEvent extends Event {
   owner_email: string;
   photo_count: number;
+  storage_used_bytes: number;
+  last_activity_at: string; // ISO datetime
 }
 
 export interface AdminEventsResponse {
@@ -121,6 +123,34 @@ export interface AdminEventsResponse {
   total: number;
   page: number;
   page_size: number;
+}
+
+// Processing pipeline status breakdown — all 5 real processing_status values
+// (pending/processing/complete are self-explanatory; failed = retryable,
+// error = retries exhausted — see backend design D3).
+export interface ProcessingMonitor {
+  pending: number;
+  processing: number;
+  complete: number;
+  failed: number;
+  error: number;
+}
+
+export interface AdminEventDetail extends AdminEvent {
+  processing_monitor: ProcessingMonitor;
+}
+
+export interface PlatformHealth {
+  total_events: number;
+  total_photos: number;
+  total_storage_bytes: number;
+  error_rate_24h: number; // 0-1 float
+}
+
+export interface EventAnalytics {
+  total_views: number;
+  total_downloads: number;
+  total_searches: number;
 }
 
 export interface SlugTakenError {

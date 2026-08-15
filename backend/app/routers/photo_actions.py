@@ -5,12 +5,14 @@ from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Response, status
 from fastapi.responses import StreamingResponse
+from starlette.background import BackgroundTask
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.dependencies import get_db, get_validated_guest_event
 from app.models.photo import Photo
+from app.services import analytics as analytics_service
 from app.services.favourites_store import favourites_store
 from app.services.guest_auth import create_share_token
 from app.services.zip_streaming import generate_zip_stream
@@ -68,6 +70,10 @@ async def bulk_zip_download(
             "Content-Disposition": f'attachment; filename="{zip_filename}"',
             "X-Guest-Token": refreshed_token,
         },
+        # D5/S6 — one download_events row per ZIP request, not one per photo
+        # (written once the stream has fully sent, via Starlette's
+        # background hook on Response/StreamingResponse).
+        background=BackgroundTask(analytics_service.record_download_event, event_id),
     )
 
 
@@ -209,4 +215,6 @@ async def favourites_zip_download(
             "Content-Disposition": f'attachment; filename="{zip_filename}"',
             "X-Guest-Token": refreshed_token,
         },
+        # D5/S6 — one download_events row per ZIP request, not one per photo.
+        background=BackgroundTask(analytics_service.record_download_event, event_id),
     )

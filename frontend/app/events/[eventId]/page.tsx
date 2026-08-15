@@ -16,11 +16,12 @@ import {
   getEventPhotographers,
   assignPhotographer,
   removePhotographer,
+  getEventAnalytics,
 } from '@/lib/api';
 import type { AssignedPhotographerRow } from '@/lib/api';
 import { isAuthenticated, getCurrentUserId } from '@/lib/auth';
 import { isSlugTakenError } from '@/types/api';
-import type { Event, AccessMode, Photo } from '@/types/api';
+import type { Event, AccessMode, Photo, EventAnalytics } from '@/types/api';
 import SlugField from '@/components/SlugField';
 import StatusBadge from '@/components/StatusBadge';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -80,6 +81,10 @@ export default function EventDetailPage() {
   const [isAssigning, setIsAssigning] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
 
+  // Event-owner analytics (S6) — owner-only endpoint
+  const [analytics, setAnalytics] = useState<EventAnalytics | null>(null);
+  const [analyticsError, setAnalyticsError] = useState('');
+
   useEffect(() => {
     Promise.all([
       getEvent(eventId),
@@ -127,6 +132,20 @@ export default function EventDetailPage() {
       })
       .finally(() => setIsLoadingEvent(false));
   }, [eventId]);
+
+  // Fetch owner analytics once the event has loaded and ownership is known
+  // (the endpoint is strictly owner-only — REQ-6c — so skip the call
+  // entirely for assigned photographers to avoid a guaranteed 403).
+  useEffect(() => {
+    if (!event || event.owner_id !== getCurrentUserId()) return;
+    setAnalyticsError('');
+    getEventAnalytics(eventId)
+      .then(setAnalytics)
+      .catch((err: unknown) => {
+        const apiErr = err as { detail?: string };
+        setAnalyticsError(apiErr?.detail ?? 'Failed to load analytics.');
+      });
+  }, [event, eventId]);
 
   async function handleSave(e: FormEvent) {
     e.preventDefault();
@@ -328,6 +347,34 @@ export default function EventDetailPage() {
           QR Code
         </Link>
       </div>
+
+      {/* Analytics (S6) — owner only */}
+      {isOwner && (
+        <div className="mb-6 p-4 bg-white border border-gray-200 rounded-lg">
+          <h2 className="text-sm font-semibold text-gray-800 mb-3">Analytics</h2>
+          {analyticsError && (
+            <p className="text-xs text-red-600 mb-2">{analyticsError}</p>
+          )}
+          {analytics ? (
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <p className="text-xs text-gray-500">Views</p>
+                <p className="text-xl font-semibold text-gray-900">{analytics.total_views}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Downloads</p>
+                <p className="text-xl font-semibold text-gray-900">{analytics.total_downloads}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Searches</p>
+                <p className="text-xl font-semibold text-gray-900">{analytics.total_searches}</p>
+              </div>
+            </div>
+          ) : !analyticsError ? (
+            <p className="text-xs text-gray-400">Loading analytics...</p>
+          ) : null}
+        </div>
+      )}
 
       {/* Publish / Unpublish */}
       <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">

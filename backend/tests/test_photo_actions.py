@@ -5,17 +5,30 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from unittest.mock import patch
+
 import pytest
 from httpx import AsyncClient
 from jose import jwt
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.models.analytics import DownloadEvent
 from app.models.event import Event
 from app.models.photo import Photo
 from app.models.user import User
 from app.services.favourites_store import favourites_store
 from app.services.guest_auth import create_guest_token, create_share_token, decode_share_token
+from tests.conftest import TestSessionLocal
+
+
+@pytest.fixture(autouse=True)
+def patch_analytics_session():
+    """Redirect the fire-and-forget download_events writes (ZIP background
+    task) to the test SQLite session."""
+    with patch("app.services.analytics.AsyncSessionLocal", TestSessionLocal):
+        yield
 
 
 # ---------------------------------------------------------------------------
@@ -264,6 +277,43 @@ async def test_favourites_zip_empty_returns_400(
     assert resp.json()["detail"] == "no_favourites"
 
 
+@pytest.mark.asyncio
+async def test_favourites_zip_writes_one_download_event(
+    client: AsyncClient, db: AsyncSession, regular_user: User
+):
+    event = await _make_event(db, regular_user)
+    headers, sid = _guest_sid(event.id)
+
+    storage_dir = Path(os.environ["STORAGE_PATH"]) / f"events/{event.id}"
+    storage_dir.mkdir(parents=True, exist_ok=True)
+
+    photos = []
+    for i in range(2):
+        photo_filename = f"{uuid.uuid4()}.jpg"
+        storage_path = f"events/{event.id}/{photo_filename}"
+        (storage_dir / photo_filename).write_bytes(b"fake-photo-data")
+        photos.append(
+            await _make_photo(db, event, storage_path=storage_path, filename=f"f{i}.jpg")
+        )
+
+    for p in photos:
+        add_resp = await client.put(
+            f"/api/v1/events/{event.id}/favourites/{p.id}", headers=headers
+        )
+        assert add_resp.status_code == 204
+
+    resp = await client.post(
+        f"/api/v1/events/{event.id}/favourites/zip",
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    assert resp.content[:2] == b"PK"
+
+    result = await db.execute(select(DownloadEvent).where(DownloadEvent.event_id == event.id))
+    rows = list(result.scalars().all())
+    assert len(rows) == 1
+
+
 # ---------------------------------------------------------------------------
 # Test 8: two different sids have independent favourites
 # ---------------------------------------------------------------------------
@@ -400,3 +450,40 @@ async def test_bulk_zip_valid_photos(
     assert "attachment" in resp.headers["content-disposition"]
     # ZIP magic bytes: PK\x03\x04
     assert resp.content[:2] == b"PK"
+
+
+# ---------------------------------------------------------------------------
+# Test: ZIP download writes exactly ONE download_events row, not one per
+# photo in the ZIP (D5, S6, REQ-6b).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_bulk_zip_writes_one_download_event_not_per_photo(
+    client: AsyncClient, db: AsyncSession, regular_user: User
+):
+    event = await _make_event(db, regular_user)
+
+    storage_dir = Path(os.environ["STORAGE_PATH"]) / f"events/{event.id}"
+    storage_dir.mkdir(parents=True, exist_ok=True)
+
+    photos = []
+    for i in range(3):
+        photo_filename = f"{uuid.uuid4()}.jpg"
+        storage_path = f"events/{event.id}/{photo_filename}"
+        (storage_dir / photo_filename).write_bytes(b"fake-photo-data")
+        photos.append(
+            await _make_photo(db, event, storage_path=storage_path, filename=f"p{i}.jpg")
+        )
+
+    resp = await client.post(
+        f"/api/v1/events/{event.id}/photos/zip",
+        json={"photo_ids": [str(p.id) for p in photos]},
+        headers=_guest_headers(event.id),
+    )
+    assert resp.status_code == 200
+    assert resp.content[:2] == b"PK"
+
+    result = await db.execute(select(DownloadEvent).where(DownloadEvent.event_id == event.id))
+    rows = list(result.scalars().all())
+    assert len(rows) == 1, "ZIP download must write exactly one row, not one per photo"

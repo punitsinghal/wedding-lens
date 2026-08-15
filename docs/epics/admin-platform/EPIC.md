@@ -1,6 +1,6 @@
 # Admin Platform & Analytics
 
-**Status:** Designed — ready for /build
+**Status:** In Review (built on `feature/admin-platform-analytics`, issue #38)
 **Owner:** Product Team
 **Last Updated:** 2026-08-15
 
@@ -26,13 +26,13 @@ Give platform administrators a central dashboard to manage all wedding events, m
 ## Features
 | Feature | Status |
 |---------|--------|
-| Admin event list (view/suspend/delete) | Partial — endpoints + UI shipped under Event Management (#12); missing photo count/storage/last-activity columns. Designed — ready for /build to close the gap |
-| Admin hard delete | Partial — shipped (#12), but Qdrant vector deletion is currently a stub (`_stub_qdrant_delete`); pulled into scope as REQ-3a. Designed — ready for /build |
-| Admin event detail view (context + processing monitor) | New endpoint designed — ready for /build |
-| Face processing pipeline monitor (per-event pending/processing/failed/error/complete) | Designed — ready for /build |
-| Automated failure-rate alerting (email, APScheduler) | Designed — ready for /build |
-| Event-level analytics for event owners (views, downloads, searches) | Designed — ready for /build |
-| Platform health dashboard (event/photo/storage totals, 24h error rate) | Designed — ready for /build |
+| Admin event list (view/suspend/delete) | ✅ Done — photo_count/storage_used_bytes/last_activity_at added (#38) |
+| Admin hard delete | ✅ Done — Qdrant stub replaced with real, idempotent `delete_collection()` (REQ-3a, #38) |
+| Admin event detail view (context + processing monitor) | ✅ Done — `GET /admin/events/{id}` + `/admin/events/[eventId]` page (#38) |
+| Face processing pipeline monitor (per-event pending/processing/failed/error/complete) | ✅ Done (#38) |
+| Automated failure-rate alerting (email, APScheduler) | ✅ Done (#38) |
+| Event-level analytics for event owners (views, downloads, searches) | ✅ Done (#38) |
+| Platform health dashboard (event/photo/storage totals, 24h error rate) | ✅ Done (#38) |
 | Storage quota management per event | Deferred — out of scope for MVP (admin can view usage, not enforce caps); see requirements.md Out of Scope |
 | Subscription and billing management | Deferred — out of scope for MVP; no in-platform billing UI |
 

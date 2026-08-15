@@ -4,8 +4,10 @@
 Runs daily at 02:00 via APScheduler (registered in app lifespan).
 For each expired event (status='deleted', deleted_at < NOW()-30d):
   1. Deletes photo files from STORAGE_PATH/events/{event_id}/
-  2. Stubs out Qdrant deletion (logs it — Qdrant not set up yet)
-  3. Hard-deletes the event from PostgreSQL (cascades to albums, slug_redirects)
+  2. Deletes the event's Qdrant collection (app.services.qdrant.delete_collection —
+     idempotent, REQ-3a/D2)
+  3. Hard-deletes the event from PostgreSQL (cascades to albums, slug_redirects,
+     photos, face_records, and the analytics tables)
 
 The job is idempotent: re-running on the same event is safe.
 Per-event error handling ensures one failure does not abort the entire run.
@@ -23,6 +25,7 @@ from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.event import Event
 from app.models.upload_session import UploadSession
+from app.services import qdrant
 
 logger = logging.getLogger("weddinglens.purge")
 
@@ -74,8 +77,12 @@ async def _purge_single_event(event_id: uuid.UUID) -> None:
                 event_id,
             )
 
-        # 2. Stub: Qdrant vector deletion (not yet set up)
-        _stub_qdrant_delete(event_id)
+        # 2. Delete the event's Qdrant collection (idempotent — safe if already gone)
+        qdrant.delete_collection(event_id)
+        logger.info(
+            '{"event": "purge_qdrant_deleted", "event_id": "%s"}',
+            event_id,
+        )
 
         # 3. Hard-delete from PostgreSQL
         async with AsyncSessionLocal() as db:
@@ -101,19 +108,6 @@ async def _purge_single_event(event_id: uuid.UUID) -> None:
             event_id,
             str(exc),
         )
-
-
-def _stub_qdrant_delete(event_id: uuid.UUID) -> None:
-    """
-    Qdrant is not set up yet. This stub logs the intended operation so that
-    the purge job can be wired to real Qdrant calls in a future epic without
-    changing the job structure.
-    """
-    logger.info(
-        '{"event": "purge_qdrant_stub", "event_id": "%s", "action": "delete_by_filter", "filter": {"event_id": "%s"}}',
-        event_id,
-        event_id,
-    )
 
 
 UPLOAD_SESSION_ABANDON_HOURS = 24
