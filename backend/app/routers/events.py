@@ -6,10 +6,17 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_current_user, get_db, get_event_with_photographer_access
+from app.dependencies import (
+    get_current_user,
+    get_db,
+    get_event_owner_only,
+    get_event_with_photographer_access,
+)
 from app.models.event import Event, SlugRedirect
 from app.models.user import User
+from app.schemas.analytics import EventAnalyticsOut
 from app.schemas.event import EventCreate, EventOut, EventPublicOut, EventUpdate
+from app.services import analytics as analytics_service
 from app.services import events as event_svc
 from app.services import qr as qr_svc
 
@@ -162,6 +169,20 @@ async def unpublish_event(
     event = await _get_owned_event(event_id, db, current_user)
     event = await event_svc.unpublish_event(db, event)
     return EventOut.model_validate(event)
+
+
+@router.get("/{event_id}/analytics", response_model=EventAnalyticsOut)
+async def get_event_analytics(
+    event_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    # REQ-6a is written as "event owner" specifically (not "owner or assigned
+    # photographer" like get_event_with_photographer_access) — use the
+    # strict owner-only dependency so a non-owning assigned photographer
+    # also gets 403, matching REQ-6c/AC-6 precisely.
+    event: Event = Depends(get_event_owner_only),
+) -> EventAnalyticsOut:
+    counts = await analytics_service.get_event_analytics(db, event.id)
+    return EventAnalyticsOut(**counts)
 
 
 @router.get("/{event_id}/qr-code")

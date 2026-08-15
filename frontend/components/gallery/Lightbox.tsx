@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { guestFetchBlob } from '@/lib/api';
+import { guestFetchBlob, recordPhotoView } from '@/lib/api';
 import type { GalleryPhoto } from '@/types/api';
 import FavouriteToggle from '@/components/photo-actions/FavouriteToggle';
 import ShareButton from '@/components/photo-actions/ShareButton';
@@ -59,6 +59,14 @@ export default function Lightbox({
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [photoId, eventId, photo?.thumbnail_url]);
+
+  // View beacon (S6) — fire-and-forget on the photo actually being opened.
+  // Keyed on [photoId, eventId] only, so it fires exactly once per photo
+  // open (not on every re-render of the lightbox, e.g. favourite toggling).
+  useEffect(() => {
+    if (!photoId) return;
+    recordPhotoView(eventId, photoId);
+  }, [photoId, eventId]);
 
   const navigateTo = useCallback(
     async (newIndex: number) => {

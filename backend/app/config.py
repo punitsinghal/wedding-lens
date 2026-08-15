@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     # D3 — Sliding-window rate limiter for /search (REQ-17/18, ADR 2026-06-22)
     SEARCH_RATE_LIMIT_MAX: int = 10
     SEARCH_RATE_LIMIT_WINDOW_SECONDS: int = 300  # 5 minutes
+    # D4 — Admin processing-failure-rate alerting (REQ-5a/5b/5c, ADR 2026-08-15)
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = "alerts@weddinglens.example"
+    ADMIN_FAILURE_RATE_THRESHOLD: float = 0.10
+    ADMIN_FAILURE_RATE_WINDOW_MINUTES: int = 60
+    ADMIN_ALERT_DEDUP_MINUTES: int = 60
 
 
 settings = Settings()

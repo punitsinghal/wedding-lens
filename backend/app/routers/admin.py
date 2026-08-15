@@ -10,31 +10,93 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db, require_admin
 from app.models.privacy import RemovalRequest
 from app.models.user import User
-from app.schemas.event import EventOut, PaginatedEvents
+from app.schemas.admin import (
+    AdminEventDetailOut,
+    AdminEventListItem,
+    PaginatedAdminEvents,
+    PlatformHealthOut,
+    ProcessingMonitorOut,
+)
+from app.schemas.event import EventOut
 from app.schemas.privacy import RemovalRequestListOut, RemovalRequestOut
-from app.services import events as event_svc
+from app.services import admin_stats, events as event_svc
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
 
-@router.get("/events", response_model=PaginatedEvents)
+@router.get("/events", response_model=PaginatedAdminEvents)
 async def admin_list_events(
     page: int = 1,
     page_size: int = 20,
+    # alias="status" so the query param is ?status=, following the same
+    # pattern as admin_list_removal_requests below (avoids shadowing the
+    # `status` module import).
+    status_filter: str | None = Query(default=None, alias="status"),
+    sort: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin),
-) -> PaginatedEvents:
+) -> PaginatedAdminEvents:
+    """Paginated event list with photo_count/storage_used_bytes/last_activity_at
+    (REQ-1, design D1) — one aggregated query, not N+1. Supports ?status= filter
+    and ?sort=last_activity|photo_count.
+    """
     if page < 1:
         page = 1
     if page_size < 1 or page_size > 100:
         page_size = 20
-    events, total = await event_svc.list_events_paginated(db, page, page_size)
-    return PaginatedEvents(
-        items=[EventOut.model_validate(e) for e in events],
+    rows, total = await admin_stats.list_events_with_stats(
+        db, page, page_size, status_filter=status_filter, sort=sort
+    )
+    items = [
+        AdminEventListItem(
+            **EventOut.model_validate(event).model_dump(),
+            photo_count=photo_count,
+            storage_used_bytes=storage_used_bytes,
+            last_activity_at=last_activity_at,
+        )
+        for event, photo_count, storage_used_bytes, last_activity_at in rows
+    ]
+    return PaginatedAdminEvents(
+        items=items,
         total=total,
         page=page,
         page_size=page_size,
     )
+
+
+@router.get("/events/{event_id}", response_model=AdminEventDetailOut)
+async def admin_get_event_detail(
+    event_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> AdminEventDetailOut:
+    """Event detail: context fields (D1) + processing monitor breakdown (D3).
+
+    Backs the admin event detail view (REQ-2, REQ-4a/4b).
+    """
+    stats = await admin_stats.get_event_with_stats(db, event_id)
+    if stats is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+    event, photo_count, storage_used_bytes, last_activity_at = stats
+    monitor = await admin_stats.get_processing_monitor(db, event_id)
+    return AdminEventDetailOut(
+        **EventOut.model_validate(event).model_dump(),
+        photo_count=photo_count,
+        storage_used_bytes=storage_used_bytes,
+        last_activity_at=last_activity_at,
+        processing_monitor=ProcessingMonitorOut(**monitor),
+    )
+
+
+@router.get("/health", response_model=PlatformHealthOut)
+async def admin_platform_health(
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> PlatformHealthOut:
+    """Platform-wide health dashboard (REQ-7a/7b, design D6). Batch queries,
+    no caching — computed fresh on every request."""
+    health = await admin_stats.get_platform_health(db)
+    return PlatformHealthOut(**health)
 
 
 @router.post("/events/{event_id}/suspend", response_model=EventOut)
@@ -146,7 +208,7 @@ async def admin_hard_delete_event(
     import shutil
     from pathlib import Path
     from app.config import settings as app_settings
-    from app.services.purge import _stub_qdrant_delete
+    from app.services import qdrant
 
     event = await event_svc.get_event(db, event_id)
     if event is None:
@@ -157,8 +219,8 @@ async def admin_hard_delete_event(
     if event_path.exists():
         shutil.rmtree(event_path)
 
-    # 2. Stub Qdrant deletion
-    _stub_qdrant_delete(event_id)
+    # 2. Delete the event's Qdrant collection (idempotent — REQ-3a/D2)
+    qdrant.delete_collection(event_id)
 
     # 3. Hard delete from DB using the request session (keeps test DB consistent)
     await db.delete(event)

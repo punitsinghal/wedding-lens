@@ -3,11 +3,12 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, get_validated_guest_event
 from app.schemas.search import SearchResponse, SearchResultOut
+from app.services import analytics as analytics_service
 from app.services.face_search import NoDominantFaceError, NoFaceDetectedError, run_search
 from app.services.search_rate_limit import make_enforce_rate_limit_dep
 
@@ -29,6 +30,7 @@ async def face_search(
     event_id: uuid.UUID,
     selfie: UploadFile,
     response: Response,
+    background_tasks: BackgroundTasks,
     # D5 — consent_ack: server-enforced precondition (REQ-8a, AC-2e).
     # Must be sent as a multipart form field alongside the selfie.
     # If absent or false → 422 consent_required (AC-2e / design D5).
@@ -91,6 +93,12 @@ async def face_search(
         )
     finally:
         del selfie_bytes  # drop router's own reference; run_search already drops its own
+
+    # D5/S6 — one search_events row per COMPLETED request, including cache
+    # hits (a repeat search is still guest engagement) — but not for the
+    # no_face_detected/no_dominant_face error paths above, which raise
+    # before reaching here.
+    background_tasks.add_task(analytics_service.record_search_event, event_id)
 
     response.headers["X-Search-Cache"] = "hit" if cache_hit else "miss"
     return SearchResponse(

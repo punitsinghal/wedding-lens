@@ -4,7 +4,7 @@ import mimetypes
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +20,7 @@ from app.schemas.gallery import (
     PhotographerChoiceOut,
     PhotographerChoicePatch,
 )
+from app.services import analytics as analytics_service
 from app.services import gallery as gallery_service
 
 router = APIRouter(prefix="/api/v1/events/{event_id}", tags=["gallery"])
@@ -121,6 +122,7 @@ async def download_photo(
     event_id: uuid.UUID,
     photo_id: uuid.UUID,
     response: Response,
+    background_tasks: BackgroundTasks,
     guest_event: tuple = Depends(get_validated_guest_event),
     db: AsyncSession = Depends(get_db),
 ) -> FileResponse:
@@ -151,11 +153,36 @@ async def download_photo(
     )
     await db.commit()
 
+    # D5/S6 — one download_events row per download action (fire-and-forget,
+    # NFR-3). Separate from Photo.download_count above (per-photo badge,
+    # unrelated purpose — see design D5's explicit note not to conflate them).
+    background_tasks.add_task(analytics_service.record_download_event, event_id)
+
     return FileResponse(
         str(abs_path),
         media_type="application/octet-stream",
         filename=photo.filename,
     )
+
+
+@router.post("/photos/{photo_id}/view", status_code=status.HTTP_204_NO_CONTENT)
+async def record_photo_view(
+    event_id: uuid.UUID,
+    photo_id: uuid.UUID,
+    response: Response,
+    background_tasks: BackgroundTasks,
+    guest_event: tuple = Depends(get_validated_guest_event),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Guest photo-view beacon (S6, design D5). Fire-and-forget: the response
+    returns 204 immediately regardless of whether the insert succeeds
+    (NFR-3) — this is intentionally NOT gated on the photo actually existing,
+    since a failed lookup must not fail the beacon either.
+    """
+    _event, refreshed_token, _sid = guest_event
+    response.headers["X-Guest-Token"] = refreshed_token
+
+    background_tasks.add_task(analytics_service.record_view_event, event_id)
 
 
 @router.patch("/photos/{photo_id}/photographer-choice", response_model=PhotographerChoiceOut)

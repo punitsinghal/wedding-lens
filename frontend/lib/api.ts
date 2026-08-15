@@ -14,6 +14,9 @@ import type {
   AlbumCreateRequest,
   AlbumUpdateRequest,
   AdminEventsResponse,
+  AdminEventDetail,
+  PlatformHealth,
+  EventAnalytics,
   AlbumTab,
   GalleryListResponse,
   Photo,
@@ -192,6 +195,11 @@ export function getQrCodeUrl(eventId: string): string {
   return `/api/events/${eventId}/qr-code`;
 }
 
+// Event-owner analytics (view/download/search totals) — owner-only endpoint.
+export async function getEventAnalytics(eventId: string): Promise<EventAnalytics> {
+  return apiFetch<EventAnalytics>(`/api/v1/events/${eventId}/analytics`);
+}
+
 // ---------------------------------------------------------------------------
 // Albums
 // ---------------------------------------------------------------------------
@@ -234,11 +242,21 @@ export async function deleteAlbum(eventId: string, albumId: string): Promise<voi
 
 export async function adminGetEvents(
   page: number = 1,
-  pageSize: number = 20
+  pageSize: number = 20,
+  params: { status?: string; sort?: 'last_activity' | 'photo_count' } = {}
 ): Promise<AdminEventsResponse> {
-  return apiFetch<AdminEventsResponse>(
-    `/api/v1/admin/events?page=${page}&page_size=${pageSize}`
-  );
+  const qs = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  if (params.status) qs.set('status', params.status);
+  if (params.sort) qs.set('sort', params.sort);
+  return apiFetch<AdminEventsResponse>(`/api/v1/admin/events?${qs.toString()}`);
+}
+
+export async function adminGetEventDetail(eventId: string): Promise<AdminEventDetail> {
+  return apiFetch<AdminEventDetail>(`/api/v1/admin/events/${eventId}`);
+}
+
+export async function adminGetPlatformHealth(): Promise<PlatformHealth> {
+  return apiFetch<PlatformHealth>('/api/v1/admin/health');
 }
 
 export async function adminSuspendEvent(eventId: string): Promise<Event> {
@@ -315,6 +333,19 @@ export async function getGalleryPhotos(
     eventId,
     `/api/v1/events/${eventId}/gallery${query}`
   );
+}
+
+// Guest photo-view beacon — fire-and-forget (204, may refresh guest token).
+// Intentionally returns void rather than a Promise: callers (e.g. Lightbox)
+// must not await this or handle its result — errors are swallowed here so a
+// failed beacon never surfaces to the guest or blocks the UI.
+export function recordPhotoView(eventId: string, photoId: string): void {
+  guestApiFetch<void>(eventId, `/api/v1/events/${eventId}/photos/${photoId}/view`, {
+    method: 'POST',
+  }).catch(() => {
+    // fire-and-forget — swallow errors, matches the backend's own
+    // fire-and-forget contract for this beacon (design D5).
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -93,6 +93,7 @@ async def _assert_schema_current() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Import jobs here to avoid circular imports at module level
+    from app.services.admin_alerts import check_processing_failure_rates
     from app.services.purge import purge_abandoned_upload_sessions, purge_expired_events
     from app.services.retry import retry_failed_photos
 
@@ -120,6 +121,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         trigger="interval",
         minutes=5,
         id="retry_failed_photos",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        check_processing_failure_rates,
+        trigger="interval",
+        minutes=5,
+        id="check_processing_failure_rates",
         replace_existing=True,
     )
     scheduler.start()

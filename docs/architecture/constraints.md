@@ -1,5 +1,5 @@
 # Architectural Constraints: WeddingLens
-Last updated: 2026-06-19
+Last updated: 2026-08-15
 
 <!-- Violations of the rules below are treated as blocking issues in /review and /build. -->
 
@@ -20,6 +20,7 @@ Last updated: 2026-06-19
 | backend | Qdrant, PostgreSQL, local SSD, InsightFace | Another event's data without an explicit `event_id` scope check |
 | face pipeline (BackgroundTask) | InsightFace, Qdrant Cloud (HTTPS), PostgreSQL | Must not make outbound calls to any service other than Qdrant Cloud |
 | guests | frontend only | backend directly from browser (all calls must go via frontend) |
+| admin alert job (APScheduler) | SMTP relay (outbound only, credentials via `SMTP_*` settings), PostgreSQL | No third-party alerting SDK/webhook (Admin Platform, design D4) |
 
 ## Cross-cutting Standards
 

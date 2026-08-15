@@ -15,6 +15,7 @@ from app.services.auth import hash_password
 from app.services.guest_auth import create_guest_token
 from app.services.search_cache import search_cache
 from app.services.search_rate_limit import search_rate_limiter
+from tests.conftest import TestSessionLocal
 
 
 # ---------------------------------------------------------------------------
@@ -30,6 +31,13 @@ def clear_cache():
     yield
     search_cache.clear()
     search_rate_limiter.clear_all()
+
+
+@pytest.fixture(autouse=True)
+def patch_analytics_session():
+    """Redirect search_events BackgroundTasks writes to the test SQLite session."""
+    with patch("app.services.analytics.AsyncSessionLocal", TestSessionLocal):
+        yield
 
 
 @pytest_asyncio.fixture
@@ -306,6 +314,101 @@ async def test_search_cache_hit_on_second_request(
         )
         assert resp2.status_code == 200
         assert resp2.headers.get("x-search-cache") == "hit"
+
+
+# ---------------------------------------------------------------------------
+# Test 8b: search_events row written on completed search (D5, S6)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_search_writes_search_event_on_success(
+    client: AsyncClient, db: AsyncSession, event: Event, photo: Photo
+):
+    from sqlalchemy import select
+
+    from app.models.analytics import SearchEvent
+
+    emb = _fake_embedding()
+    faces = [{"bbox": [0, 0, 100, 100], "embedding": emb, "det_score": 0.99}]
+    qdrant_hits = [{"photo_id": str(photo.id), "score": 0.95}]
+
+    with patch("app.services.face_search._detect_faces", return_value=faces), \
+         patch("app.services.face_search.search_faces", return_value=qdrant_hits):
+        resp = await client.post(
+            f"/api/v1/events/{event.id}/search",
+            files={"selfie": ("selfie.jpg", _fake_selfie(), "image/jpeg")},
+            data={"consent_ack": "true"},
+            headers=_guest_headers(event.id),
+        )
+    assert resp.status_code == 200
+
+    result = await db.execute(select(SearchEvent).where(SearchEvent.event_id == event.id))
+    rows = list(result.scalars().all())
+    assert len(rows) == 1
+
+
+@pytest.mark.asyncio
+async def test_search_cache_hit_still_writes_search_event(
+    client: AsyncClient, db: AsyncSession, event: Event, photo: Photo
+):
+    """D5's explicit rationale: a cache-hit repeat search is still guest
+    engagement — it must still write a search_events row."""
+    from sqlalchemy import select
+
+    from app.models.analytics import SearchEvent
+
+    emb = _fake_embedding()
+    faces = [{"bbox": [0, 0, 100, 100], "embedding": emb, "det_score": 0.99}]
+    qdrant_hits = [{"photo_id": str(photo.id), "score": 0.95}]
+    sid = str(uuid.uuid4())
+    headers = _guest_headers(event.id, sid=sid)
+    selfie_bytes = _fake_selfie(200)
+
+    with patch("app.services.face_search._detect_faces", return_value=faces), \
+         patch("app.services.face_search.search_faces", return_value=qdrant_hits):
+        resp1 = await client.post(
+            f"/api/v1/events/{event.id}/search",
+            files={"selfie": ("selfie.jpg", selfie_bytes, "image/jpeg")},
+            data={"consent_ack": "true"},
+            headers=headers,
+        )
+        assert resp1.headers.get("x-search-cache") == "miss"
+
+        resp2 = await client.post(
+            f"/api/v1/events/{event.id}/search",
+            files={"selfie": ("selfie.jpg", selfie_bytes, "image/jpeg")},
+            data={"consent_ack": "true"},
+            headers=headers,
+        )
+        assert resp2.headers.get("x-search-cache") == "hit"
+
+    result = await db.execute(select(SearchEvent).where(SearchEvent.event_id == event.id))
+    rows = list(result.scalars().all())
+    assert len(rows) == 2  # one per completed request, including the cache hit
+
+
+@pytest.mark.asyncio
+async def test_search_no_face_detected_does_not_write_search_event(
+    client: AsyncClient, db: AsyncSession, event: Event
+):
+    """The error paths raise before the search_events write point — no row
+    should be written for an incomplete/failed search."""
+    from sqlalchemy import select
+
+    from app.models.analytics import SearchEvent
+
+    with patch("app.services.face_search._detect_faces", return_value=[]):
+        resp = await client.post(
+            f"/api/v1/events/{event.id}/search",
+            files={"selfie": ("selfie.jpg", _fake_selfie(), "image/jpeg")},
+            data={"consent_ack": "true"},
+            headers=_guest_headers(event.id),
+        )
+    assert resp.status_code == 422
+
+    result = await db.execute(select(SearchEvent).where(SearchEvent.event_id == event.id))
+    assert list(result.scalars().all()) == []
 
 
 # ---------------------------------------------------------------------------

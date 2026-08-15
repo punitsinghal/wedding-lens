@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import {
   adminGetEvents,
   adminSuspendEvent,
@@ -8,10 +9,12 @@ import {
   adminDeleteEvent,
   adminGetRemovalRequests,
   adminFulfillRemovalRequest,
+  adminGetPlatformHealth,
 } from '@/lib/api';
-import type { AdminEvent, RemovalRequest } from '@/types/api';
+import type { AdminEvent, RemovalRequest, PlatformHealth } from '@/types/api';
 import StatusBadge from '@/components/StatusBadge';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import { formatBytes, formatDateTime, formatPercent } from '@/lib/format';
 
 const PAGE_SIZE = 20;
 
@@ -36,6 +39,11 @@ export default function AdminPage() {
   const [removalError, setRemovalError] = useState('');
   const [fulfillingId, setFulfillingId] = useState<string | null>(null);
 
+  // Platform health dashboard
+  const [health, setHealth] = useState<PlatformHealth | null>(null);
+  const [healthLoading, setHealthLoading] = useState(true);
+  const [healthError, setHealthError] = useState('');
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const loadEvents = useCallback(() => {
@@ -56,6 +64,19 @@ export default function AdminPage() {
   useEffect(() => {
     loadEvents();
   }, [loadEvents]);
+
+  // Platform health — loaded once on mount (no caching, D6)
+  useEffect(() => {
+    setHealthLoading(true);
+    setHealthError('');
+    adminGetPlatformHealth()
+      .then(setHealth)
+      .catch((err: unknown) => {
+        const apiErr = err as { detail?: string };
+        setHealthError(apiErr?.detail ?? 'Failed to load platform health.');
+      })
+      .finally(() => setHealthLoading(false));
+  }, []);
 
   async function handleSuspend(event: AdminEvent) {
     setActionError('');
@@ -151,6 +172,46 @@ export default function AdminPage() {
         {total > 0 ? `${total} total events` : 'No events found'}
       </p>
 
+      {/* Platform health dashboard (REQ-7, design D6) */}
+      <div className="mb-8">
+        <h2 className="text-lg font-semibold text-gray-900 mb-3">Platform Health</h2>
+        {healthError && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+            {healthError}
+          </div>
+        )}
+        {healthLoading ? (
+          <div className="text-sm text-gray-400">Loading platform health...</div>
+        ) : health ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <p className="text-xs text-gray-500">Total Events</p>
+              <p className="text-xl font-semibold text-gray-900">{health.total_events}</p>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <p className="text-xs text-gray-500">Total Photos</p>
+              <p className="text-xl font-semibold text-gray-900">{health.total_photos}</p>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <p className="text-xs text-gray-500">Total Storage</p>
+              <p className="text-xl font-semibold text-gray-900">
+                {formatBytes(health.total_storage_bytes)}
+              </p>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <p className="text-xs text-gray-500">Error Rate (24h)</p>
+              <p
+                className={`text-xl font-semibold ${
+                  health.error_rate_24h > 0.1 ? 'text-red-600' : 'text-gray-900'
+                }`}
+              >
+                {formatPercent(health.error_rate_24h)}
+              </p>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
           {error}
@@ -176,13 +237,15 @@ export default function AdminPage() {
                   <th className="text-left px-4 py-3 font-medium text-gray-600">Date</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
                   <th className="text-right px-4 py-3 font-medium text-gray-600">Photos</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-600">Storage</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Last Activity</th>
                   <th className="text-right px-4 py-3 font-medium text-gray-600">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {events.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-12 text-gray-400">
+                    <td colSpan={8} className="text-center py-12 text-gray-400">
                       No events on this page.
                     </td>
                   </tr>
@@ -193,9 +256,12 @@ export default function AdminPage() {
                       className="border-b border-gray-100 hover:bg-gray-50"
                     >
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900 truncate max-w-xs">
+                        <Link
+                          href={`/admin/events/${event.id}`}
+                          className="font-medium text-gray-900 hover:text-blue-600 hover:underline truncate max-w-xs block"
+                        >
                           {event.name}
-                        </div>
+                        </Link>
                         <div className="text-xs text-gray-400 font-mono">/{event.slug}</div>
                       </td>
                       <td className="px-4 py-3 text-gray-600 truncate max-w-[180px]">
@@ -213,6 +279,12 @@ export default function AdminPage() {
                       </td>
                       <td className="px-4 py-3 text-right text-gray-600">
                         {event.photo_count}
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-600 whitespace-nowrap">
+                        {formatBytes(event.storage_used_bytes)}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                        {formatDateTime(event.last_activity_at)}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-2">
@@ -261,7 +333,12 @@ export default function AdminPage() {
                 >
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div>
-                      <p className="font-medium text-gray-900">{event.name}</p>
+                      <Link
+                        href={`/admin/events/${event.id}`}
+                        className="font-medium text-gray-900 hover:text-blue-600 hover:underline"
+                      >
+                        {event.name}
+                      </Link>
                       <p className="text-xs text-gray-400 font-mono">/{event.slug}</p>
                     </div>
                     <StatusBadge status={event.status} />
@@ -273,7 +350,10 @@ export default function AdminPage() {
                       month: 'short',
                       year: 'numeric',
                     })}{' '}
-                    &middot; {event.photo_count} photos
+                    &middot; {event.photo_count} photos &middot; {formatBytes(event.storage_used_bytes)}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Last activity: {formatDateTime(event.last_activity_at)}
                   </p>
                   <div className="flex gap-3 mt-3">
                     {event.status === 'suspended' ? (

@@ -1,6 +1,6 @@
 # Product Capabilities
 
-Last updated: 2026-06-23
+Last updated: 2026-08-15
 
 ---
 
@@ -141,3 +141,29 @@ Governance layer over the existing encryption + selfie-deletion controls. Compli
 - "Remove my face data" link + form (name, email, description) on the guest gallery page with on-screen confirmation
 - Static `/privacy` page (no API call): DPDP §6 legal basis, Data Fiduciary identity, 30-day retention, consent-withdrawal + removal instructions
 - Admin dashboard: pending removal-request count badge + list with "Mark fulfilled" action
+
+---
+
+## Admin Platform & Analytics (Epic: admin-platform)
+
+**Status:** Shipped — `feature/admin-platform-analytics`
+
+Reconciled two gaps found in already-shipped admin code (Event Management #12) and added the four scenarios that were previously nothing-built: processing monitor, failure-rate alerting, event-owner analytics, platform health dashboard.
+
+### What was added
+
+**Backend (`backend/`):**
+- Admin event list (`GET /admin/events`) now returns `photo_count`, `storage_used_bytes` (original bytes only), and `last_activity_at` per event via one aggregated query (no N+1); supports `?status=` filter and `?sort=last_activity|photo_count`
+- Admin hard delete now calls the real `qdrant.delete_collection()` (idempotent on 404) instead of the pre-existing `_stub_qdrant_delete` — a hard-deleted event's face embeddings are actually removed from Qdrant now
+- New admin event detail endpoint (`GET /admin/events/{id}`): context fields + a 5-state processing monitor (`pending`/`processing`/`complete`/`failed`/`error` — `failed` is retryable, `error` is exhausted-retries)
+- New platform health dashboard (`GET /admin/health`): total events/photos/storage, 24h processing error rate
+- New automated failure-rate alerting: APScheduler job every 5 minutes, emails every `is_admin=true` user when an event's 1-hour failure rate exceeds 10%; in-process dedup (no repeat alert for the same event within 1 hour) — see ADR `2026-08-15-admin-alert-in-process-dedup`
+- New event-owner analytics (`GET /events/{id}/analytics`, owner-only): total views/downloads/searches
+- Three new event-scoped tables (`view_events`, `download_events`, `search_events` — no guest identity, CASCADE-deleted with the event); new guest-facing view beacon (`POST /events/{id}/photos/{id}/view`); download events written on single-photo and ZIP download completion (one row per ZIP request, not per photo); search events written on every completed search including cache hits
+
+**Frontend (`frontend/`):**
+- Admin dashboard: platform-health stat cards; storage/last-activity columns on the event table; event name links to a new detail page
+- New admin event detail page (`/admin/events/[eventId]`): context fields + processing monitor grid
+- Event owner's event detail page: new analytics section (views/downloads/searches)
+- Lightbox fires the view beacon once per photo opened (fire-and-forget, not on every re-render)
+- New shared `lib/format.ts` helpers (bytes, datetime, percent) — see ADR `2026-08-15-shared-format-helpers`
