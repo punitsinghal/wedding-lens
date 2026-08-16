@@ -191,7 +191,7 @@ def _send_alert_email(
     keeps the job safe to run every 5 minutes indefinitely in environments
     with no SMTP relay configured.
     """
-    subject = f"[WeddingLens] Processing failure rate alert — {event_name}"
+    subject = f"[PicsLeLo] Processing failure rate alert — {event_name}"
     body = (
         f"Event: {event_name}\n"
         f"Event ID: {event_id}\n"

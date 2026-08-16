@@ -7,6 +7,14 @@ import type { Event, AssignedEvent } from '@/types/api';
 import EventCard from '@/components/EventCard';
 import AssignedEventCard from '@/components/AssignedEventCard';
 
+function PlusIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M8 2v12M2 8h12" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export default function DashboardPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -29,50 +37,55 @@ export default function DashboardPage() {
   }, []);
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">My Events</h1>
-        <Link
-          href="/events/new"
-          className="bg-blue-600 text-white text-sm font-medium px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          + New Event
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
+      <div className="flex items-center justify-between gap-4 mb-8">
+        <h1 className="text-4xl">Your events</h1>
+        <Link href="/events/new" className="btn btn-primary">
+          <PlusIcon />
+          New event
         </Link>
       </div>
 
       {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+        <div className="mb-6 px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
           {error}
         </div>
       )}
 
       {isLoading ? (
-        <div className="text-center py-16 text-gray-400 text-sm">Loading events...</div>
+        <div className="text-center py-16 text-neutral-600 text-sm">Loading events...</div>
       ) : events.length === 0 ? (
-        <div className="text-center py-16 border border-dashed border-gray-300 rounded-lg">
-          <p className="text-gray-500 text-sm mb-4">No events yet.</p>
-          <Link
-            href="/events/new"
-            className="text-blue-600 text-sm hover:underline font-medium"
-          >
+        <div className="text-center py-16 border-2 border-dashed border-divider rounded-lg">
+          <p className="text-neutral-600 text-sm mb-4">No events yet.</p>
+          <Link href="/events/new" className="btn btn-primary">
+            <PlusIcon />
             Create your first event
           </Link>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {events.map((event) => (
             <EventCard key={event.id} event={event} />
           ))}
+          <Link
+            href="/events/new"
+            className="flex flex-col items-center justify-center gap-2 min-h-[240px] rounded-lg border-2 border-dashed border-divider text-neutral-600 hover:border-accent hover:text-accent transition-colors text-center p-6"
+          >
+            <PlusIcon />
+            <span className="text-sm font-medium">Create your next event</span>
+          </Link>
         </div>
       )}
 
       {assignedEventsError && (
-        <p className="mt-4 text-sm text-red-600">{assignedEventsError}</p>
+        <div className="mt-4 px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
+          {assignedEventsError}
+        </div>
       )}
       {assignedEvents.length > 0 && (
-        <div className="mt-10">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Events I&apos;m Photographing</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
+        <div className="mt-12">
+          <h2 className="text-2xl mb-4">Events I&apos;m Photographing</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {assignedEvents.map((event) => (
               <AssignedEventCard key={event.id} event={event} />
             ))}

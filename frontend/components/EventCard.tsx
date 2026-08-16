@@ -14,36 +14,29 @@ export default function EventCard({ event }: Props) {
   });
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-5 hover:shadow-md transition-shadow">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h3 className="text-base font-semibold text-gray-900 truncate">{event.name}</h3>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {event.bride_name} &amp; {event.groom_name}
-          </p>
-          <p className="text-xs text-gray-400 mt-1">{formattedDate}</p>
-          <p className="text-xs text-gray-400 font-mono mt-0.5">/{event.slug}</p>
-        </div>
+    <div className="card elev-sm">
+      <div className="aspect-[4/3] w-full rounded-md bg-neutral-200" />
+
+      <div className="flex items-center gap-2 flex-wrap">
         <StatusBadge status={event.status} />
       </div>
 
-      <div className="mt-4 flex items-center gap-3 flex-wrap">
-        <Link
-          href={`/events/${event.id}`}
-          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-        >
+      <div className="min-w-0">
+        <h3 className="card-title text-[21px] truncate">{event.name}</h3>
+        <p className="text-sm opacity-70 truncate mt-0.5">
+          {event.bride_name} &amp; {event.groom_name}
+        </p>
+        <p className="card-meta mt-1">{formattedDate}</p>
+      </div>
+
+      <div className="flex items-center gap-2 flex-wrap pt-1">
+        <Link href={`/events/${event.id}`} className="btn btn-secondary text-xs px-3 py-1.5">
           Edit
         </Link>
-        <Link
-          href={`/events/${event.id}/albums`}
-          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-        >
+        <Link href={`/events/${event.id}/albums`} className="btn btn-secondary text-xs px-3 py-1.5">
           Albums
         </Link>
-        <Link
-          href={`/events/${event.id}/qr`}
-          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-        >
+        <Link href={`/events/${event.id}/qr`} className="btn btn-secondary text-xs px-3 py-1.5">
           QR Code
         </Link>
       </div>

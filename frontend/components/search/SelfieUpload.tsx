@@ -120,24 +120,24 @@ export default function SelfieUpload({
     return (
       <div className="flex flex-col items-center gap-6 px-4 py-8 max-w-md mx-auto">
         <div className="text-center">
-          <h2 className="text-lg font-semibold text-gray-900">Before we continue</h2>
-          <p className="mt-1 text-sm text-gray-500">
+          <h2 className="text-lg">Before we continue</h2>
+          <p className="mt-1 text-sm opacity-60">
             Please read this notice about how your data will be used.
           </p>
         </div>
 
-        <div className="w-full bg-blue-50 border border-blue-200 rounded-xl px-5 py-5 text-sm text-gray-700 space-y-3">
+        <div className="w-full card elev-sm bg-accent-2-100 text-sm space-y-3">
           <div>
-            <span className="font-semibold text-gray-900">What we collect:</span>{' '}
+            <span className="font-semibold">What we collect:</span>{' '}
             A face embedding (a mathematical representation of your face) is derived from
             your selfie. Your actual selfie image is never stored.
           </div>
           <div>
-            <span className="font-semibold text-gray-900">Why:</span>{' '}
+            <span className="font-semibold">Why:</span>{' '}
             To find the photos you appear in within this event&apos;s gallery.
           </div>
           <div>
-            <span className="font-semibold text-gray-900">How long we keep it:</span>{' '}
+            <span className="font-semibold">How long we keep it:</span>{' '}
             Your selfie is deleted immediately after the search. All event data, including
             face embeddings, is deleted within 30 days of the event end date.
           </div>
@@ -146,7 +146,7 @@ export default function SelfieUpload({
               href="/privacy"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-600 underline hover:text-blue-800 font-medium"
+              className="text-accent underline hover:text-accent-700 font-medium"
             >
               Read the full platform privacy notice
             </Link>
@@ -154,13 +154,10 @@ export default function SelfieUpload({
         </div>
 
         {/* AC-2e: age/guardian affirmation included in the acknowledgement button */}
-        <button
-          onClick={() => setAcknowledged(true)}
-          className="w-full max-w-xs py-3 px-6 text-sm font-semibold text-white bg-blue-600 rounded-full hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-colors"
-        >
+        <button onClick={() => setAcknowledged(true)} className="btn btn-primary btn-block max-w-xs">
           I understand, continue
         </button>
-        <p className="text-xs text-gray-400 text-center max-w-xs">
+        <p className="text-xs opacity-50 text-center max-w-xs">
           By continuing, you also confirm that you are 18 or older, or that a
           parent or guardian is consenting on behalf of an under-18 guest.
         </p>
@@ -171,8 +168,8 @@ export default function SelfieUpload({
   return (
     <div className="flex flex-col items-center gap-6 px-4 py-8">
       <div className="text-center">
-        <h2 className="text-lg font-semibold text-gray-900">Find your photos</h2>
-        <p className="mt-1 text-sm text-gray-500">
+        <h2 className="text-lg">Find your photos</h2>
+        <p className="mt-1 text-sm opacity-60">
           Upload a clear selfie and we&apos;ll find all the photos you appear in.
         </p>
       </div>
@@ -188,14 +185,14 @@ export default function SelfieUpload({
         htmlFor="selfie-input"
         className={`flex flex-col items-center justify-center w-full max-w-xs border-2 border-dashed rounded-xl px-6 py-10 cursor-pointer transition-colors ${
           isUploading
-            ? 'border-gray-300 bg-gray-50 cursor-not-allowed'
-            : 'border-blue-400 bg-blue-50 hover:bg-blue-100'
+            ? 'border-divider bg-neutral-100 cursor-not-allowed'
+            : 'border-accent-400 bg-accent-100 hover:bg-accent-200'
         }`}
       >
         {isUploading ? (
           <>
             <svg
-              className="animate-spin h-8 w-8 text-blue-500 mb-3"
+              className="animate-spin h-8 w-8 text-accent mb-3"
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
               viewBox="0 0 24 24"
@@ -215,12 +212,12 @@ export default function SelfieUpload({
                 d="M4 12a8 8 0 018-8v8H4z"
               />
             </svg>
-            <span className="text-sm text-gray-500">Searching...</span>
+            <span className="text-sm opacity-60">Searching...</span>
           </>
         ) : (
           <>
             <svg
-              className="h-8 w-8 text-blue-400 mb-3"
+              className="h-8 w-8 text-accent mb-3"
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
               viewBox="0 0 24 24"
@@ -239,8 +236,8 @@ export default function SelfieUpload({
                 d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z"
               />
             </svg>
-            <span className="text-sm font-medium text-blue-600">Take or upload a selfie</span>
-            <span className="mt-1 text-xs text-gray-400">JPEG or PNG, max 20 MB</span>
+            <span className="text-sm font-medium text-accent">Take or upload a selfie</span>
+            <span className="mt-1 text-xs opacity-50">JPEG or PNG, max 20 MB</span>
           </>
         )}
       </label>

@@ -284,45 +284,34 @@ function GalleryContent() {
   if (isChecking || !event) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-gray-400 text-sm">Loading...</p>
+        <p className="text-sm opacity-60">Loading...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-bg">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-4 py-4">
+      <header className="bg-bg border-b border-divider px-4 py-4">
         <div className="max-w-6xl mx-auto flex items-start justify-between">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">{event.name}</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
+            <h1 className="text-xl">{event.name}</h1>
+            <p className="text-sm opacity-60 mt-0.5">
               {event.bride_name} &amp; {event.groom_name}
             </p>
           </div>
           <div className="flex gap-2 items-center flex-wrap justify-end">
-            <Link
-              href={`/g/${slug}/search`}
-              className="px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors"
-            >
+            <Link href={`/g/${slug}/search`} className="btn btn-primary">
               Find my photos
             </Link>
-            <Link
-              href={`/g/${slug}/favourites`}
-              className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-full hover:bg-gray-50 transition-colors"
-            >
+            <Link href={`/g/${slug}/favourites`} className="btn btn-secondary">
               Favourites
               {favouriteIds.size > 0 && (
-                <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full ml-1">
-                  {favouriteIds.size}
-                </span>
+                <span className="tag tag-neutral ml-1">{favouriteIds.size}</span>
               )}
             </Link>
             {/* S3: Remove my face data link (AC-3a) */}
-            <button
-              onClick={() => setShowRemovalForm(true)}
-              className="px-3 py-1.5 text-sm font-medium text-red-600 bg-white border border-red-200 rounded-full hover:bg-red-50 transition-colors"
-            >
+            <button onClick={() => setShowRemovalForm(true)} className="btn btn-ghost">
               Remove my face data
             </button>
           </div>
@@ -330,7 +319,7 @@ function GalleryContent() {
       </header>
 
       {/* Filters */}
-      <div className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-10">
+      <div className="bg-bg border-b border-divider px-4 py-3 sticky top-0 z-10">
         <div className="max-w-6xl mx-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           {tabs.length > 0 && (
             <AlbumFilterBar
@@ -406,14 +395,16 @@ function GalleryContent() {
       {/* S3: Removal request modal */}
       {showRemovalForm && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50"
           role="dialog"
           aria-modal="true"
           aria-labelledby="removal-form-title"
         >
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 id="removal-form-title" className="text-base font-semibold text-gray-900">
+          <div className="w-full sm:max-w-md bg-surface rounded-t-[36px] sm:rounded-[36px] shadow-lg p-6 pb-8 sm:pb-6 max-h-[92vh] overflow-y-auto">
+            <div className="w-11 h-1.5 rounded-full bg-neutral-300 mx-auto mb-4 sm:hidden" />
+
+            <div className="flex items-center justify-between mb-1">
+              <h2 id="removal-form-title" className="text-xl">
                 Remove my face data
               </h2>
               <button
@@ -428,7 +419,7 @@ function GalleryContent() {
                   setRemovalDescriptionError('');
                   setRemovalError('');
                 }}
-                className="text-gray-400 hover:text-gray-600"
+                className="btn btn-icon btn-ghost -mr-1.5"
                 aria-label="Close"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -439,76 +430,76 @@ function GalleryContent() {
 
             {removalSuccess ? (
               <div className="py-4 text-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-green-500 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-accent-2-600 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <p className="text-sm font-medium text-gray-900 mb-1">Request received</p>
-                <p className="text-sm text-gray-500">
+                <p className="text-base mb-1">Request received</p>
+                <p className="text-sm opacity-70">
                   Your face data removal request has been submitted. It will be processed within 24 hours.
                 </p>
               </div>
             ) : (
               <form onSubmit={handleRemovalSubmit} noValidate className="space-y-4">
-                <p className="text-sm text-gray-600">
+                <p className="text-sm opacity-70">
                   Fill in this form to request removal of your face data from this event. All fields are required.
                 </p>
 
-                <div>
-                  <label htmlFor="removal-name" className="block text-sm font-medium text-gray-700 mb-1">
-                    Your name <span className="text-red-500">*</span>
+                <div className="field">
+                  <label htmlFor="removal-name">
+                    Your name <span className="text-accent-600">*</span>
                   </label>
                   <input
                     id="removal-name"
                     type="text"
                     value={removalName}
                     onChange={(e) => { setRemovalName(e.target.value); setRemovalNameError(''); }}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="input"
                     placeholder="e.g. Priya Sharma"
                   />
                   {removalNameError && (
-                    <p className="mt-1 text-xs text-red-600">{removalNameError}</p>
+                    <p className="mt-1 text-xs text-[#b3261e]">{removalNameError}</p>
                   )}
                 </div>
 
-                <div>
-                  <label htmlFor="removal-email" className="block text-sm font-medium text-gray-700 mb-1">
-                    Email address <span className="text-red-500">*</span>
+                <div className="field">
+                  <label htmlFor="removal-email">
+                    Email address <span className="text-accent-600">*</span>
                   </label>
                   <input
                     id="removal-email"
                     type="email"
                     value={removalEmail}
                     onChange={(e) => { setRemovalEmail(e.target.value); setRemovalEmailError(''); }}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="input"
                     placeholder="you@example.com"
                   />
                   {removalEmailError && (
-                    <p className="mt-1 text-xs text-red-600">{removalEmailError}</p>
+                    <p className="mt-1 text-xs text-[#b3261e]">{removalEmailError}</p>
                   )}
                 </div>
 
-                <div>
-                  <label htmlFor="removal-description" className="block text-sm font-medium text-gray-700 mb-1">
-                    When did you upload a selfie? <span className="text-red-500">*</span>
+                <div className="field">
+                  <label htmlFor="removal-description">
+                    When did you upload a selfie? <span className="text-accent-600">*</span>
                   </label>
                   <textarea
                     id="removal-description"
                     value={removalDescription}
                     onChange={(e) => { setRemovalDescription(e.target.value); setRemovalDescriptionError(''); }}
                     rows={3}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                    className="input"
                     placeholder="e.g. I uploaded a selfie on 15 June around 7 pm during the reception."
                   />
                   {removalDescriptionError && (
-                    <p className="mt-1 text-xs text-red-600">{removalDescriptionError}</p>
+                    <p className="mt-1 text-xs text-[#b3261e]">{removalDescriptionError}</p>
                   )}
                 </div>
 
                 {removalError && (
-                  <p className="text-sm text-red-600">{removalError}</p>
+                  <p className="text-sm text-[#b3261e]">{removalError}</p>
                 )}
 
-                <div className="flex justify-end gap-3 pt-1">
+                <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-1">
                   <button
                     type="button"
                     onClick={() => {
@@ -521,16 +512,12 @@ function GalleryContent() {
                       setRemovalDescriptionError('');
                       setRemovalError('');
                     }}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                    className="btn btn-ghost"
                   >
                     Cancel
                   </button>
-                  <button
-                    type="submit"
-                    disabled={removalSubmitting}
-                    className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {removalSubmitting ? 'Submitting...' : 'Submit request'}
+                  <button type="submit" disabled={removalSubmitting} className="btn btn-primary btn-block sm:w-auto">
+                    {removalSubmitting ? 'Submitting...' : 'Send request'}
                   </button>
                 </div>
               </form>

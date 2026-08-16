@@ -20,14 +20,14 @@ export default function AlbumFilterBar({ tabs, activeAlbum, onChange }: AlbumFil
               onClick={() => onChange(tab.ceremony_category)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
                 isActive
-                  ? 'bg-gray-900 text-white'
-                  : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-100'
+                  ? 'bg-accent text-bg'
+                  : 'bg-surface opacity-80 border border-divider hover:opacity-100'
               }`}
             >
               {tab.label}
               <span
                 className={`text-xs px-1.5 py-0.5 rounded-full ${
-                  isActive ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-500'
+                  isActive ? 'bg-accent-700 text-accent-100' : 'bg-neutral-200 opacity-70'
                 }`}
               >
                 {tab.photo_count}

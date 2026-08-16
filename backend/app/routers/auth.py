@@ -28,7 +28,7 @@ async def register(data: UserCreate, db: AsyncSession = Depends(get_db)) -> Toke
     )
     db.add(user)
     await db.flush()
-    token = create_access_token(str(user.id))
+    token = create_access_token(str(user.id), email=user.email, is_admin=user.is_admin)
     return TokenOut(access_token=token)
 
 
@@ -41,5 +41,5 @@ async def login(data: UserLogin, db: AsyncSession = Depends(get_db)) -> TokenOut
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
         )
-    token = create_access_token(str(user.id))
+    token = create_access_token(str(user.id), email=user.email, is_admin=user.is_admin)
     return TokenOut(access_token=token)

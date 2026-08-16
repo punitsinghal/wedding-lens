@@ -1,6 +1,6 @@
 ---
 name: frontend-builder
-description: Implementation work in the WeddingLens Next.js frontend (frontend/). Use for pages, components, API routes, hooks, and data fetching — guest gallery, face search UI, photographer dashboard, event management. Runs npm run lint (zero warnings) and npm run build before claiming completion. Does not touch backend/.
+description: Implementation work in the PicsLeLo Next.js frontend (frontend/). Use for pages, components, API routes, hooks, and data fetching — guest gallery, face search UI, photographer dashboard, event management. Runs npm run lint (zero warnings) and npm run build before claiming completion. Does not touch backend/.
 tools: Read, Edit, Write, Bash, Grep, Glob
 model: sonnet
 ---

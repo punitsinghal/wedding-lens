@@ -15,11 +15,33 @@ const CEREMONY_CATEGORIES: CeremonyCategory[] = [
   'Family Photos',
 ];
 
-const MAX_ALBUMS = 10;
+export const MAX_ALBUMS = 10;
 
 interface Props {
   eventId: string;
   initialAlbums: Album[];
+}
+
+function PlusIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function TrashIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path
+        d="M3 5h14M8 5V3.5A1.5 1.5 0 019.5 2h1A1.5 1.5 0 0112 3.5V5m-7 0v11a1.5 1.5 0 001.5 1.5h5a1.5 1.5 0 001.5-1.5V5M8.5 8.5v6M11.5 8.5v6"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 export default function AlbumList({ eventId, initialAlbums }: Props) {
@@ -113,57 +135,46 @@ export default function AlbumList({ eventId, initialAlbums }: Props) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-900">
-          Albums{' '}
-          <span className="text-sm font-normal text-gray-500">
-            {albums.length} / {MAX_ALBUMS}
-          </span>
-        </h2>
-        {albums.length < MAX_ALBUMS && !isCreating && (
-          <button
-            onClick={() => setIsCreating(true)}
-            className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            + New Album
+      {albums.length < MAX_ALBUMS && !isCreating && (
+        <div className="flex justify-end mb-4">
+          <button onClick={() => setIsCreating(true)} className="btn btn-primary">
+            <PlusIcon className="w-3 h-3" />
+            New Album
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+        <div className="mb-4 px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
           {error}
         </div>
       )}
 
       {isCreating && (
-        <form
-          onSubmit={handleCreate}
-          className="mb-4 p-4 border border-blue-200 bg-blue-50 rounded-lg"
-        >
-          <h3 className="text-sm font-semibold text-gray-800 mb-3">New Album</h3>
+        <form onSubmit={handleCreate} className="card elev-sm bg-accent-100 mb-4">
+          <h3 className="card-title">New Album</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Album Name <span className="text-red-500">*</span>
+            <div className="field">
+              <label>
+                Album Name <span className="text-accent">*</span>
               </label>
               <input
                 type="text"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 required
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="input"
                 placeholder="e.g. Pre-Wedding Shoot"
               />
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Ceremony Category <span className="text-gray-400">(optional)</span>
+            <div className="field">
+              <label>
+                Ceremony Category <span className="opacity-60">(optional)</span>
               </label>
               <select
                 value={newCategory}
                 onChange={(e) => setNewCategory(e.target.value as CeremonyCategory | '')}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="input"
               >
                 <option value="">— None —</option>
                 {CEREMONY_CATEGORIES.map((c) => (
@@ -174,11 +185,8 @@ export default function AlbumList({ eventId, initialAlbums }: Props) {
               </select>
             </div>
           </div>
-          <div className="flex gap-2 mt-3">
-            <button
-              type="submit"
-              className="text-sm bg-blue-600 text-white px-4 py-1.5 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
+          <div className="flex gap-2 pt-1">
+            <button type="submit" className="btn btn-primary">
               Create
             </button>
             <button
@@ -188,7 +196,7 @@ export default function AlbumList({ eventId, initialAlbums }: Props) {
                 setNewName('');
                 setNewCategory('');
               }}
-              className="text-sm text-gray-600 px-4 py-1.5 rounded-md border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400"
+              className="btn btn-secondary"
             >
               Cancel
             </button>
@@ -197,108 +205,94 @@ export default function AlbumList({ eventId, initialAlbums }: Props) {
       )}
 
       {albums.length === 0 && !isCreating ? (
-        <p className="text-sm text-gray-500 py-8 text-center border border-dashed border-gray-200 rounded-lg">
+        <div className="py-10 text-center text-sm opacity-60 rounded-[32px] border border-dashed border-divider">
           No albums yet. Create one to organise photos.
-        </p>
+        </div>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-3">
           {albums.map((album) =>
             editingId === album.id ? (
-              <li
-                key={album.id}
-                className="border border-yellow-200 bg-yellow-50 rounded-lg p-3"
-              >
-                <form onSubmit={(e) => handleUpdate(album.id, e)}>
+              <li key={album.id}>
+                <form onSubmit={(e) => handleUpdate(album.id, e)} className="card elev-sm bg-accent-100">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <input
-                      type="text"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      required
-                      className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <select
-                      value={editCategory}
-                      onChange={(e) =>
-                        setEditCategory(e.target.value as CeremonyCategory | '')
-                      }
-                      className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">— None —</option>
-                      {CEREMONY_CATEGORIES.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-
+                    <div className="field">
+                      <label>Album Name</label>
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        required
+                        className="input"
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Ceremony Category</label>
+                      <select
+                        value={editCategory}
+                        onChange={(e) => setEditCategory(e.target.value as CeremonyCategory | '')}
+                        className="input"
+                      >
+                        <option value="">— None —</option>
+                        {CEREMONY_CATEGORIES.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                  <div className="flex gap-2 mt-2">
-                    <button
-                      type="submit"
-                      className="text-sm bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700"
-                    >
+                  <div className="flex gap-2 pt-1">
+                    <button type="submit" className="btn btn-primary">
                       Save
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditingId(null)}
-                      className="text-sm text-gray-600 px-3 py-1 rounded-md border border-gray-300 hover:bg-gray-50"
-                    >
+                    <button type="button" onClick={() => setEditingId(null)} className="btn btn-secondary">
                       Cancel
                     </button>
                   </div>
                 </form>
               </li>
             ) : (
-              <li
-                key={album.id}
-                className="flex items-center justify-between border border-gray-200 rounded-lg px-4 py-3 bg-white hover:bg-gray-50"
-              >
-                <div>
-                  <span className="text-sm font-medium text-gray-900">{album.name}</span>
-                  {album.ceremony_category && (
-                    <span className="ml-2 text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-                      {album.ceremony_category}
-                    </span>
-                  )}
-                  {album.cover_photo_id && (
-                    <span className="ml-2 text-xs text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">
-                      Cover set
-                    </span>
-                  )}
-                  {album.visibility === 'private' && (
-                    <span className="ml-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
-                      Private
-                    </span>
-                  )}
+              <li key={album.id} className="card elev-sm flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-12 h-12 rounded-full bg-neutral-200 flex-none" />
+                  <div className="min-w-0">
+                    <p className="card-title truncate">{album.name}</p>
+                    <p className="card-meta mt-0.5">
+                      {album.ceremony_category ?? 'Uncategorized'} ·{' '}
+                      {album.cover_photo_id ? 'Cover set' : 'No cover yet'}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex gap-2 items-center">
+                <div className="flex items-center gap-2 flex-none flex-wrap justify-end">
                   <button
+                    type="button"
                     onClick={() => handleToggleVisibility(album)}
                     disabled={togglingId === album.id}
-                    title={album.visibility === 'private' ? 'Make public (visible to guests)' : 'Make private (hidden from guests)'}
-                    className="text-xs text-gray-500 hover:text-gray-700 font-medium disabled:opacity-50"
+                    title={
+                      album.visibility === 'private'
+                        ? 'Make public (visible to guests)'
+                        : 'Make private (hidden from guests)'
+                    }
+                    className={`tag border-0 cursor-pointer disabled:opacity-50 ${
+                      album.visibility === 'public' ? 'tag-accent-2' : 'tag-neutral'
+                    }`}
                   >
-                    {album.visibility === 'private' ? '🔒 Private' : '🌐 Public'}
+                    {album.visibility === 'public' ? 'Public' : 'Private'}
                   </button>
-                  <Link
-                    href={`/events/${eventId}/albums/${album.id}`}
-                    className="text-xs text-gray-600 hover:text-gray-800 font-medium"
-                  >
+                  <Link href={`/events/${eventId}/albums/${album.id}`} className="btn btn-secondary text-xs px-3 py-1.5">
                     Photos
                   </Link>
-                  <button
-                    onClick={() => startEdit(album)}
-                    className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                  >
+                  <button type="button" onClick={() => startEdit(album)} className="btn btn-secondary text-xs px-3 py-1.5">
                     Rename
                   </button>
                   <button
+                    type="button"
                     onClick={() => setDeletingAlbum(album)}
-                    className="text-xs text-red-600 hover:text-red-800 font-medium"
+                    className="btn btn-icon btn-secondary"
+                    aria-label="Delete album"
+                    title="Delete album"
                   >
-                    Delete
+                    <TrashIcon className="w-4 h-4" />
                   </button>
                 </div>
               </li>
@@ -308,7 +302,7 @@ export default function AlbumList({ eventId, initialAlbums }: Props) {
       )}
 
       {albums.length >= MAX_ALBUMS && (
-        <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+        <p className="mt-3 text-xs px-3 py-2 rounded-md bg-accent-100 text-accent-800 border border-accent-200">
           Maximum of {MAX_ALBUMS} albums per event reached.
         </p>
       )}
@@ -317,6 +311,7 @@ export default function AlbumList({ eventId, initialAlbums }: Props) {
         isOpen={deletingAlbum !== null}
         title="Delete Album"
         message={`Delete album "${deletingAlbum?.name}"? Photos in this album will be moved to uncategorized state.`}
+        confirmText="DELETE"
         confirmLabel="Delete Album"
         onConfirm={() => deletingAlbum && handleDelete(deletingAlbum)}
         onCancel={() => setDeletingAlbum(null)}

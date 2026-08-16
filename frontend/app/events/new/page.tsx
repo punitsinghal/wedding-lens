@@ -10,6 +10,16 @@ import { isSlugTakenError } from '@/types/api';
 import type { AccessMode } from '@/types/api';
 import SlugField from '@/components/SlugField';
 
+function InfoIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="8" cy="8" r="6.25" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M8 7.25v3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <circle cx="8" cy="5.1" r="0.85" fill="currentColor" />
+    </svg>
+  );
+}
+
 export default function NewEventPage() {
   const router = useRouter();
 
@@ -92,146 +102,185 @@ export default function NewEventPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Create New Event</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Set up your wedding event. You can edit all details later.
-        </p>
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10">
+      <div className="grid grid-cols-1 md:grid-cols-[1fr,300px] gap-11">
+        {/* Left column — form */}
+        <div>
+          <h1 className="text-4xl mb-6">New event</h1>
+
+          {error && (
+            <div className="mb-6 px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Event name */}
+            <div className="field">
+              <label htmlFor="name">
+                Event Name <span className="text-accent">*</span>
+              </label>
+              <input
+                id="name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                placeholder="e.g. Priya & Rahul Wedding"
+                className="input"
+              />
+            </div>
+
+            {/* Bride & Groom names */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="field">
+                <label htmlFor="brideName">
+                  Bride&apos;s Name <span className="text-accent">*</span>
+                </label>
+                <input
+                  id="brideName"
+                  type="text"
+                  value={brideName}
+                  onChange={(e) => setBrideName(e.target.value)}
+                  required
+                  placeholder="Priya"
+                  className="input"
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="groomName">
+                  Groom&apos;s Name <span className="text-accent">*</span>
+                </label>
+                <input
+                  id="groomName"
+                  type="text"
+                  value={groomName}
+                  onChange={(e) => setGroomName(e.target.value)}
+                  required
+                  placeholder="Rahul"
+                  className="input"
+                />
+              </div>
+            </div>
+
+            {/* Event date */}
+            <div className="field">
+              <label htmlFor="eventDate">
+                Event Date <span className="text-accent">*</span>
+              </label>
+              <input
+                id="eventDate"
+                type="date"
+                value={eventDate}
+                onChange={(e) => setEventDate(e.target.value)}
+                required
+                className="input"
+              />
+            </div>
+
+            {/* Access mode */}
+            <div className="field">
+              <label>
+                Guest Access Mode <span className="text-accent">*</span>
+              </label>
+              <div className="flex flex-col gap-3">
+                <label className="radio">
+                  <input
+                    type="radio"
+                    name="accessMode"
+                    value="public"
+                    checked={accessMode === 'public'}
+                    onChange={() => setAccessMode('public')}
+                  />
+                  <span className="dot" />
+                  <span>
+                    Public
+                    <span className="block text-xs opacity-60">Anyone with the link can view</span>
+                  </span>
+                </label>
+                <label className="radio">
+                  <input
+                    type="radio"
+                    name="accessMode"
+                    value="access-code"
+                    checked={accessMode === 'access-code'}
+                    onChange={() => setAccessMode('access-code')}
+                  />
+                  <span className="dot" />
+                  <span>
+                    Access Code
+                    <span className="block text-xs opacity-60">Guests enter a code to view</span>
+                  </span>
+                </label>
+                <label className="radio">
+                  <input
+                    type="radio"
+                    name="accessMode"
+                    value="magic-link-otp"
+                    checked={accessMode === 'magic-link-otp'}
+                    onChange={() => setAccessMode('magic-link-otp')}
+                  />
+                  <span className="dot" />
+                  <span>
+                    Magic Link / OTP
+                    <span className="block text-xs opacity-60">Guests verify by email</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            {/* Access code (conditional) */}
+            {accessMode === 'access-code' && (
+              <div className="field">
+                <label htmlFor="accessCode">
+                  Access Code <span className="text-accent">*</span>
+                </label>
+                <input
+                  id="accessCode"
+                  type="text"
+                  value={accessCode}
+                  onChange={(e) => setAccessCode(e.target.value)}
+                  required
+                  placeholder="e.g. PRIYA2026"
+                  className="input"
+                />
+                <p className="mt-1 text-xs opacity-60">
+                  Share this code with your guests. They will need it to access the gallery.
+                </p>
+              </div>
+            )}
+
+            {/* Slug */}
+            <SlugField
+              value={slug}
+              onChange={handleSlugChange}
+              suggestions={slugSuggestions}
+              onSelectSuggestion={handleSelectSuggestion}
+            />
+
+            <div className="flex justify-end gap-3 pt-2">
+              <Link href="/dashboard" className="btn btn-secondary">
+                Cancel
+              </Link>
+              <button type="submit" disabled={isLoading} className="btn btn-primary">
+                {isLoading ? 'Creating...' : 'Create event'}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* Right column — info card */}
+        <aside className="card elev-sm bg-accent-2-100 h-fit">
+          <div className="w-9 h-9 rounded-full bg-accent-2-500 text-bg grid place-items-center">
+            <InfoIcon />
+          </div>
+          <h2 className="card-title">What happens next</h2>
+          <p className="card-body">
+            Once your event is created, you&apos;ll upload photos, set a cover photo, and publish
+            when you&apos;re ready. Nothing is visible to guests until you publish.
+          </p>
+        </aside>
       </div>
-
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-5 bg-white border border-gray-200 rounded-lg p-6">
-        {/* Event name */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="name">
-            Event Name <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            placeholder="e.g. Priya & Rahul Wedding"
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        {/* Bride & Groom names */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="brideName">
-              Bride&apos;s Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              id="brideName"
-              type="text"
-              value={brideName}
-              onChange={(e) => setBrideName(e.target.value)}
-              required
-              placeholder="Priya"
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="groomName">
-              Groom&apos;s Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              id="groomName"
-              type="text"
-              value={groomName}
-              onChange={(e) => setGroomName(e.target.value)}
-              required
-              placeholder="Rahul"
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
-
-        {/* Event date */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="eventDate">
-            Event Date <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="eventDate"
-            type="date"
-            value={eventDate}
-            onChange={(e) => setEventDate(e.target.value)}
-            required
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        {/* Access mode */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="accessMode">
-            Guest Access Mode <span className="text-red-500">*</span>
-          </label>
-          <select
-            id="accessMode"
-            value={accessMode}
-            onChange={(e) => setAccessMode(e.target.value as AccessMode)}
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="public">Public — anyone with the link</option>
-            <option value="access-code">Access Code — guests enter a code</option>
-            <option value="magic-link-otp">Magic Link / OTP — guests verify by email</option>
-          </select>
-        </div>
-
-        {/* Access code (conditional) */}
-        {accessMode === 'access-code' && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="accessCode">
-              Access Code <span className="text-red-500">*</span>
-            </label>
-            <input
-              id="accessCode"
-              type="text"
-              value={accessCode}
-              onChange={(e) => setAccessCode(e.target.value)}
-              required
-              placeholder="e.g. PRIYA2026"
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <p className="mt-1 text-xs text-gray-400">
-              Share this code with your guests. They will need it to access the gallery.
-            </p>
-          </div>
-        )}
-
-        {/* Slug */}
-        <SlugField
-          value={slug}
-          onChange={handleSlugChange}
-          suggestions={slugSuggestions}
-          onSelectSuggestion={handleSelectSuggestion}
-        />
-
-        <div className="flex justify-end gap-3 pt-2">
-          <Link
-            href="/dashboard"
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            Cancel
-          </Link>
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {isLoading ? 'Creating...' : 'Create Event'}
-          </button>
-        </div>
-      </form>
     </div>
   );
 }

@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { getEvent, getAlbums } from '@/lib/api';
 import { isAuthenticated } from '@/lib/auth';
 import type { Event, Album } from '@/types/api';
-import AlbumList from '@/components/AlbumList';
+import AlbumList, { MAX_ALBUMS } from '@/components/AlbumList';
 import StatusBadge from '@/components/StatusBadge';
 
 export default function AlbumsPage() {
@@ -38,7 +38,7 @@ export default function AlbumsPage() {
 
   if (isLoading) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-16 text-center text-gray-400 text-sm">
+      <div className="max-w-2xl mx-auto px-4 py-16 text-center text-sm opacity-60">
         Loading...
       </div>
     );
@@ -47,10 +47,10 @@ export default function AlbumsPage() {
   if (error || !event) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-8">
-        <div className="p-4 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+        <div className="px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
           {error || 'Event not found.'}
         </div>
-        <Link href="/dashboard" className="mt-4 inline-block text-sm text-blue-600 hover:underline">
+        <Link href="/dashboard" className="btn btn-secondary mt-4">
           Back to Dashboard
         </Link>
       </div>
@@ -59,19 +59,19 @@ export default function AlbumsPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-2 mb-6 text-sm flex-wrap">
-        <Link href="/dashboard" className="text-gray-500 hover:text-gray-700">
-          Dashboard
-        </Link>
-        <span className="text-gray-300">/</span>
-        <Link href={`/events/${eventId}`} className="text-gray-500 hover:text-gray-700 truncate">
+      {/* Header */}
+      <p className="text-sm opacity-60 mb-1 flex items-center gap-2 flex-wrap">
+        <Link href="/dashboard" className="hover:text-accent">Dashboard</Link> /{' '}
+        <Link href={`/events/${eventId}`} className="hover:text-accent truncate">
           {event.name}
-        </Link>
-        <span className="text-gray-300">/</span>
-        <span className="text-gray-900 font-medium">Albums</span>
+        </Link>{' '}
+        / Albums
         <StatusBadge status={event.status} />
-      </div>
+      </p>
+      <h1 className="text-3xl sm:text-4xl mb-1">Albums</h1>
+      <p className="text-sm opacity-60 mb-6">
+        {albums.length} of {MAX_ALBUMS} used
+      </p>
 
       <AlbumList eventId={eventId} initialAlbums={albums} />
     </div>

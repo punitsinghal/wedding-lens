@@ -13,26 +13,21 @@ export default function AssignedEventCard({ event }: Props) {
   });
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-5 hover:shadow-md transition-shadow">
+    <div className="card elev-sm">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h3 className="text-base font-semibold text-gray-900 truncate">{event.name}</h3>
+          <h3 className="card-title text-[21px] truncate">{event.name}</h3>
           {(event.bride_name || event.groom_name) && (
-            <p className="text-sm text-gray-500 mt-0.5">
+            <p className="text-sm opacity-70 truncate mt-0.5">
               {event.bride_name} &amp; {event.groom_name}
             </p>
           )}
-          <p className="text-xs text-gray-400 mt-1">{formattedDate}</p>
+          <p className="card-meta mt-1">{formattedDate}</p>
         </div>
-        <span className="flex-shrink-0 text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
-          Photographer
-        </span>
+        <span className="tag tag-accent-2 flex-shrink-0">Photographer</span>
       </div>
-      <div className="mt-4">
-        <Link
-          href={`/events/${event.id}/photos`}
-          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-        >
+      <div className="pt-1">
+        <Link href={`/events/${event.id}/photos`} className="btn btn-secondary text-sm">
           Manage Photos &rarr;
         </Link>
       </div>

@@ -28,6 +28,29 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 
 type TabKey = 'overview' | 'publish' | 'photographers' | 'danger';
 
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ChecklistItem({ checked, label }: { checked: boolean; label: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span
+        className={`grid h-5 w-5 flex-none place-items-center rounded-full ${
+          checked ? 'bg-accent-2-500' : 'bg-neutral-300'
+        }`}
+      >
+        <CheckIcon className="h-3 w-3 text-bg" />
+      </span>
+      <span className="text-sm">{label}</span>
+    </div>
+  );
+}
+
 export default function EventDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -296,7 +319,7 @@ export default function EventDetailPage() {
 
   if (isLoadingEvent) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-16 text-center text-gray-400 text-sm">
+      <div className="max-w-2xl mx-auto px-4 py-16 text-center text-sm opacity-60">
         Loading event...
       </div>
     );
@@ -305,10 +328,10 @@ export default function EventDetailPage() {
   if (loadError || !event) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-8">
-        <div className="p-4 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+        <div className="px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
           {loadError || 'Event not found.'}
         </div>
-        <Link href="/dashboard" className="mt-4 inline-block text-sm text-blue-600 hover:underline">
+        <Link href="/dashboard" className="btn btn-secondary mt-4">
           Back to Dashboard
         </Link>
       </div>
@@ -319,6 +342,7 @@ export default function EventDetailPage() {
   // REQ-31/AC-19 (event-management): the backend rejects publish when no cover
   // photo is set. Mirror that here so the button doesn't invite a doomed submit.
   const missingCoverPhoto = event.status !== 'published' && !event.cover_photo_id;
+  const consentConfirmed = consentChecked || event.status === 'published';
 
   const TABS: { key: TabKey; label: string }[] = [
     { key: 'overview', label: 'Overview' },
@@ -329,74 +353,58 @@ export default function EventDetailPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <Link href="/dashboard" className="text-sm text-gray-500 hover:text-gray-700">
-          &larr; Dashboard
-        </Link>
-        <span className="text-gray-300">/</span>
-        <h1 className="text-xl font-bold text-gray-900 truncate">{event.name}</h1>
+      <p className="text-sm opacity-60 mb-1">
+        <Link href="/dashboard" className="hover:text-accent">Dashboard</Link> / {event.name}
+      </p>
+      <div className="flex items-center gap-3 mb-5 flex-wrap">
+        <h1 className="text-3xl sm:text-4xl truncate">{event.name}</h1>
         <StatusBadge status={event.status} />
       </div>
 
       {/* Quick links */}
-      <div className="flex gap-4 mb-6 text-sm flex-wrap">
-        <Link
-          href={`/events/${eventId}/photos`}
-          className="text-blue-600 hover:underline"
-        >
+      <div className="flex gap-2 mb-6 flex-wrap">
+        <Link href={`/events/${eventId}/photos`} className="btn btn-secondary text-xs px-3 py-1.5">
           Manage Photos
         </Link>
-        <Link
-          href={`/events/${eventId}/albums`}
-          className="text-blue-600 hover:underline"
-        >
+        <Link href={`/events/${eventId}/albums`} className="btn btn-secondary text-xs px-3 py-1.5">
           Manage Albums
         </Link>
-        <Link
-          href={`/events/${eventId}/qr`}
-          className="text-blue-600 hover:underline"
-        >
+        <Link href={`/events/${eventId}/qr`} className="btn btn-secondary text-xs px-3 py-1.5">
           QR Code
         </Link>
       </div>
 
       {!isOwner && (
-        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-700">
+        <div className="mb-4 px-4 py-3 rounded-md text-sm bg-accent-2-100 text-accent-2-800 border border-accent-2-200">
           You have view-only access to this event as an assigned photographer.
         </div>
       )}
 
       {/* Tabs */}
-      <div className="mb-6 border-b border-gray-200">
-        <nav className="flex gap-1 -mb-px" aria-label="Event settings sections">
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setActiveTab(tab.key)}
-              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab.key
-                  ? tab.key === 'danger'
-                    ? 'border-red-500 text-red-700'
-                    : 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+      <div className="mb-6 flex items-center gap-2 border-b border-divider pb-4 flex-wrap" role="tablist" aria-label="Event settings sections">
+        {TABS.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setActiveTab(tab.key)}
+            className={`tag border-0 cursor-pointer ${
+              activeTab === tab.key ? 'bg-accent text-bg' : 'tag-neutral'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {saveError && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+        <div className="mb-4 px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
           {saveError}
         </div>
       )}
       {saveSuccess && (
-        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md text-sm text-green-700">
+        <div className="mb-4 px-4 py-3 rounded-md text-sm bg-accent-2-100 text-accent-2-800 border border-accent-2-200">
           Changes saved successfully.
         </div>
       )}
@@ -405,41 +413,38 @@ export default function EventDetailPage() {
       {activeTab === 'overview' && (
         <>
           {isOwner && (
-            <div className="mb-6 p-4 bg-white border border-gray-200 rounded-lg">
-              <h2 className="text-sm font-semibold text-gray-800 mb-3">Analytics</h2>
+            <div className="card elev-sm mb-6">
+              <h4>Analytics</h4>
               {analyticsError && (
-                <p className="text-xs text-red-600 mb-2">{analyticsError}</p>
+                <p className="text-xs text-[#8c2018]">{analyticsError}</p>
               )}
               {analytics ? (
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 gap-3 pt-1">
                   <div>
-                    <p className="text-xs text-gray-500">Views</p>
-                    <p className="text-xl font-semibold text-gray-900">{analytics.total_views}</p>
+                    <p className="text-xs opacity-60">Views</p>
+                    <p className="text-3xl">{analytics.total_views}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">Downloads</p>
-                    <p className="text-xl font-semibold text-gray-900">{analytics.total_downloads}</p>
+                    <p className="text-xs opacity-60">Downloads</p>
+                    <p className="text-3xl">{analytics.total_downloads}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">Searches</p>
-                    <p className="text-xl font-semibold text-gray-900">{analytics.total_searches}</p>
+                    <p className="text-xs opacity-60">Searches</p>
+                    <p className="text-3xl">{analytics.total_searches}</p>
                   </div>
                 </div>
               ) : !analyticsError ? (
-                <p className="text-xs text-gray-400">Loading analytics...</p>
+                <p className="text-xs opacity-60">Loading analytics...</p>
               ) : null}
             </div>
           )}
 
-          <form
-            onSubmit={handleSave}
-            className="space-y-5 bg-white border border-gray-200 rounded-lg p-6"
-          >
-            <h2 className="text-base font-semibold text-gray-800">Event Details</h2>
+          <form onSubmit={handleSave} className="card elev-sm space-y-5">
+            <h4>Event Details</h4>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="name">
-                Event Name <span className="text-red-500">*</span>
+            <div className="field">
+              <label htmlFor="name">
+                Event Name <span className="text-accent">*</span>
               </label>
               <input
                 id="name"
@@ -448,14 +453,14 @@ export default function EventDetailPage() {
                 onChange={(e) => setName(e.target.value)}
                 required
                 disabled={!isOwner}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
+                className="input"
               />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="brideName">
-                  Bride&apos;s Name <span className="text-red-500">*</span>
+              <div className="field">
+                <label htmlFor="brideName">
+                  Bride&apos;s Name <span className="text-accent">*</span>
                 </label>
                 <input
                   id="brideName"
@@ -464,12 +469,12 @@ export default function EventDetailPage() {
                   onChange={(e) => setBrideName(e.target.value)}
                   required
                   disabled={!isOwner}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
+                  className="input"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="groomName">
-                  Groom&apos;s Name <span className="text-red-500">*</span>
+              <div className="field">
+                <label htmlFor="groomName">
+                  Groom&apos;s Name <span className="text-accent">*</span>
                 </label>
                 <input
                   id="groomName"
@@ -478,14 +483,14 @@ export default function EventDetailPage() {
                   onChange={(e) => setGroomName(e.target.value)}
                   required
                   disabled={!isOwner}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
+                  className="input"
                 />
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="eventDate">
-                Event Date <span className="text-red-500">*</span>
+            <div className="field">
+              <label htmlFor="eventDate">
+                Event Date <span className="text-accent">*</span>
               </label>
               <input
                 id="eventDate"
@@ -494,7 +499,7 @@ export default function EventDetailPage() {
                 onChange={(e) => setEventDate(e.target.value)}
                 required
                 disabled={!isOwner}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
+                className="input"
               />
             </div>
 
@@ -514,11 +519,7 @@ export default function EventDetailPage() {
 
             {isOwner && (
               <div className="flex justify-end pt-2">
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
-                >
+                <button type="submit" disabled={isSaving} className="btn btn-primary">
                   {isSaving ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
@@ -529,178 +530,256 @@ export default function EventDetailPage() {
 
       {/* Publish & Access tab: cover photo, access mode, publish/consent, guest-access toggle */}
       {activeTab === 'publish' && (
-        <>
-          {isOwner && (
-            <div className="mb-6 p-4 bg-white border border-gray-200 rounded-lg">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h2 className="text-sm font-semibold text-gray-800">Event Cover Photo</h2>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    Required to publish. Shown as the event thumbnail for guests.
-                  </p>
+        <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr),360px] gap-6 items-start">
+          {/* Left column */}
+          <div className="space-y-6 min-w-0">
+            {isOwner && (
+              <div className="card elev-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h4>Event Cover Photo</h4>
+                    <p className="text-xs opacity-60 mt-0.5">
+                      Required to publish. Shown as the event thumbnail for guests.
+                    </p>
+                  </div>
+                  {event.cover_photo_id && (
+                    <span className="tag tag-accent-2 flex-none">Cover set</span>
+                  )}
                 </div>
-                {event.cover_photo_id && (
-                  <span className="text-xs text-green-700 bg-green-50 border border-green-200 px-2 py-1 rounded-full">
-                    Cover set
-                  </span>
+
+                {coverError && (
+                  <p className="text-xs text-[#8c2018]">{coverError}</p>
                 )}
-              </div>
 
-              {coverError && (
-                <p className="mb-3 text-xs text-red-600">{coverError}</p>
-              )}
-
-              {photosLoading && allPhotos.length === 0 ? (
-                <p className="text-xs text-gray-400 py-4 text-center">Loading photos...</p>
-              ) : allPhotos.length === 0 ? (
-                <p className="text-xs text-gray-400 py-4 text-center">
-                  No photos in albums yet.{' '}
-                  <Link href={`/events/${eventId}/albums`} className="text-blue-600 hover:underline">
-                    Add photos to an album
-                  </Link>{' '}
-                  to set a cover.
-                </p>
-              ) : (
-                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                  {allPhotos.map((photo) => {
-                    const isCover = event.cover_photo_id === photo.id;
-                    const thumbSrc = coverBlobUrls[photo.id];
-                    return (
-                      <button
-                        key={photo.id}
-                        onClick={() => handleSetEventCover(photo.id)}
-                        disabled={settingEventCover}
-                        className={[
-                          'relative aspect-square rounded-md overflow-hidden',
-                          'transition-all duration-150 focus:outline-none',
-                          isCover
-                            ? 'ring-2 ring-blue-500 ring-offset-1'
-                            : 'hover:ring-2 hover:ring-gray-400 hover:ring-offset-1',
-                          settingEventCover ? 'opacity-50 cursor-wait' : 'cursor-pointer',
-                        ]
-                          .filter(Boolean)
-                          .join(' ')}
-                        title={isCover ? 'Current event cover' : `Set as event cover`}
-                      >
-                        {thumbSrc ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={thumbSrc}
-                            alt={photo.filename}
-                            className="absolute inset-0 w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="absolute inset-0 flex items-center justify-center bg-gray-100 text-gray-400">
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                          </div>
-                        )}
-                        {isCover && (
-                          <span className="absolute top-1 right-1 flex items-center justify-center w-4 h-4 bg-blue-500 rounded-full shadow">
-                            <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 12 12" fill="none">
-                              <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          <form
-            onSubmit={handleSave}
-            className="mb-6 space-y-5 bg-white border border-gray-200 rounded-lg p-6"
-          >
-            <h2 className="text-base font-semibold text-gray-800">Guest Access</h2>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="accessMode">
-                Guest Access Mode <span className="text-red-500">*</span>
-              </label>
-              <select
-                id="accessMode"
-                value={accessMode}
-                onChange={(e) => setAccessMode(e.target.value as AccessMode)}
-                disabled={!isOwner}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
-              >
-                <option value="public">Public — anyone with the link</option>
-                <option value="access-code">Access Code — guests enter a code</option>
-                <option value="magic-link-otp">Magic Link / OTP — guests verify by email</option>
-              </select>
-            </div>
-
-            {accessMode === 'access-code' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="accessCode">
-                  Access Code <span className="text-red-500">*</span>
-                </label>
-                <input
-                  id="accessCode"
-                  type="text"
-                  value={accessCode}
-                  onChange={(e) => setAccessCode(e.target.value)}
-                  required
-                  disabled={!isOwner}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
-                />
+                {photosLoading && allPhotos.length === 0 ? (
+                  <p className="text-xs opacity-60 py-4 text-center">Loading photos...</p>
+                ) : allPhotos.length === 0 ? (
+                  <p className="text-xs opacity-60 py-4 text-center">
+                    No photos in albums yet.{' '}
+                    <Link href={`/events/${eventId}/albums`} className="text-accent hover:underline">
+                      Add photos to an album
+                    </Link>{' '}
+                    to set a cover.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 pt-1">
+                    {allPhotos.map((photo) => {
+                      const isCover = event.cover_photo_id === photo.id;
+                      const thumbSrc = coverBlobUrls[photo.id];
+                      return (
+                        <button
+                          key={photo.id}
+                          onClick={() => handleSetEventCover(photo.id)}
+                          disabled={settingEventCover}
+                          className={[
+                            'relative aspect-square rounded-md overflow-hidden',
+                            'transition-all duration-150 focus:outline-none',
+                            isCover
+                              ? 'ring-2 ring-accent ring-offset-1'
+                              : 'hover:ring-2 hover:ring-neutral-400 hover:ring-offset-1',
+                            settingEventCover ? 'opacity-50 cursor-wait' : 'cursor-pointer',
+                          ]
+                            .filter(Boolean)
+                            .join(' ')}
+                          title={isCover ? 'Current event cover' : `Set as event cover`}
+                        >
+                          {thumbSrc ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={thumbSrc}
+                              alt={photo.filename}
+                              className="absolute inset-0 w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="absolute inset-0 flex items-center justify-center bg-neutral-200 opacity-60">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                            </div>
+                          )}
+                          {isCover && (
+                            <span className="absolute top-1 right-1 flex items-center justify-center w-4 h-4 bg-accent rounded-full shadow">
+                              <CheckIcon className="w-2.5 h-2.5 text-bg" />
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
-            {accessMode === 'magic-link-otp' && event.otp_code && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  OTP Code (share with guests)
+            <form onSubmit={handleSave} className="card elev-sm space-y-5">
+              <h4>Guest Access</h4>
+
+              <div className="field">
+                <label>
+                  Guest Access Mode <span className="text-accent">*</span>
                 </label>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm bg-gray-50 font-mono tracking-widest">
-                    {event.otp_code}
-                  </code>
-                  <button
-                    type="button"
-                    onClick={() => navigator.clipboard.writeText(event.otp_code!)}
-                    className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
-                  >
-                    Copy
+                <div className="flex flex-col gap-3">
+                  <label className="radio">
+                    <input
+                      type="radio"
+                      name="accessMode"
+                      value="public"
+                      checked={accessMode === 'public'}
+                      onChange={() => setAccessMode('public')}
+                      disabled={!isOwner}
+                    />
+                    <span className="dot" />
+                    <span>
+                      Public
+                      <span className="block text-xs opacity-60">Anyone with the link can view</span>
+                    </span>
+                  </label>
+                  <label className="radio">
+                    <input
+                      type="radio"
+                      name="accessMode"
+                      value="access-code"
+                      checked={accessMode === 'access-code'}
+                      onChange={() => setAccessMode('access-code')}
+                      disabled={!isOwner}
+                    />
+                    <span className="dot" />
+                    <span>
+                      Access Code
+                      <span className="block text-xs opacity-60">Guests enter a code to view</span>
+                    </span>
+                  </label>
+                  <label className="radio">
+                    <input
+                      type="radio"
+                      name="accessMode"
+                      value="magic-link-otp"
+                      checked={accessMode === 'magic-link-otp'}
+                      onChange={() => setAccessMode('magic-link-otp')}
+                      disabled={!isOwner}
+                    />
+                    <span className="dot" />
+                    <span>
+                      Magic Link / OTP
+                      <span className="block text-xs opacity-60">Guests verify by email</span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              {accessMode === 'access-code' && (
+                <div className="field">
+                  <label htmlFor="accessCode">
+                    Access Code <span className="text-accent">*</span>
+                  </label>
+                  <input
+                    id="accessCode"
+                    type="text"
+                    value={accessCode}
+                    onChange={(e) => setAccessCode(e.target.value)}
+                    required
+                    disabled={!isOwner}
+                    className="input"
+                  />
+                </div>
+              )}
+
+              {accessMode === 'magic-link-otp' && event.otp_code && (
+                <div className="field">
+                  <label>OTP Code (share with guests)</label>
+                  <div className="flex items-center gap-2">
+                    <code className="input flex-1 font-mono tracking-widest">
+                      {event.otp_code}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => navigator.clipboard.writeText(event.otp_code!)}
+                      className="btn btn-secondary flex-none"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <p className="mt-1 text-xs opacity-60">Share this code with guests via WhatsApp or email.</p>
+                </div>
+              )}
+
+              {isOwner && (
+                <div className="flex justify-end pt-2">
+                  <button type="submit" disabled={isSaving} className="btn btn-primary">
+                    {isSaving ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
-                <p className="mt-1 text-xs text-gray-400">Share this code with guests via WhatsApp or email.</p>
+              )}
+            </form>
+
+            {isOwner && event.status === 'published' && (
+              <div className="card elev-sm">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h4>Guest Access: {event.guest_access_enabled ? 'Active' : 'Revoked'}</h4>
+                    <p className="text-xs opacity-60 mt-0.5">
+                      {event.guest_access_enabled
+                        ? 'Guests with valid sessions can access the gallery.'
+                        : 'All guest sessions are invalidated. Re-enable to allow access again.'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleGuestAccessToggle}
+                    disabled={isRevoking}
+                    className={`btn flex-none ${event.guest_access_enabled ? 'btn-secondary' : 'btn-primary'}`}
+                  >
+                    {isRevoking ? 'Updating...' : event.guest_access_enabled ? 'Revoke Access' : 'Enable Access'}
+                  </button>
+                </div>
+                {revokeError && <p className="mt-2 text-xs text-[#8c2018]">{revokeError}</p>}
+              </div>
+            )}
+          </div>
+
+          {/* Right column — publish readiness */}
+          <div className="card elev-sm h-fit">
+            <h4>Ready to publish</h4>
+            <p className="text-sm opacity-70">
+              {event.status === 'published'
+                ? 'Guests can access this event via its QR code or URL.'
+                : 'Guests cannot access this event yet.'}
+            </p>
+            {publishError && (
+              <p className="text-xs text-[#8c2018]">{publishError}</p>
+            )}
+
+            <div className="space-y-2 pt-1">
+              <ChecklistItem checked={!!event.cover_photo_id} label="Cover photo chosen" />
+              <ChecklistItem checked={consentConfirmed} label="Consent confirmed" />
+            </div>
+
+            {isOwner && event.status !== 'published' && event.status !== 'suspended' && event.status !== 'deleted' && (
+              <div className="pt-3 mt-1 border-t border-divider">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={consentChecked}
+                    onChange={(e) => setConsentChecked(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-divider text-accent focus:ring-accent"
+                  />
+                  <span className="text-xs opacity-80 leading-relaxed">
+                    I confirm that guests attending this event have been informed that their photos will be processed using face recognition to help them find themselves in the gallery.
+                  </span>
+                </label>
+                {!consentChecked && (
+                  <p className="mt-2 text-xs px-2 py-1.5 rounded bg-accent-100 text-accent-800 border border-accent-200">
+                    Check the box above to enable the Publish button.
+                  </p>
+                )}
+                {missingCoverPhoto && (
+                  <p className="mt-2 text-xs px-2 py-1.5 rounded bg-accent-100 text-accent-800 border border-accent-200">
+                    Set a cover photo (above) to enable the Publish button.
+                  </p>
+                )}
               </div>
             )}
 
             {isOwner && (
-              <div className="flex justify-end pt-2">
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {isSaving ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
-            )}
-          </form>
-
-          <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-medium text-gray-700">
-                  {event.status === 'published' ? 'Event is published' : 'Event is not published'}
-                </p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {event.status === 'published'
-                    ? 'Guests can access this event via its QR code or URL.'
-                    : 'Guests cannot access this event yet.'}
-                </p>
-                {publishError && (
-                  <p className="text-xs text-red-600 mt-1">{publishError}</p>
-                )}
-              </div>
-              {isOwner && (
+              <div className="pt-3">
                 <button
                   onClick={handlePublishToggle}
                   disabled={
@@ -717,11 +796,7 @@ export default function EventDetailPage() {
                       ? 'Set a cover photo above before publishing.'
                       : undefined
                   }
-                  className={`flex-shrink-0 px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed ${
-                    event.status === 'published'
-                      ? 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-400'
-                      : 'bg-green-600 text-white hover:bg-green-700 focus:ring-green-500'
-                  }`}
+                  className={`btn btn-block ${event.status === 'published' ? 'btn-secondary' : 'btn-primary'}`}
                 >
                   {isPublishing
                     ? 'Updating...'
@@ -729,112 +804,54 @@ export default function EventDetailPage() {
                     ? 'Unpublish'
                     : 'Publish'}
                 </button>
-              )}
-            </div>
-
-            {/* Consent checkbox — shown to owner when event is not yet published (AC-1a/1b) */}
-            {isOwner && event.status !== 'published' && event.status !== 'suspended' && event.status !== 'deleted' && (
-              <div className="mt-3 pt-3 border-t border-gray-200">
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={consentChecked}
-                    onChange={(e) => setConsentChecked(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-gray-300 text-green-600 focus:ring-green-500"
-                  />
-                  <span className="text-xs text-gray-700 leading-relaxed">
-                    I confirm that guests attending this event have been informed that their photos will be processed using face recognition to help them find themselves in the gallery.
-                  </span>
-                </label>
-                {!consentChecked && (
-                  <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
-                    Check the box above to enable the Publish button.
-                  </p>
-                )}
-                {missingCoverPhoto && (
-                  <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
-                    Set a cover photo (above) to enable the Publish button.
-                  </p>
-                )}
-              </div>
-            )}
-
-            {isOwner && event.status === 'published' && (
-              <div className="mt-3 pt-3 border-t border-gray-200">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-gray-700">
-                      Guest Access: {event.guest_access_enabled ? 'Active' : 'Revoked'}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {event.guest_access_enabled
-                        ? 'Guests with valid sessions can access the gallery.'
-                        : 'All guest sessions are invalidated. Re-enable to allow access again.'}
-                    </p>
-                  </div>
-                  <button
-                    onClick={handleGuestAccessToggle}
-                    disabled={isRevoking}
-                    className={`flex-shrink-0 px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed ${
-                      event.guest_access_enabled
-                        ? 'bg-red-50 border border-red-300 text-red-700 hover:bg-red-100 focus:ring-red-400'
-                        : 'bg-green-600 text-white hover:bg-green-700 focus:ring-green-500'
-                    }`}
-                  >
-                    {isRevoking ? 'Updating...' : event.guest_access_enabled ? 'Revoke Access' : 'Enable Access'}
-                  </button>
-                </div>
-                {revokeError && <p className="mt-2 text-xs text-red-600">{revokeError}</p>}
               </div>
             )}
           </div>
-        </>
+        </div>
       )}
 
       {/* Photographers tab — owner only */}
       {activeTab === 'photographers' && isOwner && (
-        <div className="p-4 bg-white border border-gray-200 rounded-lg">
-          <h2 className="text-base font-semibold text-gray-800 mb-4">Photographers</h2>
+        <div className="card elev-sm">
+          <h4>Photographers</h4>
 
-          <form onSubmit={handleAssignPhotographer} className="flex gap-2 mb-4">
-            <input
-              type="email"
-              value={assignEmail}
-              onChange={(e) => { setAssignEmail(e.target.value); setAssignError(''); }}
-              placeholder="photographer@studio.com"
-              required
-              className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button
-              type="submit"
-              disabled={isAssigning}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
-            >
+          <form onSubmit={handleAssignPhotographer} className="flex gap-2 items-start pt-1">
+            <div className="field flex-1 !gap-0">
+              <input
+                type="email"
+                value={assignEmail}
+                onChange={(e) => { setAssignEmail(e.target.value); setAssignError(''); }}
+                placeholder="photographer@studio.com"
+                required
+                className="input"
+              />
+            </div>
+            <button type="submit" disabled={isAssigning} className="btn btn-primary flex-none">
               {isAssigning ? 'Assigning...' : 'Assign'}
             </button>
           </form>
 
           {assignError && (
-            <p className="mb-3 text-xs text-red-600">{assignError}</p>
+            <p className="text-xs text-[#8c2018]">{assignError}</p>
           )}
 
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Currently assigned</p>
+          <p className="text-xs opacity-60 uppercase tracking-wide pt-2">Currently assigned</p>
           {photographers.length === 0 ? (
-            <p className="text-sm text-gray-400">No photographers assigned yet.</p>
+            <p className="text-sm opacity-60">No photographers assigned yet.</p>
           ) : (
-            <ul className="divide-y divide-gray-100">
+            <ul className="divide-y divide-divider">
               {photographers.map((p) => (
                 <li key={p.photographer_id} className="flex items-center justify-between py-2 gap-4">
                   <div className="min-w-0">
-                    <span className="text-sm text-gray-800 truncate">{p.email}</span>
-                    <span className="ml-3 text-xs text-gray-400">
+                    <span className="text-sm truncate">{p.email}</span>
+                    <span className="ml-3 text-xs opacity-60">
                       Assigned {new Date(p.assigned_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                     </span>
                   </div>
                   <button
                     onClick={() => handleRemovePhotographer(p.photographer_id)}
                     disabled={removingId === p.photographer_id}
-                    className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 flex-shrink-0"
+                    className="btn btn-danger text-xs px-3 py-1 flex-none"
                   >
                     {removingId === p.photographer_id ? 'Removing...' : 'Remove'}
                   </button>
@@ -847,20 +864,22 @@ export default function EventDetailPage() {
 
       {/* Danger Zone tab — owner only */}
       {activeTab === 'danger' && isOwner && (
-        <div className="p-4 border border-red-200 bg-red-50 rounded-lg">
-          <h3 className="text-sm font-semibold text-red-800 mb-1">Danger Zone</h3>
-          <p className="text-xs text-red-700 mb-3">
+        <div className="card elev-sm">
+          <h4>Danger Zone</h4>
+          <div className="px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
             Deleting this event starts a 30-day grace period. During this time the event is
             inaccessible to guests but data is retained and can be recovered by an admin.
             After 30 days all photos, face embeddings, and records are permanently deleted.
-          </p>
-          <button
-            onClick={() => setShowDeleteDialog(true)}
-            disabled={isDeleting}
-            className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-60"
-          >
-            Delete Event
-          </button>
+          </div>
+          <div>
+            <button
+              onClick={() => setShowDeleteDialog(true)}
+              disabled={isDeleting}
+              className="btn btn-danger-solid"
+            >
+              Delete Event
+            </button>
+          </div>
         </div>
       )}
 

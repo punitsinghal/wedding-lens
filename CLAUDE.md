@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**WeddingLens** — Private wedding photo-sharing platform where guests instantly find and download their own photos from thousands of wedding pictures using AI-powered face recognition.
+**PicsLeLo** — Private wedding photo-sharing platform where guests instantly find and download their own photos from thousands of wedding pictures using AI-powered face recognition.
 
 Sub-projects:
 | Name | Path | Stack | Purpose |
@@ -14,7 +14,7 @@ Sub-projects:
 
 ## Architecture
 
-WeddingLens is a per-event photo platform: a photographer uploads photos once, the backend indexes them (face detection + ArcFace embeddings into Qdrant), and guests find themselves by scanning a QR code, uploading a selfie, and downloading a ZIP. The entire system runs on a single 4-core/16GB VM with a local or USB SSD — no cloud storage, no user accounts. The FastAPI backend owns all data (PostgreSQL, Qdrant, local SSD) and runs face processing as in-process background tasks. The Next.js frontend handles the guest flow (QR+PIN → selfie → results → ZIP download) and the photographer dashboard. All face embeddings are encrypted at rest; searches are strictly isolated per `event_id`.
+PicsLeLo is a per-event photo platform: a photographer uploads photos once, the backend indexes them (face detection + ArcFace embeddings into Qdrant), and guests find themselves by scanning a QR code, uploading a selfie, and downloading a ZIP. The entire system runs on a single 4-core/16GB VM with a local or USB SSD — no cloud storage, no user accounts. The FastAPI backend owns all data (PostgreSQL, Qdrant, local SSD) and runs face processing as in-process background tasks. The Next.js frontend handles the guest flow (QR+PIN → selfie → results → ZIP download) and the photographer dashboard. All face embeddings are encrypted at rest; searches are strictly isolated per `event_id`.
 
 ```mermaid
 flowchart LR
