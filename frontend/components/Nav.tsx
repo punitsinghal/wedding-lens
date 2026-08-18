@@ -44,7 +44,7 @@ export default function Nav() {
         <Image
           src="/logo-wordmark.png"
           alt="PicsLeLo"
-          width={172}
+          width={156}
           height={32}
           className="nav-brand-mark"
           priority
