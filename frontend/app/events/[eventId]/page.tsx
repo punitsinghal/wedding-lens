@@ -319,7 +319,7 @@ export default function EventDetailPage() {
 
   if (isLoadingEvent) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-16 text-center text-sm opacity-60">
+      <div className="max-w-5xl mx-auto px-4 py-16 text-center text-sm opacity-60">
         Loading event...
       </div>
     );
@@ -327,7 +327,7 @@ export default function EventDetailPage() {
 
   if (loadError || !event) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-8">
+      <div className="max-w-5xl mx-auto px-4 py-8">
         <div className="px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
           {loadError || 'Event not found.'}
         </div>

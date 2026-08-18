@@ -88,7 +88,7 @@ export default function AlbumDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-16 text-center text-sm opacity-60">
+      <div className="max-w-5xl mx-auto px-4 py-16 text-center text-sm opacity-60">
         Loading...
       </div>
     );
@@ -96,7 +96,7 @@ export default function AlbumDetailPage() {
 
   if (error || !album) {
     return (
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
         <div className="px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
           {error || 'Album not found.'}
         </div>
@@ -108,7 +108,7 @@ export default function AlbumDetailPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 mb-6 text-sm flex-wrap opacity-80">
         <Link href="/dashboard" className="hover:text-accent">
