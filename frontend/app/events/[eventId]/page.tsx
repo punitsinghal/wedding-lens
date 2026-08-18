@@ -319,7 +319,7 @@ export default function EventDetailPage() {
 
   if (isLoadingEvent) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-16 text-center text-sm opacity-60">
+      <div className="max-w-5xl mx-auto px-4 py-16 text-center text-sm opacity-60">
         Loading event...
       </div>
     );
@@ -327,7 +327,7 @@ export default function EventDetailPage() {
 
   if (loadError || !event) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-8">
+      <div className="max-w-5xl mx-auto px-4 py-8">
         <div className="px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
           {loadError || 'Event not found.'}
         </div>
@@ -361,19 +361,6 @@ export default function EventDetailPage() {
       <div className="flex items-center gap-3 mb-5 flex-wrap">
         <h1 className="text-3xl sm:text-4xl truncate">{event.name}</h1>
         <StatusBadge status={event.status} />
-      </div>
-
-      {/* Quick links */}
-      <div className="flex gap-2 mb-6 flex-wrap">
-        <Link href={`/events/${eventId}/photos`} className="btn btn-secondary text-xs px-3 py-1.5">
-          Manage Photos
-        </Link>
-        <Link href={`/events/${eventId}/albums`} className="btn btn-secondary text-xs px-3 py-1.5">
-          Manage Albums
-        </Link>
-        <Link href={`/events/${eventId}/qr`} className="btn btn-secondary text-xs px-3 py-1.5">
-          QR Code
-        </Link>
       </div>
 
       {!isOwner && (

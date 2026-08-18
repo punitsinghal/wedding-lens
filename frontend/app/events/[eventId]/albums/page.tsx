@@ -38,7 +38,7 @@ export default function AlbumsPage() {
 
   if (isLoading) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-16 text-center text-sm opacity-60">
+      <div className="max-w-5xl mx-auto px-4 py-16 text-center text-sm opacity-60">
         Loading...
       </div>
     );
@@ -46,7 +46,7 @@ export default function AlbumsPage() {
 
   if (error || !event) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-8">
+      <div className="max-w-5xl mx-auto px-4 py-8">
         <div className="px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
           {error || 'Event not found.'}
         </div>
@@ -58,7 +58,7 @@ export default function AlbumsPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
       {/* Header */}
       <p className="text-sm opacity-60 mb-1 flex items-center gap-2 flex-wrap">
         <Link href="/dashboard" className="hover:text-accent">Dashboard</Link> /{' '}
