@@ -159,50 +159,48 @@ export default function AdminPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
-      <div className="flex items-center gap-3 mb-2">
-        <h1 className="text-2xl font-bold text-gray-900">Admin — All Events</h1>
+      <div className="flex items-center gap-3 mb-1 flex-wrap">
+        <h1 className="text-4xl">All events</h1>
         {/* D6: pending removal requests badge */}
         {pendingCount > 0 && (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+          <span className="tag tag-accent">
             {pendingCount} removal {pendingCount === 1 ? 'request' : 'requests'}
           </span>
         )}
       </div>
-      <p className="text-sm text-gray-500 mb-6">
+      <p className="text-sm opacity-60 mb-8">
         {total > 0 ? `${total} total events` : 'No events found'}
       </p>
 
       {/* Platform health dashboard (REQ-7, design D6) */}
       <div className="mb-8">
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">Platform Health</h2>
+        <h2 className="text-2xl mb-3">Platform health</h2>
         {healthError && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+          <div className="mb-4 px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
             {healthError}
           </div>
         )}
         {healthLoading ? (
-          <div className="text-sm text-gray-400">Loading platform health...</div>
+          <div className="text-sm opacity-60">Loading platform health...</div>
         ) : health ? (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500">Total Events</p>
-              <p className="text-xl font-semibold text-gray-900">{health.total_events}</p>
+            <div className="card">
+              <p className="text-[11px] uppercase tracking-wide opacity-60">Active events</p>
+              <p className="font-heading text-4xl">{health.total_events}</p>
             </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500">Total Photos</p>
-              <p className="text-xl font-semibold text-gray-900">{health.total_photos}</p>
+            <div className="card">
+              <p className="text-[11px] uppercase tracking-wide opacity-60">Photos stored</p>
+              <p className="font-heading text-4xl">{health.total_photos}</p>
             </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500">Total Storage</p>
-              <p className="text-xl font-semibold text-gray-900">
-                {formatBytes(health.total_storage_bytes)}
-              </p>
+            <div className="card">
+              <p className="text-[11px] uppercase tracking-wide opacity-60">Storage used</p>
+              <p className="font-heading text-4xl">{formatBytes(health.total_storage_bytes)}</p>
             </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500">Error Rate (24h)</p>
+            <div className={`card ${health.error_rate_24h > 0.1 ? 'bg-accent-100' : ''}`}>
+              <p className="text-[11px] uppercase tracking-wide opacity-60">Errors (24h)</p>
               <p
-                className={`text-xl font-semibold ${
-                  health.error_rate_24h > 0.1 ? 'text-red-600' : 'text-gray-900'
+                className={`font-heading text-4xl ${
+                  health.error_rate_24h > 0.1 ? 'text-accent-800' : ''
                 }`}
               >
                 {formatPercent(health.error_rate_24h)}
@@ -213,86 +211,81 @@ export default function AdminPage() {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+        <div className="mb-4 px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
           {error}
         </div>
       )}
       {actionError && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+        <div className="mb-4 px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
           {actionError}
         </div>
       )}
 
       {isLoading ? (
-        <div className="text-center py-16 text-gray-400 text-sm">Loading events...</div>
+        <div className="text-center py-16 text-sm opacity-60">Loading events...</div>
       ) : (
         <>
           {/* Desktop table */}
           <div className="hidden sm:block overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
+            <table className="table-organic">
               <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Event</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Owner</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Date</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">Photos</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">Storage</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Last Activity</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">Actions</th>
+                <tr>
+                  <th>Event</th>
+                  <th>Owner</th>
+                  <th>Date</th>
+                  <th>Status</th>
+                  <th className="text-right">Photos</th>
+                  <th className="text-right">Storage</th>
+                  <th>Last activity</th>
+                  <th className="text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {events.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-12 text-gray-400">
+                    <td colSpan={8} className="text-center py-12 opacity-60">
                       No events on this page.
                     </td>
                   </tr>
                 ) : (
                   events.map((event) => (
-                    <tr
-                      key={event.id}
-                      className="border-b border-gray-100 hover:bg-gray-50"
-                    >
-                      <td className="px-4 py-3">
+                    <tr key={event.id}>
+                      <td>
                         <Link
                           href={`/admin/events/${event.id}`}
-                          className="font-medium text-gray-900 hover:text-blue-600 hover:underline truncate max-w-xs block"
+                          className="font-medium hover:text-accent truncate max-w-xs block"
                         >
                           {event.name}
                         </Link>
-                        <div className="text-xs text-gray-400 font-mono">/{event.slug}</div>
+                        <div className="text-xs opacity-50 font-mono">/{event.slug}</div>
                       </td>
-                      <td className="px-4 py-3 text-gray-600 truncate max-w-[180px]">
+                      <td className="opacity-70 truncate max-w-[180px]">
                         {event.owner_email}
                       </td>
-                      <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                      <td className="opacity-70 whitespace-nowrap">
                         {new Date(event.event_date).toLocaleDateString('en-IN', {
                           day: 'numeric',
                           month: 'short',
                           year: 'numeric',
                         })}
                       </td>
-                      <td className="px-4 py-3">
+                      <td>
                         <StatusBadge status={event.status} />
                       </td>
-                      <td className="px-4 py-3 text-right text-gray-600">
-                        {event.photo_count}
-                      </td>
-                      <td className="px-4 py-3 text-right text-gray-600 whitespace-nowrap">
+                      <td className="text-right opacity-70">{event.photo_count}</td>
+                      <td className="text-right opacity-70 whitespace-nowrap">
                         {formatBytes(event.storage_used_bytes)}
                       </td>
-                      <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                      <td className="opacity-70 whitespace-nowrap">
                         {formatDateTime(event.last_activity_at)}
                       </td>
-                      <td className="px-4 py-3">
+                      <td>
                         <div className="flex justify-end gap-2">
                           {event.status === 'suspended' ? (
                             <button
                               onClick={() => handleUnsuspend(event)}
                               disabled={actingOnId === event.id}
-                              className="text-xs text-green-700 hover:text-green-900 font-medium disabled:opacity-50"
+                              className="btn btn-secondary text-xs px-3 py-1"
                             >
                               Unsuspend
                             </button>
@@ -300,7 +293,7 @@ export default function AdminPage() {
                             <button
                               onClick={() => handleSuspend(event)}
                               disabled={actingOnId === event.id}
-                              className="text-xs text-yellow-700 hover:text-yellow-900 font-medium disabled:opacity-50"
+                              className="btn btn-secondary text-xs px-3 py-1"
                             >
                               Suspend
                             </button>
@@ -308,7 +301,7 @@ export default function AdminPage() {
                           <button
                             onClick={() => setDeletingEvent(event)}
                             disabled={actingOnId === event.id}
-                            className="text-xs text-red-600 hover:text-red-800 font-medium disabled:opacity-50"
+                            className="btn btn-danger text-xs px-3 py-1"
                           >
                             Delete
                           </button>
@@ -324,27 +317,24 @@ export default function AdminPage() {
           {/* Mobile card list */}
           <div className="sm:hidden space-y-3">
             {events.length === 0 ? (
-              <p className="text-center py-12 text-gray-400 text-sm">No events on this page.</p>
+              <p className="text-center py-12 text-sm opacity-60">No events on this page.</p>
             ) : (
               events.map((event) => (
-                <div
-                  key={event.id}
-                  className="bg-white border border-gray-200 rounded-lg p-4"
-                >
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div>
+                <div key={event.id} className="card elev-sm">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
                       <Link
                         href={`/admin/events/${event.id}`}
-                        className="font-medium text-gray-900 hover:text-blue-600 hover:underline"
+                        className="card-title hover:text-accent truncate block"
                       >
                         {event.name}
                       </Link>
-                      <p className="text-xs text-gray-400 font-mono">/{event.slug}</p>
+                      <p className="text-xs opacity-50 font-mono">/{event.slug}</p>
                     </div>
                     <StatusBadge status={event.status} />
                   </div>
-                  <p className="text-xs text-gray-500">{event.owner_email}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <p className="text-xs opacity-70">{event.owner_email}</p>
+                  <p className="text-xs opacity-60">
                     {new Date(event.event_date).toLocaleDateString('en-IN', {
                       day: 'numeric',
                       month: 'short',
@@ -352,15 +342,15 @@ export default function AdminPage() {
                     })}{' '}
                     &middot; {event.photo_count} photos &middot; {formatBytes(event.storage_used_bytes)}
                   </p>
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <p className="text-xs opacity-60">
                     Last activity: {formatDateTime(event.last_activity_at)}
                   </p>
-                  <div className="flex gap-3 mt-3">
+                  <div className="flex gap-2 mt-1">
                     {event.status === 'suspended' ? (
                       <button
                         onClick={() => handleUnsuspend(event)}
                         disabled={actingOnId === event.id}
-                        className="text-xs text-green-700 hover:text-green-900 font-medium disabled:opacity-50"
+                        className="btn btn-secondary text-xs px-3 py-1"
                       >
                         Unsuspend
                       </button>
@@ -368,7 +358,7 @@ export default function AdminPage() {
                       <button
                         onClick={() => handleSuspend(event)}
                         disabled={actingOnId === event.id}
-                        className="text-xs text-yellow-700 hover:text-yellow-900 font-medium disabled:opacity-50"
+                        className="btn btn-secondary text-xs px-3 py-1"
                       >
                         Suspend
                       </button>
@@ -376,7 +366,7 @@ export default function AdminPage() {
                     <button
                       onClick={() => setDeletingEvent(event)}
                       disabled={actingOnId === event.id}
-                      className="text-xs text-red-600 hover:text-red-800 font-medium disabled:opacity-50"
+                      className="btn btn-danger text-xs px-3 py-1"
                     >
                       Delete
                     </button>
@@ -389,21 +379,21 @@ export default function AdminPage() {
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-6">
-              <p className="text-sm text-gray-500">
+              <p className="text-sm opacity-60">
                 Page {page} of {totalPages}
               </p>
               <div className="flex gap-2">
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page === 1}
-                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="btn btn-secondary"
                 >
                   Previous
                 </button>
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page === totalPages}
-                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="btn btn-secondary"
                 >
                   Next
                 </button>
@@ -416,105 +406,52 @@ export default function AdminPage() {
       {/* D6: Pending face data removal requests */}
       <div className="mt-10">
         <div className="flex items-center gap-3 mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Face Data Removal Requests</h2>
-          {pendingCount > 0 && (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-              {pendingCount} pending
-            </span>
-          )}
+          <h2 className="text-2xl">Face data removal requests</h2>
+          {pendingCount > 0 && <span className="tag tag-accent">{pendingCount} pending</span>}
         </div>
 
         {removalError && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+          <div className="mb-4 px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
             {removalError}
           </div>
         )}
 
         {removalLoading ? (
-          <div className="text-center py-8 text-gray-400 text-sm">Loading removal requests...</div>
+          <div className="text-center py-8 text-sm opacity-60">Loading removal requests...</div>
         ) : removalRequests.length === 0 ? (
-          <div className="text-center py-8 text-gray-400 text-sm bg-gray-50 rounded-lg border border-gray-200">
+          <div className="card text-center py-8 text-sm opacity-60">
             No pending removal requests.
           </div>
         ) : (
-          <>
-            {/* Desktop table */}
-            <div className="hidden sm:block overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Guest</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Event ID</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Submitted</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Description</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {removalRequests.map((req) => (
-                    <tr key={req.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900">{req.guest_name}</div>
-                        <div className="text-xs text-gray-400">{req.guest_email}</div>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 font-mono text-xs">
-                        {req.event_id}
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
-                        {new Date(req.submitted_at).toLocaleDateString('en-IN', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                        })}
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 max-w-xs">
-                        <p className="truncate">{req.description}</p>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => handleFulfill(req.id)}
-                          disabled={fulfillingId === req.id}
-                          className="text-xs text-green-700 hover:text-green-900 font-medium disabled:opacity-50"
-                        >
-                          {fulfillingId === req.id ? 'Marking...' : 'Mark fulfilled'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Mobile card list */}
-            <div className="sm:hidden space-y-3">
-              {removalRequests.map((req) => (
-                <div key={req.id} className="bg-white border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div>
-                      <p className="font-medium text-gray-900">{req.guest_name}</p>
-                      <p className="text-xs text-gray-400">{req.guest_email}</p>
-                    </div>
-                    <button
-                      onClick={() => handleFulfill(req.id)}
-                      disabled={fulfillingId === req.id}
-                      className="text-xs text-green-700 hover:text-green-900 font-medium disabled:opacity-50 flex-shrink-0"
-                    >
-                      {fulfillingId === req.id ? 'Marking...' : 'Mark fulfilled'}
-                    </button>
-                  </div>
-                  <p className="text-xs text-gray-500 font-mono mb-1">{req.event_id}</p>
-                  <p className="text-xs text-gray-400 mb-2">
+          <div className="space-y-3">
+            {removalRequests.map((req) => (
+              <div
+                key={req.id}
+                className="card elev-sm sm:flex-row sm:items-center sm:justify-between gap-4"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="card-title truncate">{req.guest_name}</p>
+                  <p className="text-xs opacity-60">{req.guest_email}</p>
+                  <p className="text-xs opacity-50 font-mono mt-1">
                     {new Date(req.submitted_at).toLocaleDateString('en-IN', {
                       day: 'numeric',
                       month: 'short',
                       year: 'numeric',
-                    })}
+                    })}{' '}
+                    &middot; event {req.event_id}
                   </p>
-                  <p className="text-xs text-gray-600 line-clamp-2">{req.description}</p>
+                  <p className="text-sm mt-2">{req.description}</p>
                 </div>
-              ))}
-            </div>
-          </>
+                <button
+                  onClick={() => handleFulfill(req.id)}
+                  disabled={fulfillingId === req.id}
+                  className="btn btn-primary flex-shrink-0"
+                >
+                  {fulfillingId === req.id ? 'Marking...' : 'Mark fulfilled'}
+                </button>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 

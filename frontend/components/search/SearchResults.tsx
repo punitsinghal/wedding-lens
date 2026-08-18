@@ -68,7 +68,7 @@ export default function SearchResults({ results, eventId, onRetry }: SearchResul
       {results.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <svg
-            className="h-12 w-12 text-gray-300 mb-4"
+            className="h-12 w-12 opacity-30 mb-4"
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"
@@ -82,21 +82,18 @@ export default function SearchResults({ results, eventId, onRetry }: SearchResul
               d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"
             />
           </svg>
-          <p className="text-gray-600 font-medium">No photos found</p>
-          <p className="mt-1 text-sm text-gray-400">
+          <p className="font-medium">No photos found</p>
+          <p className="mt-1 text-sm opacity-60">
             We couldn&apos;t find any photos matching your face. Try a clearer selfie.
           </p>
-          <button
-            onClick={onRetry}
-            className="mt-6 px-5 py-2 text-sm font-medium bg-blue-600 text-white rounded-full hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-colors"
-          >
+          <button onClick={onRetry} className="mt-6 btn btn-primary">
             Try another photo
           </button>
         </div>
       ) : (
         <>
           <div className="flex items-center justify-between mb-4">
-            <p className="text-sm text-gray-500">
+            <p className="text-sm opacity-60">
               Found {results.length} photo{results.length === 1 ? '' : 's'} with you in them.
             </p>
             <BulkDownloadButton source="search" eventId={eventId} photoIds={photoIds} />
@@ -113,10 +110,7 @@ export default function SearchResults({ results, eventId, onRetry }: SearchResul
             ))}
           </div>
           <div className="flex justify-center">
-            <button
-              onClick={onRetry}
-              className="px-5 py-2 text-sm font-medium bg-gray-900 text-white rounded-full hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 transition-colors"
-            >
+            <button onClick={onRetry} className="btn btn-secondary">
               Try another photo
             </button>
           </div>

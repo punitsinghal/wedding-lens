@@ -1,3 +1,270 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Design tokens — white ground, true-neutral grays, terracotta + olive
+   accents, Manrope display type over Inter body type. Source of truth
+   for the app's look; every component class below is built from these.
+   ══════════════════════════════════════════════════════════════════════ */
+:root {
+  --color-bg: #ffffff;
+  --color-surface: #f4f4f5;
+  --color-text: #18181b;
+  --color-accent: #c67139;
+  --color-accent-2: #7a8a5e;
+  --color-divider: color-mix(in srgb, #18181b 12%, transparent);
+
+  --color-neutral-100: #fafafa;
+  --color-neutral-200: #f4f4f5;
+  --color-neutral-300: #e4e4e7;
+  --color-neutral-400: #d4d4d8;
+  --color-neutral-500: #a1a1aa;
+  --color-neutral-600: #71717a;
+  --color-neutral-700: #52525b;
+  --color-neutral-800: #3f3f46;
+  --color-neutral-900: #18181b;
+
+  --color-accent-100: #fff2eb;
+  --color-accent-200: #ffe1d0;
+  --color-accent-300: #ffc6a5;
+  --color-accent-400: #f6a06b;
+  --color-accent-500: #d67f48;
+  --color-accent-600: #b2622d;
+  --color-accent-700: #8c491a;
+  --color-accent-800: #643312;
+  --color-accent-900: #402310;
+
+  --color-accent-2-100: #f0fae1;
+  --color-accent-2-200: #e1eecc;
+  --color-accent-2-300: #ccdbb2;
+  --color-accent-2-400: #aebf92;
+  --color-accent-2-500: #8fa073;
+  --color-accent-2-600: #728157;
+  --color-accent-2-700: #56633f;
+  --color-accent-2-800: #3d472b;
+  --color-accent-2-900: #272e1b;
+
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 28px;
+
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #18181b 8%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #18181b 10%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #18181b 16%, transparent);
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body), system-ui, sans-serif;
+}
+h1, h2, h3, h4 {
+  font-family: var(--font-heading), system-ui, sans-serif;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Components — plain CSS on top of Tailwind utilities. Pages compose these
+   with layout utilities (flex/grid/gap) rather than hand-rolling buttons,
+   cards, tags, and inputs from scratch.
+   ══════════════════════════════════════════════════════════════════════ */
+@layer components {
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    cursor: pointer;
+    text-decoration: none;
+    font-family: var(--font-heading), system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    line-height: 1.2;
+    color: var(--color-text);
+    background: transparent;
+    border: 1px solid transparent;
+    padding: 8px 16px;
+    border-radius: 999px;
+    transition: background-color 0.15s ease;
+  }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-primary { background: var(--color-accent); color: var(--color-bg); }
+  .btn-primary:hover:not(:disabled) { background: var(--color-accent-600); }
+  .btn-primary:active:not(:disabled) { background: var(--color-accent-700); }
+  .btn-secondary { border-color: var(--color-divider); }
+  .btn-secondary:hover:not(:disabled) { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
+  .btn-secondary:active:not(:disabled) { background: color-mix(in srgb, var(--color-text) 14%, transparent); }
+  .btn-ghost { color: var(--color-accent); padding-inline: 6px; }
+  .btn-ghost:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
+  .btn-danger { background: transparent; border-color: color-mix(in srgb, #b3261e 40%, transparent); color: #b3261e; }
+  .btn-danger:hover:not(:disabled) { background: color-mix(in srgb, #b3261e 8%, transparent); }
+  .btn-danger-solid { background: #b3261e; color: #fff2eb; }
+  .btn-danger-solid:hover:not(:disabled) { background: #8f1e17; }
+  .btn-icon { width: 36px; height: 36px; padding: 0; }
+  .btn-block { width: 100%; }
+
+  .field > label {
+    display: block;
+    font-size: 12px;
+    margin-bottom: 5px;
+    color: color-mix(in srgb, var(--color-text) 70%, transparent);
+  }
+  .input {
+    width: 100%;
+    min-height: 42px;
+    padding: 8px 16px;
+    font: inherit;
+    font-size: 14px;
+    color: var(--color-text);
+    caret-color: var(--color-accent);
+    background: var(--color-surface);
+    border: 1px solid var(--color-divider);
+    border-radius: 999px;
+  }
+  textarea.input { min-height: 90px; border-radius: 20px; resize: vertical; }
+  select.input { border-radius: 999px; }
+  .input:hover { border-color: color-mix(in srgb, var(--color-text) 45%, transparent); }
+  .input:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 0; border-color: var(--color-accent); }
+  .input:disabled { background: var(--color-neutral-100); color: var(--color-neutral-600); cursor: default; }
+
+  .radio { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; }
+  .radio input { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+  .radio .dot { width: 16px; height: 16px; flex: none; border-radius: 50%; border: 1.5px solid var(--color-divider); }
+  .radio:hover .dot { border-color: var(--color-accent); }
+  .radio input:checked + .dot {
+    border-color: var(--color-accent);
+    background: var(--color-accent);
+    box-shadow: inset 0 0 0 4px var(--color-bg);
+  }
+  .radio input:focus-visible + .dot { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px;
+    border-radius: 32px;
+    background: var(--color-surface);
+  }
+  .card-kicker { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-accent); }
+  .card-title { font-family: var(--font-heading), system-ui, sans-serif; font-weight: 700; font-size: 17px; line-height: 1.2; }
+  .card-body { margin: 0; font-size: 13px; opacity: 0.8; flex: 1; }
+  .card-meta { display: flex; align-items: center; gap: 6px; font-size: 11px; color: color-mix(in srgb, var(--color-text) 50%, transparent); }
+  .elev-sm { box-shadow: var(--shadow-sm); }
+  .elev-md { box-shadow: var(--shadow-md); }
+  .elev-lg { box-shadow: var(--shadow-lg); }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    padding: 3px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .tag-accent { background: var(--color-accent-100); color: var(--color-accent-800); }
+  .tag-accent-2 { background: var(--color-accent-2-100); color: var(--color-accent-2-800); }
+  .tag-neutral { background: var(--color-neutral-100); color: var(--color-neutral-800); }
+  .tag-outline { border: 1px solid var(--color-accent); color: var(--color-accent); }
+  .tag-danger { background: #fdeceb; color: #8c2018; }
+
+  .nav-app {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 14px 24px;
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-divider);
+  }
+  .nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-heading), system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 19px;
+    margin-right: auto;
+    color: var(--color-text);
+    text-decoration: none;
+  }
+  .nav-brand-mark {
+    height: 32px;
+    width: auto;
+    flex: none;
+  }
+  .nav-app a.nav-link { color: var(--color-text); text-decoration: none; font-size: 14px; opacity: 0.75; }
+  .nav-app a.nav-link:hover, .nav-app a.nav-link[aria-current='page'] { color: var(--color-accent); opacity: 1; }
+  .nav-avatar {
+    width: 32px; height: 32px; border-radius: 999px;
+    background: var(--color-accent-2-300);
+    display: grid; place-items: center;
+    font-size: 12px; font-weight: 700;
+    color: var(--color-accent-2-900);
+    flex: none;
+  }
+  .nav-profile { position: relative; }
+  .nav-profile-trigger {
+    display: flex; align-items: center; gap: 8px;
+    background: transparent; border: none; cursor: pointer;
+    padding: 4px 6px 4px 4px; border-radius: 999px;
+    color: var(--color-text); font: inherit;
+  }
+  .nav-profile-trigger:hover { background: color-mix(in srgb, var(--color-text) 6%, transparent); }
+  .nav-profile-trigger:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+  .nav-profile-name { font-size: 14px; }
+  .nav-profile-caret { width: 10px; height: 6px; opacity: 0.6; flex: none; }
+  .nav-dropdown {
+    position: absolute; top: calc(100% + 8px); right: 0; z-index: 40;
+    min-width: 200px;
+    display: flex; flex-direction: column;
+    padding: 6px; border-radius: 16px;
+    background: var(--color-bg); box-shadow: var(--shadow-md);
+    border: 1px solid var(--color-divider);
+  }
+  .nav-dropdown-header {
+    padding: 8px 10px 10px;
+    font-size: 12px; color: color-mix(in srgb, var(--color-text) 60%, transparent);
+    border-bottom: 1px solid var(--color-divider);
+    margin-bottom: 4px;
+    word-break: break-all;
+  }
+  .nav-dropdown-item {
+    display: flex; align-items: center;
+    width: 100%; text-align: left;
+    padding: 8px 10px; border-radius: 10px;
+    background: transparent; border: none; cursor: pointer;
+    font: inherit; font-size: 14px; color: var(--color-text);
+  }
+  .nav-dropdown-item:hover { background: color-mix(in srgb, var(--color-text) 6%, transparent); }
+
+  .table-organic { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .table-organic th {
+    text-align: left; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: color-mix(in srgb, var(--color-text) 60%, transparent);
+    padding: 10px 12px; border-bottom: 1px solid var(--color-divider);
+  }
+  .table-organic td {
+    padding: 10px 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent);
+  }
+  .table-organic tbody tr:hover { background: color-mix(in srgb, var(--color-text) 4%, transparent); }
+
+  .dialog-backdrop {
+    position: fixed; inset: 0; z-index: 50; display: grid; place-items: center;
+    padding: 18px;
+    background: color-mix(in srgb, var(--color-neutral-900) 50%, transparent);
+  }
+  .dialog {
+    width: min(440px, 100%);
+    display: flex; flex-direction: column; gap: 14px;
+    padding: 22px; border-radius: 36px;
+    background: var(--color-surface); box-shadow: var(--shadow-lg);
+  }
+  .dialog-title { font-family: var(--font-heading), system-ui, sans-serif; font-weight: 700; font-size: 20px; }
+  .dialog-body { font-size: 14px; opacity: 0.85; }
+  .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+}

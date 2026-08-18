@@ -8,6 +8,21 @@ import { isGuestAuthenticated } from '@/lib/auth';
 
 type PageState = 'loading' | 'expired' | 'invalid' | 'unauthenticated' | 'ready';
 
+function DownloadIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M8 2v7.5M8 9.5 5.2 6.7M8 9.5l2.8-2.8"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M2.75 11.5v1.25c0 .55.45 1 1 1h8.5c.55 0 1-.45 1-1V11.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export default function SharePage() {
   const params = useParams();
   const router = useRouter();
@@ -16,6 +31,7 @@ export default function SharePage() {
   const [state, setState] = useState<PageState>('loading');
   const [photoId, setPhotoId] = useState('');
   const [eventId, setEventId] = useState('');
+  const [eventSlug, setEventSlug] = useState<string | null>(null);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -23,6 +39,7 @@ export default function SharePage() {
       .then((data) => {
         setPhotoId(data.photo_id);
         setEventId(data.event_id);
+        setEventSlug(data.event_slug);
         if (!isGuestAuthenticated(data.event_id)) {
           if (data.event_slug) {
             router.replace(`/g/${data.event_slug}?next=/share/${token}`);
@@ -62,7 +79,7 @@ export default function SharePage() {
   if (state === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-gray-400 text-sm">Loading...</p>
+        <p className="text-sm opacity-60">Loading...</p>
       </div>
     );
   }
@@ -71,11 +88,11 @@ export default function SharePage() {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="max-w-sm w-full text-center">
-          <h1 className="text-xl font-semibold text-gray-800 mb-2">Link expired</h1>
-          <p className="text-sm text-gray-500 mb-4">
+          <h1 className="text-2xl mb-2">Link expired</h1>
+          <p className="text-sm opacity-70 mb-5">
             This share link is no longer valid. Share links expire after 72 hours.
           </p>
-          <Link href="/" className="text-sm text-blue-600 hover:underline">
+          <Link href="/" className="btn btn-secondary">
             Go to home
           </Link>
         </div>
@@ -87,9 +104,9 @@ export default function SharePage() {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="max-w-sm w-full text-center">
-          <h1 className="text-xl font-semibold text-gray-800 mb-2">Invalid link</h1>
-          <p className="text-sm text-gray-500 mb-4">This link is not valid.</p>
-          <Link href="/" className="text-sm text-blue-600 hover:underline">
+          <h1 className="text-2xl mb-2">Invalid link</h1>
+          <p className="text-sm opacity-70 mb-5">This link is not valid.</p>
+          <Link href="/" className="btn btn-secondary">
             Go to home
           </Link>
         </div>
@@ -101,11 +118,11 @@ export default function SharePage() {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="max-w-sm w-full text-center">
-          <h1 className="text-xl font-semibold text-gray-800 mb-2">Access required</h1>
-          <p className="text-sm text-gray-500 mb-4">
+          <h1 className="text-2xl mb-2">Access required</h1>
+          <p className="text-sm opacity-70 mb-5">
             You need to access the event gallery before viewing this shared photo.
           </p>
-          <Link href="/" className="text-sm text-blue-600 hover:underline">
+          <Link href="/" className="btn btn-secondary">
             Go to home
           </Link>
         </div>
@@ -114,24 +131,36 @@ export default function SharePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4 py-8">
-      <div className="max-w-2xl w-full">
-        <h1 className="text-lg font-semibold text-gray-800 mb-4 text-center">Shared photo</h1>
-        <div className="rounded-xl overflow-hidden bg-gray-200 aspect-square max-w-md mx-auto">
-          {blobUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={blobUrl} alt="Shared wedding photo" className="w-full h-full object-cover" />
-          ) : (
-            <div className="w-full h-full animate-pulse bg-gray-200" />
-          )}
-        </div>
-        <div className="mt-4 flex justify-center gap-3">
+    <div className="min-h-screen relative bg-neutral-900">
+      {blobUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={blobUrl}
+          alt="Shared wedding photo"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      ) : (
+        <div className="absolute inset-0 animate-pulse bg-neutral-800" />
+      )}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/0 to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 px-6 pb-10 pt-32 flex flex-col items-start gap-3">
+        <span className="text-xs uppercase tracking-[0.14em] text-accent-300">
+          Shared with you
+        </span>
+        <h1 className="text-3xl sm:text-4xl text-white">A shared photo</h1>
+        <div className="flex flex-wrap gap-3 pt-2">
           <button
             onClick={() => downloadPhoto(eventId, photoId).catch(() => {})}
-            className="px-4 py-2 text-sm font-medium bg-gray-900 text-white rounded-full hover:bg-gray-700 transition-colors"
+            className="btn btn-primary"
           >
-            Download original
+            <DownloadIcon />
+            Download
           </button>
+          {eventSlug && (
+            <Link href={`/g/${eventSlug}`} className="btn bg-white/15 text-bg">
+              See the gallery
+            </Link>
+          )}
         </div>
       </div>
     </div>

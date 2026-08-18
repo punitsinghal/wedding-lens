@@ -2,42 +2,42 @@
 import Link from 'next/link';
 
 export const metadata = {
-  title: 'Privacy Notice — WeddingLens',
+  title: 'Privacy Notice — PicsLeLo',
   description:
-    'How WeddingLens collects, uses, and retains biometric face data under the Digital Personal Data Protection Act, 2023.',
+    'How PicsLeLo collects, uses, and retains biometric face data under the Digital Personal Data Protection Act, 2023.',
 };
 
 export default function PrivacyPage() {
   return (
-    <div className="min-h-screen bg-white">
-      <header className="border-b border-gray-200 px-4 py-4">
+    <div className="min-h-screen bg-bg">
+      <header className="border-b border-divider px-4 py-4">
         <div className="max-w-2xl mx-auto flex items-center gap-3">
           <Link
             href="/"
-            className="text-sm text-gray-500 hover:text-gray-800 transition-colors"
+            className="text-sm opacity-60 hover:opacity-100 hover:text-accent transition-colors"
           >
             &larr; Back
           </Link>
-          <span className="text-gray-300">/</span>
-          <span className="text-sm font-medium text-gray-700">Privacy Notice</span>
+          <span className="opacity-40">/</span>
+          <span className="text-sm font-medium opacity-80">Privacy Notice</span>
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-10 space-y-8 text-gray-700">
+      <main className="max-w-2xl mx-auto px-4 py-10 space-y-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">
+          <h1 className="text-2xl mb-1">
             Biometric Data Privacy Notice
           </h1>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm opacity-60">
             Effective date: June 2026. English only for MVP.
           </p>
         </div>
 
         {/* Data Fiduciary */}
         <section className="space-y-2">
-          <h2 className="text-base font-semibold text-gray-900">1. Who we are (Data Fiduciary)</h2>
+          <h2 className="text-base font-semibold">1. Who we are (Data Fiduciary)</h2>
           <p className="text-sm leading-relaxed">
-            WeddingLens is the Data Fiduciary responsible for the personal data described in this
+            PicsLeLo is the Data Fiduciary responsible for the personal data described in this
             notice. Event owners (photographers) use the platform to host photo galleries; they
             inform their guests about face recognition before publishing an event. The platform
             remains the Data Fiduciary for the biometric data processed — responsibility does not
@@ -47,7 +47,7 @@ export default function PrivacyPage() {
 
         {/* Data collected */}
         <section className="space-y-2">
-          <h2 className="text-base font-semibold text-gray-900">2. What data we collect</h2>
+          <h2 className="text-base font-semibold">2. What data we collect</h2>
           <p className="text-sm leading-relaxed">
             When you use the &ldquo;Find my photos&rdquo; feature, you upload a selfie. We derive a
             face embedding — a mathematical numerical representation of facial geometry — from that
@@ -59,7 +59,7 @@ export default function PrivacyPage() {
 
         {/* Purpose */}
         <section className="space-y-2">
-          <h2 className="text-base font-semibold text-gray-900">3. Why we collect it (Purpose)</h2>
+          <h2 className="text-base font-semibold">3. Why we collect it (Purpose)</h2>
           <p className="text-sm leading-relaxed">
             The sole purpose of collecting the face embedding is to search this event&apos;s photo
             index and identify which photos you appear in, so that you can find and download them.
@@ -70,7 +70,7 @@ export default function PrivacyPage() {
 
         {/* Legal basis */}
         <section className="space-y-2">
-          <h2 className="text-base font-semibold text-gray-900">
+          <h2 className="text-base font-semibold">
             4. Legal basis (DPDP Act, 2023 &sect;6 — Consent)
           </h2>
           <p className="text-sm leading-relaxed">
@@ -87,7 +87,7 @@ export default function PrivacyPage() {
 
         {/* Retention */}
         <section className="space-y-2">
-          <h2 className="text-base font-semibold text-gray-900">5. How long we keep it (Retention)</h2>
+          <h2 className="text-base font-semibold">5. How long we keep it (Retention)</h2>
           <ul className="text-sm leading-relaxed space-y-1 list-disc list-inside">
             <li>
               <strong>Your selfie:</strong> deleted immediately after the face search is complete.
@@ -103,7 +103,7 @@ export default function PrivacyPage() {
 
         {/* Withdraw consent */}
         <section className="space-y-2">
-          <h2 className="text-base font-semibold text-gray-900">6. How to withdraw consent</h2>
+          <h2 className="text-base font-semibold">6. How to withdraw consent</h2>
           <p className="text-sm leading-relaxed">
             You can withdraw consent for your face data at any time by submitting a face data
             removal request via the event gallery page (see the &ldquo;Remove my face data&rdquo;
@@ -115,7 +115,7 @@ export default function PrivacyPage() {
 
         {/* Removal request */}
         <section className="space-y-2">
-          <h2 className="text-base font-semibold text-gray-900">
+          <h2 className="text-base font-semibold">
             7. How to submit a face data removal request
           </h2>
           <p className="text-sm leading-relaxed">
@@ -133,7 +133,7 @@ export default function PrivacyPage() {
 
         {/* Security */}
         <section className="space-y-2">
-          <h2 className="text-base font-semibold text-gray-900">8. How we protect your data</h2>
+          <h2 className="text-base font-semibold">8. How we protect your data</h2>
           <p className="text-sm leading-relaxed">
             Face embeddings are encrypted at rest using AES-256-GCM. All data in transit is
             protected by TLS 1.2 or higher. Searches are strictly scoped per event — your
@@ -141,10 +141,10 @@ export default function PrivacyPage() {
           </p>
         </section>
 
-        <hr className="border-gray-200" />
+        <hr className="border-divider" />
 
-        <p className="text-xs text-gray-400">
-          This notice covers the WeddingLens platform. For questions, use the removal request
+        <p className="text-xs opacity-60">
+          This notice covers the PicsLeLo platform. For questions, use the removal request
           form in your event gallery.
         </p>
       </main>

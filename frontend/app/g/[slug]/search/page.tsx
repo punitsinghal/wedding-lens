@@ -56,19 +56,19 @@ function SearchContent() {
   if (isChecking) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-gray-400 text-sm">Loading...</p>
+        <p className="text-sm opacity-60">Loading...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-bg">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-4 py-4">
+      <header className="bg-bg border-b border-divider px-4 py-4">
         <div className="max-w-6xl mx-auto flex items-center gap-3">
           <Link
             href={`/g/${slug}/gallery`}
-            className="text-gray-500 hover:text-gray-900 transition-colors"
+            className="opacity-70 hover:opacity-100 hover:text-accent transition-colors"
             aria-label="Back to gallery"
           >
             <svg
@@ -87,7 +87,7 @@ function SearchContent() {
               />
             </svg>
           </Link>
-          <h1 className="text-xl font-bold text-gray-900">Find my photos</h1>
+          <h1 className="text-xl">Find my photos</h1>
         </div>
       </header>
 
@@ -138,7 +138,7 @@ export default function GuestSearchPage() {
     <Suspense
       fallback={
         <div className="min-h-screen flex items-center justify-center">
-          <p className="text-gray-400 text-sm">Loading...</p>
+          <p className="text-sm opacity-60">Loading...</p>
         </div>
       }
     >

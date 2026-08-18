@@ -1,6 +1,6 @@
 ---
 name: backend-builder
-description: Implementation work in the WeddingLens FastAPI backend (backend/). Use for adding/modifying API routers, services, database queries, face processing pipeline, Qdrant integration, and background tasks. Runs pytest before claiming completion. Does not touch frontend/.
+description: Implementation work in the PicsLeLo FastAPI backend (backend/). Use for adding/modifying API routers, services, database queries, face processing pipeline, Qdrant integration, and background tasks. Runs pytest before claiming completion. Does not touch frontend/.
 tools: Read, Edit, Write, Bash, Grep, Glob
 model: sonnet
 ---

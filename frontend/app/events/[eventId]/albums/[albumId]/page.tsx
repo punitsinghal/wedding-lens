@@ -88,7 +88,7 @@ export default function AlbumDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-16 text-center text-gray-400 text-sm">
+      <div className="max-w-4xl mx-auto px-4 py-16 text-center text-sm opacity-60">
         Loading...
       </div>
     );
@@ -97,14 +97,11 @@ export default function AlbumDetailPage() {
   if (error || !album) {
     return (
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
-        <div className="p-4 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+        <div className="px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
           {error || 'Album not found.'}
         </div>
-        <Link
-          href={`/events/${eventId}/albums`}
-          className="mt-4 inline-block text-sm text-blue-600 hover:underline"
-        >
-          Back to Albums
+        <Link href="/dashboard" className="btn btn-secondary mt-4">
+          Back to Dashboard
         </Link>
       </div>
     );
@@ -113,45 +110,45 @@ export default function AlbumDetailPage() {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 mb-6 text-sm flex-wrap">
-        <Link href="/dashboard" className="text-gray-500 hover:text-gray-700">
+      <div className="flex items-center gap-2 mb-6 text-sm flex-wrap opacity-80">
+        <Link href="/dashboard" className="hover:text-accent">
           Dashboard
         </Link>
-        <span className="text-gray-300">/</span>
-        <Link href={`/events/${eventId}`} className="text-gray-500 hover:text-gray-700 truncate">
+        <span className="opacity-50">/</span>
+        <Link href={`/events/${eventId}`} className="hover:text-accent truncate">
           {event?.name ?? eventId}
         </Link>
-        <span className="text-gray-300">/</span>
-        <Link href={`/events/${eventId}/albums`} className="text-gray-500 hover:text-gray-700">
+        <span className="opacity-50">/</span>
+        <Link href={`/events/${eventId}/albums`} className="hover:text-accent">
           Albums
         </Link>
-        <span className="text-gray-300">/</span>
-        <span className="text-gray-900 font-medium truncate">{album.name}</span>
+        <span className="opacity-50">/</span>
+        <span className="font-medium opacity-100 truncate">{album.name}</span>
       </div>
 
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">{album.name}</h1>
+        <h1 className="text-2xl">{album.name}</h1>
         {album.ceremony_category && (
-          <span className="mt-1 inline-block text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+          <span className="mt-1 tag tag-neutral">
             {album.ceremony_category}
           </span>
         )}
-        <p className="mt-2 text-sm text-gray-500">Click a photo to set it as the album cover.</p>
+        <p className="mt-2 text-sm opacity-60">Click a photo to set it as the album cover.</p>
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+        <div className="mb-4 px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
           {error}
         </div>
       )}
 
       {photos.length === 0 ? (
-        <div className="py-16 text-center border border-dashed border-gray-200 rounded-lg">
-          <p className="text-sm text-gray-500">No photos in this album yet.</p>
+        <div className="py-16 text-center border border-dashed border-divider rounded-lg">
+          <p className="text-sm opacity-60">No photos in this album yet.</p>
           <Link
             href={`/events/${eventId}/photos`}
-            className="mt-3 inline-block text-sm text-blue-600 hover:underline"
+            className="mt-3 inline-block text-sm text-accent hover:underline"
           >
             Go to Photos to add some
           </Link>
@@ -172,8 +169,8 @@ export default function AlbumDetailPage() {
                   'relative aspect-square rounded-lg overflow-hidden',
                   'transition-all duration-150 focus:outline-none',
                   isCover
-                    ? 'ring-2 ring-blue-500 ring-offset-1'
-                    : 'hover:ring-2 hover:ring-gray-400 hover:ring-offset-1',
+                    ? 'ring-2 ring-accent ring-offset-1'
+                    : 'hover:ring-2 hover:ring-neutral-400 hover:ring-offset-1',
                   isBeingSet ? 'opacity-60 cursor-wait' : 'cursor-pointer',
                   settingCover !== null && settingCover !== photo.id
                     ? 'opacity-50 cursor-not-allowed'
@@ -192,15 +189,15 @@ export default function AlbumDetailPage() {
                     className="absolute inset-0 w-full h-full object-cover"
                   />
                 ) : (
-                  <div className="absolute inset-0 flex items-center justify-center bg-gray-100 text-xs text-gray-500 font-medium px-2 text-center leading-tight">
+                  <div className="absolute inset-0 flex items-center justify-center bg-neutral-100 text-xs opacity-60 font-medium px-2 text-center leading-tight">
                     <span className="line-clamp-3 break-all">{photo.filename}</span>
                   </div>
                 )}
 
                 {/* Cover checkmark overlay */}
                 {isCover && (
-                  <span className="absolute top-1.5 right-1.5 flex items-center justify-center w-5 h-5 bg-blue-500 rounded-full shadow">
-                    <svg className="w-3 h-3 text-white" viewBox="0 0 12 12" fill="none">
+                  <span className="absolute top-1.5 right-1.5 flex items-center justify-center w-5 h-5 bg-accent rounded-full shadow">
+                    <svg className="w-3 h-3 text-bg" viewBox="0 0 12 12" fill="none">
                       <path
                         d="M2 6l3 3 5-5"
                         stroke="currentColor"
@@ -214,8 +211,8 @@ export default function AlbumDetailPage() {
 
                 {/* Loading spinner overlay */}
                 {isBeingSet && (
-                  <span className="absolute inset-0 flex items-center justify-center bg-white/60 rounded-lg">
-                    <svg className="w-5 h-5 text-blue-500 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <span className="absolute inset-0 flex items-center justify-center bg-bg/60 rounded-lg">
+                    <svg className="w-5 h-5 text-accent animate-spin" viewBox="0 0 24 24" fill="none">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
                     </svg>
@@ -228,7 +225,7 @@ export default function AlbumDetailPage() {
       )}
 
       {photos.length > 0 && (
-        <p className="mt-4 text-xs text-gray-400">
+        <p className="mt-4 text-xs opacity-50">
           {photos.length} photo{photos.length !== 1 ? 's' : ''} in this album
           {album.cover_photo_id ? ' · Cover photo set' : ' · No cover photo set'}
         </p>

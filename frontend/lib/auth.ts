@@ -54,7 +54,14 @@ export function getCurrentUserEmail(): string | null {
   const token = getToken();
   if (!token) return null;
   const payload = decodeJwtPayload(token);
-  return payload?.email ?? payload?.sub ?? null;
+  return payload?.email ?? null;
+}
+
+// Local part of the user's email (before the @), used as a short display name in the nav.
+export function getDisplayName(): string | null {
+  const email = getCurrentUserEmail();
+  if (!email) return null;
+  return email.includes('@') ? email.split('@')[0] : email;
 }
 
 export function getCurrentUserId(): string | null {

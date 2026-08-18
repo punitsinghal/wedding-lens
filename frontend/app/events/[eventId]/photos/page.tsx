@@ -55,19 +55,13 @@ function sleep(ms: number): Promise<void> {
 
 function processingBadge(status: string) {
   const styles: Record<string, string> = {
-    pending: 'bg-gray-100 text-gray-600',
-    processing: 'bg-blue-100 text-blue-700',
-    complete: 'bg-green-100 text-green-700',
-    failed: 'bg-red-100 text-red-700',
-    error: 'bg-red-100 text-red-700',
+    pending: 'tag tag-neutral',
+    processing: 'tag tag-accent-2',
+    complete: 'tag tag-accent',
+    failed: 'tag tag-danger',
+    error: 'tag tag-danger',
   };
-  return (
-    <span
-      className={`text-xs px-1.5 py-0.5 rounded font-medium ${styles[status] ?? 'bg-gray-100 text-gray-600'}`}
-    >
-      {status}
-    </span>
-  );
+  return <span className={styles[status] ?? 'tag tag-neutral'}>{status}</span>;
 }
 
 function PhotoCard({
@@ -137,17 +131,17 @@ function PhotoCard({
     photo.processing_status === 'failed' || photo.processing_status === 'error';
 
   return (
-    <div className="border border-gray-200 rounded-md overflow-hidden bg-white">
-      <div className="relative aspect-square bg-gray-100">
+    <div className="rounded-md overflow-hidden bg-surface elev-sm">
+      <div className="relative aspect-square bg-neutral-200">
         {blobUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={blobUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
-          <div className="absolute inset-0 bg-gray-200 animate-pulse" />
+          <div className="absolute inset-0 bg-neutral-200 animate-pulse" />
         )}
       </div>
       <div className="p-2 space-y-1.5">
-        <p className="text-xs text-gray-700 truncate" title={photo.filename}>
+        <p className="text-xs opacity-70 truncate" title={photo.filename}>
           {photo.filename}
         </p>
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -156,7 +150,7 @@ function PhotoCard({
             <button
               onClick={handleRetry}
               disabled={isRetrying}
-              className="text-xs text-blue-600 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+              className="text-xs text-accent hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isRetrying ? 'Retrying...' : 'Retry'}
             </button>
@@ -167,8 +161,8 @@ function PhotoCard({
           title={photo.is_photographer_choice ? "Remove Photographer's Choice" : "Mark as Photographer's Choice"}
           className={`text-sm leading-none focus:outline-none transition-colors ${
             photo.is_photographer_choice
-              ? 'text-amber-500 hover:text-amber-600'
-              : 'text-gray-300 hover:text-amber-400'
+              ? 'text-accent hover:text-accent-600'
+              : 'text-neutral-400 hover:text-accent-400'
           }`}
         >
           {photo.is_photographer_choice ? '★' : '☆'}
@@ -177,7 +171,7 @@ function PhotoCard({
           value={photo.album_id ?? ''}
           onChange={handleAlbumChange}
           disabled={isChangingAlbum}
-          className="w-full text-xs border border-gray-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+          className="input text-xs !min-h-0 py-1"
         >
           <option value="">No album</option>
           {albums.map((a) => (
@@ -525,10 +519,10 @@ export default function PhotosPage() {
   if (loadError && !event) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="p-4 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+        <div className="px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
           {loadError}
         </div>
-        <Link href="/dashboard" className="mt-4 inline-block text-sm text-blue-600 hover:underline">
+        <Link href="/dashboard" className="btn btn-secondary mt-4">
           Back to Dashboard
         </Link>
       </div>
@@ -542,22 +536,22 @@ export default function PhotosPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 mb-6 text-sm flex-wrap">
-        <Link href="/dashboard" className="text-gray-500 hover:text-gray-700">
+      <div className="flex items-center gap-2 mb-6 text-sm flex-wrap opacity-80">
+        <Link href="/dashboard" className="hover:text-accent">
           Dashboard
         </Link>
-        <span className="text-gray-300">/</span>
-        <Link href={`/events/${eventId}`} className="text-gray-500 hover:text-gray-700 truncate">
+        <span className="opacity-50">/</span>
+        <Link href={`/events/${eventId}`} className="hover:text-accent truncate">
           {event?.name ?? '...'}
         </Link>
-        <span className="text-gray-300">/</span>
-        <span className="text-gray-900 font-medium">Photos</span>
+        <span className="opacity-50">/</span>
+        <span className="font-medium opacity-100">Photos</span>
         {event && <StatusBadge status={event.status} />}
       </div>
 
       {/* Upload section */}
-      <div className="mb-6 border border-gray-200 rounded-lg p-5 bg-white">
-        <h2 className="text-sm font-semibold text-gray-800 mb-4">Upload Photos</h2>
+      <div className="mb-6 card elev-sm">
+        <h2 className="text-sm font-semibold mb-4">Upload Photos</h2>
 
         {/* Drop zone */}
         <div
@@ -570,15 +564,15 @@ export default function PhotosPage() {
           onClick={() => fileInputRef.current?.click()}
           className={`border-2 border-dashed rounded-md p-8 text-center cursor-pointer transition-colors ${
             isDragging
-              ? 'border-blue-400 bg-blue-50'
-              : 'border-gray-300 hover:border-gray-400 bg-gray-50'
+              ? 'border-accent bg-accent-100'
+              : 'border-divider hover:border-accent-400 bg-neutral-100'
           }`}
         >
-          <p className="text-sm text-gray-500">
+          <p className="text-sm opacity-70">
             Drag &amp; drop photos here, or{' '}
-            <span className="text-blue-600 underline">browse</span>
+            <span className="text-accent underline">browse</span>
           </p>
-          <p className="text-xs text-gray-400 mt-1">JPEG and PNG only, max 25 MB each</p>
+          <p className="text-xs opacity-50 mt-1">JPEG and PNG only, max 25 MB each</p>
           <input
             ref={fileInputRef}
             type="file"
@@ -592,11 +586,11 @@ export default function PhotosPage() {
         {/* Album selector + upload button */}
         <div className="mt-4 flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-600 whitespace-nowrap">Album:</label>
+            <label className="text-sm opacity-70 whitespace-nowrap">Album:</label>
             <select
               value={selectedAlbumId}
               onChange={(e) => setSelectedAlbumId(e.target.value)}
-              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="input !min-h-0 py-1.5 w-auto"
             >
               <option value="">No album</option>
               {albums.map((a) => (
@@ -610,7 +604,7 @@ export default function PhotosPage() {
           <button
             onClick={handleUpload}
             disabled={isUploading || queuedCount === 0}
-            className="px-4 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn btn-primary"
           >
             {isUploading
               ? 'Uploading...'
@@ -622,7 +616,7 @@ export default function PhotosPage() {
           {uploadQueue.length > 0 && !isUploading && (
             <button
               onClick={() => setUploadQueue([])}
-              className="text-sm text-gray-400 hover:text-gray-600"
+              className="btn btn-ghost text-sm opacity-60"
             >
               Clear
             </button>
@@ -634,41 +628,41 @@ export default function PhotosPage() {
           <div className="mt-3 space-y-1.5 max-h-48 overflow-y-auto">
             {uploadQueue.map((item) => (
               <div key={item.id} className="space-y-0.5">
-                <div className="flex items-center gap-2 text-xs text-gray-600">
+                <div className="flex items-center gap-2 text-xs opacity-70">
                   <span
                     className={`w-2 h-2 rounded-full flex-shrink-0 ${
                       item.status === 'queued'
-                        ? 'bg-gray-300'
+                        ? 'bg-neutral-300'
                         : item.status === 'hashing'
                         ? 'bg-yellow-400 animate-pulse'
                         : item.status === 'uploading'
-                        ? 'bg-blue-400 animate-pulse'
+                        ? 'bg-accent-400 animate-pulse'
                         : item.status === 'done' || item.status === 'duplicate'
                         ? 'bg-green-400'
                         : 'bg-red-400'
                     }`}
                   />
                   <span className="truncate flex-1">{item.file.name}</span>
-                  <span className="text-gray-400 flex-shrink-0">
+                  <span className="opacity-60 flex-shrink-0">
                     {(item.file.size / 1024 / 1024).toFixed(1)} MB
                   </span>
                   {item.status === 'duplicate' && (
-                    <span className="text-gray-400 flex-shrink-0">duplicate</span>
+                    <span className="opacity-60 flex-shrink-0">duplicate</span>
                   )}
                   {item.status === 'error' && (
                     <span className="text-red-500 flex-shrink-0">{item.error}</span>
                   )}
                   {item.status === 'uploading' && item.progress !== undefined && (
-                    <span className="text-blue-500 flex-shrink-0 tabular-nums">
+                    <span className="text-accent flex-shrink-0 tabular-nums">
                       {item.progress}%
                     </span>
                   )}
                 </div>
                 {/* Progress bar */}
                 {item.status === 'uploading' && item.progress !== undefined && (
-                  <div className="ml-4 h-1 bg-gray-200 rounded-full overflow-hidden">
+                  <div className="ml-4 h-1 bg-neutral-200 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-blue-500 transition-all duration-200"
+                      className="h-full bg-accent-500 transition-all duration-200"
                       style={{ width: `${item.progress}%` }}
                     />
                   </div>
@@ -680,8 +674,8 @@ export default function PhotosPage() {
       </div>
 
       {/* Processing status panel (SSE) */}
-      <div className="mb-6 border border-gray-200 rounded-lg p-5 bg-white">
-        <h2 className="text-sm font-semibold text-gray-800 mb-3">Processing Status</h2>
+      <div className="mb-6 card elev-sm">
+        <h2 className="text-sm font-semibold mb-3">Processing Status</h2>
 
         {/* Gallery ready banner */}
         {galleryReady && !galleryBannerDismissed && (
@@ -700,11 +694,11 @@ export default function PhotosPage() {
 
         {progressData ? (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="rounded-md border border-gray-100 bg-gray-50 p-3 text-center">
-              <p className="text-xl font-semibold text-gray-800 tabular-nums">
+            <div className="rounded-md border border-divider bg-neutral-100 p-3 text-center">
+              <p className="text-xl font-semibold tabular-nums">
                 {progressData.total}
               </p>
-              <p className="text-xs text-gray-500 mt-0.5">Total</p>
+              <p className="text-xs opacity-60 mt-0.5">Total</p>
             </div>
             <div className="rounded-md border border-green-100 bg-green-50 p-3 text-center">
               <p className="text-xl font-semibold text-green-700 tabular-nums">
@@ -712,11 +706,11 @@ export default function PhotosPage() {
               </p>
               <p className="text-xs text-green-600 mt-0.5">Indexed</p>
             </div>
-            <div className="rounded-md border border-gray-100 bg-gray-50 p-3 text-center">
-              <p className="text-xl font-semibold text-gray-600 tabular-nums">
+            <div className="rounded-md border border-divider bg-neutral-100 p-3 text-center">
+              <p className="text-xl font-semibold opacity-80 tabular-nums">
                 {progressData.pending}
               </p>
-              <p className="text-xs text-gray-500 mt-0.5">Pending</p>
+              <p className="text-xs opacity-60 mt-0.5">Pending</p>
             </div>
             <div className="rounded-md border border-red-100 bg-red-50 p-3 text-center">
               <p className="text-xl font-semibold text-red-700 tabular-nums">
@@ -726,11 +720,11 @@ export default function PhotosPage() {
             </div>
           </div>
         ) : (
-          <p className="text-sm text-gray-400">Connecting to progress stream&hellip;</p>
+          <p className="text-sm opacity-60">Connecting to progress stream&hellip;</p>
         )}
 
         {progressData && progressData.failed > 0 && (
-          <p className="mt-2 text-xs text-gray-500">
+          <p className="mt-2 text-xs opacity-60">
             {progressData.failed} photo{progressData.failed !== 1 ? 's' : ''} failed face
             processing. See photo grid below for retry options.
           </p>
@@ -740,15 +734,15 @@ export default function PhotosPage() {
       {/* Photos grid */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-gray-800">
+          <h2 className="text-sm font-semibold">
             {isLoading ? 'Loading...' : `${total} photo${total !== 1 ? 's' : ''}`}
           </h2>
           <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-600 whitespace-nowrap">Filter:</label>
+            <label className="text-sm opacity-70 whitespace-nowrap">Filter:</label>
             <select
               value={filterAlbumId}
               onChange={(e) => setFilterAlbumId(e.target.value)}
-              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="input !min-h-0 py-1.5 w-auto"
             >
               <option value="">All photos</option>
               <option value="__choice__">{"Photographer's Choice"}</option>
@@ -773,7 +767,7 @@ export default function PhotosPage() {
             ))}
           </div>
         ) : photos.length === 0 ? (
-          <div className="text-center py-12 text-sm text-gray-400">
+          <div className="text-center py-12 text-sm opacity-60">
             No photos yet. Upload some above.
           </div>
         ) : (
@@ -798,17 +792,17 @@ export default function PhotosPage() {
             <button
               onClick={() => loadPhotos(offset - LIMIT, filterAlbumId || undefined)}
               disabled={offset === 0}
-              className="px-3 py-1.5 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="btn btn-secondary"
             >
               Previous
             </button>
-            <span className="text-sm text-gray-500">
+            <span className="text-sm opacity-60">
               Page {currentPage} of {totalPages}
             </span>
             <button
               onClick={() => loadPhotos(offset + LIMIT, filterAlbumId || undefined)}
               disabled={offset + LIMIT >= total}
-              className="px-3 py-1.5 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="btn btn-secondary"
             >
               Next
             </button>

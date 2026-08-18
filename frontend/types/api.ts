@@ -1,4 +1,4 @@
-// TypeScript types matching the WeddingLens backend API shapes
+// TypeScript types matching the PicsLeLo backend API shapes
 
 export type AccessMode = 'access-code' | 'magic-link-otp' | 'public';
 

@@ -35,81 +35,73 @@ export default function AdminEventDetailPage() {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
       <div className="flex items-center gap-3 mb-6">
-        <Link href="/admin" className="text-sm text-gray-500 hover:text-gray-700">
-          &larr; Admin — All Events
+        <Link href="/admin" className="text-sm opacity-60 hover:text-accent hover:opacity-100">
+          &larr; All events
         </Link>
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+        <div className="mb-4 px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
           {error}
         </div>
       )}
 
       {isLoading ? (
-        <div className="text-center py-16 text-gray-400 text-sm">Loading event...</div>
+        <div className="text-center py-16 text-sm opacity-60">Loading event...</div>
       ) : !detail ? null : (
         <>
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-2xl font-bold text-gray-900 truncate">{detail.name}</h1>
+            <h1 className="text-3xl sm:text-4xl truncate">{detail.name}</h1>
             <StatusBadge status={detail.status} />
           </div>
-          <p className="text-xs text-gray-400 font-mono mb-6">/{detail.slug}</p>
+          <p className="text-xs opacity-50 font-mono mb-6">/{detail.slug}</p>
 
           {/* Context fields (D1) */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500">Owner</p>
-              <p className="text-sm font-medium text-gray-900 truncate">{detail.owner_email}</p>
+            <div className="card">
+              <p className="text-[11px] uppercase tracking-wide opacity-60">Owner</p>
+              <p className="text-sm font-medium truncate">{detail.owner_email}</p>
             </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500">Photos</p>
-              <p className="text-xl font-semibold text-gray-900">{detail.photo_count}</p>
+            <div className="card">
+              <p className="text-[11px] uppercase tracking-wide opacity-60">Photos</p>
+              <p className="font-heading text-3xl">{detail.photo_count}</p>
             </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500">Storage Used</p>
-              <p className="text-xl font-semibold text-gray-900">
-                {formatBytes(detail.storage_used_bytes)}
-              </p>
+            <div className="card">
+              <p className="text-[11px] uppercase tracking-wide opacity-60">Storage used</p>
+              <p className="font-heading text-3xl">{formatBytes(detail.storage_used_bytes)}</p>
             </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500">Last Activity</p>
-              <p className="text-sm font-medium text-gray-900">
-                {formatDateTime(detail.last_activity_at)}
-              </p>
+            <div className="card">
+              <p className="text-[11px] uppercase tracking-wide opacity-60">Last activity</p>
+              <p className="text-sm font-medium">{formatDateTime(detail.last_activity_at)}</p>
             </div>
           </div>
 
           {/* Processing monitor (D3) */}
-          <h2 className="text-lg font-semibold text-gray-900 mb-3">Processing Monitor</h2>
+          <h2 className="text-2xl mb-3">Processing monitor</h2>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-8">
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500">Pending</p>
-              <p className="text-xl font-semibold text-gray-900">
-                {detail.processing_monitor.pending}
-              </p>
+            <div className="card">
+              <p className="text-[11px] uppercase tracking-wide opacity-60">Pending</p>
+              <p className="font-heading text-3xl">{detail.processing_monitor.pending}</p>
             </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500">Processing</p>
-              <p className="text-xl font-semibold text-gray-900">
-                {detail.processing_monitor.processing}
-              </p>
+            <div className="card">
+              <p className="text-[11px] uppercase tracking-wide opacity-60">Processing</p>
+              <p className="font-heading text-3xl">{detail.processing_monitor.processing}</p>
             </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500">Complete</p>
-              <p className="text-xl font-semibold text-green-700">
+            <div className="card">
+              <p className="text-[11px] uppercase tracking-wide opacity-60">Complete</p>
+              <p className="font-heading text-3xl text-accent-2-700">
                 {detail.processing_monitor.complete}
               </p>
             </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500">Failed (retrying)</p>
-              <p className="text-xl font-semibold text-yellow-700">
+            <div className="card">
+              <p className="text-[11px] uppercase tracking-wide opacity-60">Failed (retrying)</p>
+              <p className="font-heading text-3xl text-accent-700">
                 {detail.processing_monitor.failed}
               </p>
             </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500">Error (exhausted)</p>
-              <p className="text-xl font-semibold text-red-700">
+            <div className="card">
+              <p className="text-[11px] uppercase tracking-wide opacity-60">Error (exhausted)</p>
+              <p className="font-heading text-3xl" style={{ color: '#8c2018' }}>
                 {detail.processing_monitor.error}
               </p>
             </div>
@@ -117,15 +109,15 @@ export default function AdminEventDetailPage() {
 
           <table className="w-full text-sm border-collapse">
             <tbody>
-              <tr className="border-b border-gray-100">
-                <td className="py-2 pr-4 text-gray-500">Bride / Groom</td>
-                <td className="py-2 text-gray-900">
+              <tr className="border-b border-divider">
+                <td className="py-2 pr-4 opacity-60">Bride / Groom</td>
+                <td className="py-2">
                   {detail.bride_name} &amp; {detail.groom_name}
                 </td>
               </tr>
-              <tr className="border-b border-gray-100">
-                <td className="py-2 pr-4 text-gray-500">Event Date</td>
-                <td className="py-2 text-gray-900">
+              <tr className="border-b border-divider">
+                <td className="py-2 pr-4 opacity-60">Event Date</td>
+                <td className="py-2">
                   {detail.event_date
                     ? new Date(detail.event_date).toLocaleDateString('en-IN', {
                         day: 'numeric',
@@ -135,13 +127,13 @@ export default function AdminEventDetailPage() {
                     : '—'}
                 </td>
               </tr>
-              <tr className="border-b border-gray-100">
-                <td className="py-2 pr-4 text-gray-500">Access Mode</td>
-                <td className="py-2 text-gray-900">{detail.access_mode}</td>
+              <tr className="border-b border-divider">
+                <td className="py-2 pr-4 opacity-60">Access Mode</td>
+                <td className="py-2">{detail.access_mode}</td>
               </tr>
               <tr>
-                <td className="py-2 pr-4 text-gray-500">Created</td>
-                <td className="py-2 text-gray-900">{formatDateTime(detail.created_at)}</td>
+                <td className="py-2 pr-4 opacity-60">Created</td>
+                <td className="py-2">{formatDateTime(detail.created_at)}</td>
               </tr>
             </tbody>
           </table>

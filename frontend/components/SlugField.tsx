@@ -21,10 +21,8 @@ export default function SlugField({
   const validationError = value ? validateSlug(value) : null;
 
   return (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">
-        Event URL Slug
-      </label>
+    <div className="field">
+      <label>Event URL Slug</label>
       <input
         type="text"
         value={value}
@@ -32,21 +30,18 @@ export default function SlugField({
         disabled={disabled}
         placeholder="e.g. priya-rahul"
         maxLength={50}
-        className={`w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default ${
-          validationError
-            ? 'border-red-400 focus:ring-red-400'
-            : 'border-gray-300'
-        }`}
+        className="input"
+        style={validationError ? { borderColor: '#b3261e' } : undefined}
       />
       <div className="mt-1 flex justify-between text-xs">
         {validationError ? (
-          <span className="text-red-600">{validationError}</span>
+          <span style={{ color: '#b3261e' }}>{validationError}</span>
         ) : (
-          <span className="text-gray-400">
+          <span className="opacity-60">
             Lowercase letters, digits, and hyphens only. Max 50 chars.
           </span>
         )}
-        <span className={`ml-2 ${value.length > 50 ? 'text-red-600' : 'text-gray-400'}`}>
+        <span className="ml-2 opacity-60" style={value.length > 50 ? { color: '#b3261e', opacity: 1 } : undefined}>
           {value.length}/50
         </span>
       </div>

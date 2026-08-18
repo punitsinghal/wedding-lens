@@ -85,7 +85,7 @@ export default function FavouritesPage() {
   if (isChecking) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-gray-400 text-sm">Loading...</p>
+        <p className="text-sm opacity-60">Loading...</p>
       </div>
     );
   }
@@ -93,12 +93,12 @@ export default function FavouritesPage() {
   const visiblePhotos = photos.filter((p) => favouriteIds.has(p.photo_id));
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-4 py-4">
+    <div className="min-h-screen bg-bg">
+      <header className="bg-bg border-b border-divider px-4 py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">My Favourites</h1>
-            <Link href={`/g/${slug}/gallery`} className="text-sm text-blue-600 hover:underline mt-0.5 inline-block">
+            <h1 className="text-xl">My Favourites</h1>
+            <Link href={`/g/${slug}/gallery`} className="text-sm text-accent hover:underline mt-0.5 inline-block">
               Back to gallery
             </Link>
           </div>
@@ -110,23 +110,23 @@ export default function FavouritesPage() {
 
       <main className="max-w-6xl mx-auto px-4 py-4">
         {visiblePhotos.length > 0 && (
-          <p className="mb-4 text-xs text-gray-400">
+          <p className="mb-4 text-xs opacity-60">
             Favourites aren&apos;t permanent — they may disappear after a period of inactivity.
             Download or share the photos you want to keep.
           </p>
         )}
         {visiblePhotos.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
-            <svg className="h-12 w-12 text-gray-300 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
+            <svg className="h-12 w-12 opacity-30 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" />
             </svg>
-            <p className="text-gray-600 font-medium">No favourites yet</p>
-            <p className="mt-1 text-sm text-gray-400">
+            <p className="font-medium">No favourites yet</p>
+            <p className="mt-1 text-sm opacity-60">
               Tap the heart on any photo in your search results to save it here.
             </p>
             <Link
               href={`/g/${slug}/gallery`}
-              className="mt-6 px-5 py-2 text-sm font-medium bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors"
+              className="mt-6 btn btn-primary"
             >
               Browse photos
             </Link>

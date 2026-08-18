@@ -140,7 +140,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(
-    title="WeddingLens API",
+    title="PicsLeLo API",
     version="0.1.0",
     lifespan=lifespan,
 )
