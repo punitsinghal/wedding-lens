@@ -16,11 +16,14 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
-def create_access_token(subject: str) -> str:
+def create_access_token(subject: str, *, email: str | None = None, is_admin: bool = False) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
-    payload = {"sub": subject, "exp": expire}
+    payload: dict[str, object] = {"sub": subject, "exp": expire}
+    if email is not None:
+        payload["email"] = email
+        payload["is_admin"] = is_admin
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
