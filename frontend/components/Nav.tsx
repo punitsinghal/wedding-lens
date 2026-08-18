@@ -6,6 +6,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from './AuthProvider';
 
+// Edit by hand to match the season/month — e.g. a festival or wedding-season variant.
+const NAV_TAGLINE = 'Har Event. Sabki Pics.';
+
 export default function Nav() {
   const { isLoggedIn, isAdminUser, authReady, displayName, email, signOut } = useAuth();
   const router = useRouter();
@@ -49,6 +52,7 @@ export default function Nav() {
           className="nav-brand-mark"
           priority
         />
+        <span className="nav-tagline">{NAV_TAGLINE}</span>
       </Link>
       {!authReady ? (
         <div className="h-8 w-32" />
