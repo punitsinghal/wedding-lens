@@ -249,13 +249,13 @@ function MarketingHome() {
         </div>
       </footer>
 
-      <div className="card elev-lg flex-row items-center gap-3 fixed bottom-4 left-4 sm:bottom-6 sm:left-6 w-56 z-50">
-        <span className="text-accent flex-none" aria-hidden="true">
+      <div className="card elev-lg flex-row items-center gap-3 fixed bottom-4 left-4 sm:bottom-6 sm:left-6 w-56 z-50 bg-teal-600 text-white">
+        <span className="text-white flex-none" aria-hidden="true">
           <QrIcon />
         </span>
         <div>
           <p className="text-sm font-semibold">Scan to upload</p>
-          <p className="text-xs opacity-60">No app needed</p>
+          <p className="text-xs opacity-80">No app needed</p>
         </div>
       </div>
     </div>
