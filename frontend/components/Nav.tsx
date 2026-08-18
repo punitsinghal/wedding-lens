@@ -41,8 +41,14 @@ export default function Nav() {
   return (
     <header className="nav-app">
       <Link href="/" className="nav-brand">
-        <Image src="/logo-mark.png" alt="" width={28} height={28} className="nav-brand-mark" priority />
-        PicsLeLo
+        <Image
+          src="/logo-wordmark.png"
+          alt="PicsLeLo"
+          width={172}
+          height={32}
+          className="nav-brand-mark"
+          priority
+        />
       </Link>
       {!authReady ? (
         <div className="h-8 w-32" />

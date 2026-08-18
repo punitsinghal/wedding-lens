@@ -192,8 +192,8 @@ h1, h2, h3, h4 {
     text-decoration: none;
   }
   .nav-brand-mark {
-    width: 28px;
-    height: 28px;
+    height: 32px;
+    width: auto;
     flex: none;
   }
   .nav-app a.nav-link { color: var(--color-text); text-decoration: none; font-size: 14px; opacity: 0.75; }
