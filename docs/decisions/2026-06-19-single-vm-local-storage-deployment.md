@@ -1,6 +1,11 @@
 # ADR: Single-VM Local-Storage Deployment
 Date: 2026-06-19
-Status: accepted
+Status: superseded (backend) — see `2026-08-18-railway-deployment-backend.md`
+
+> The backend now deploys to Railway.app with a Railway-managed Postgres and a
+> Volume in place of the VM's local/USB SSD. This ADR's reasoning (single-event
+> load profile, idempotent jobs tolerating restarts) still holds and informed
+> the Railway decision; only the hosting substrate changed.
 
 ## Context
 

@@ -123,8 +123,9 @@ Copy `.env.example` → `.env` before running locally.
 
 ## Deployment
 
-<!-- TODO: Cloud provider and deployment commands once decided. -->
-<!-- Reference .claude/pai-orbit-config.md for deploy commands. -->
+- **Backend**: Railway.app (Docker build via `backend/Dockerfile` + `backend/railway.json`), with a Railway-managed PostgreSQL plugin and a Volume mounted for `STORAGE_PATH` and the InsightFace model cache. See `docs/decisions/2026-08-18-railway-deployment-backend.md`.
+- **Frontend**: Vercel (`frontend/vercel.json`), pointed at the Railway backend's public URL via `NEXT_PUBLIC_API_URL`.
+- **Qdrant**: Qdrant Cloud (external, unchanged) — see `docs/decisions/2026-06-19-qdrant-cloud-free-tier.md`.
 
 ---
 

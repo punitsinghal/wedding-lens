@@ -113,6 +113,18 @@ npm run dev   # http://localhost:3000
 pm2 start ecosystem.config.js
 ```
 
+### Deploy to Railway (backend)
+
+The backend deploys to [Railway.app](https://railway.app) as a Docker service with a managed PostgreSQL plugin; the frontend stays on Vercel. See `docs/decisions/2026-08-18-railway-deployment-backend.md` for the full rationale.
+
+1. Create a Railway project, add a **PostgreSQL** plugin, and add a service from this repo with **root directory** set to `backend/` (Railway will pick up `backend/Dockerfile` and `backend/railway.json` automatically).
+2. Attach a **Volume** to the backend service (e.g. mounted at `/data`) and set:
+   - `STORAGE_PATH=/data/weddinglens`
+   - `HOME=/data` (so InsightFace's model cache persists across deploys instead of re-downloading on every restart)
+3. Set `DATABASE_URL` to the Postgres plugin's connection string reference (`${{Postgres.DATABASE_URL}}`), plus `QDRANT_URL`, `QDRANT_API_KEY`, `SECRET_KEY`, and `FRONTEND_URL` (your Vercel frontend URL).
+4. Deploy. The container runs `alembic upgrade head` before starting `uvicorn`, bound to Railway's `$PORT`.
+5. On Vercel, set `NEXT_PUBLIC_API_URL` to the Railway service's public URL.
+
 ## Environment Variables
 
 | Variable | Service | Description |

@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,6 +32,17 @@ class Settings(BaseSettings):
     ADMIN_FAILURE_RATE_THRESHOLD: float = 0.10
     ADMIN_FAILURE_RATE_WINDOW_MINUTES: int = 60
     ADMIN_ALERT_DEDUP_MINUTES: int = 60
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def _use_asyncpg_driver(cls, v: str) -> str:
+        # Managed Postgres providers (e.g. Railway) inject a bare postgres(ql)://
+        # URL, but SQLAlchemy's async engine requires the asyncpg driver scheme.
+        if v.startswith("postgres://"):
+            return "postgresql+asyncpg://" + v[len("postgres://"):]
+        if v.startswith("postgresql://"):
+            return "postgresql+asyncpg://" + v[len("postgresql://"):]
+        return v
 
 
 settings = Settings()
