@@ -363,19 +363,6 @@ export default function EventDetailPage() {
         <StatusBadge status={event.status} />
       </div>
 
-      {/* Quick links */}
-      <div className="flex gap-2 mb-6 flex-wrap">
-        <Link href={`/events/${eventId}/photos`} className="btn btn-secondary text-xs px-3 py-1.5">
-          Manage Photos
-        </Link>
-        <Link href={`/events/${eventId}/albums`} className="btn btn-secondary text-xs px-3 py-1.5">
-          Manage Albums
-        </Link>
-        <Link href={`/events/${eventId}/qr`} className="btn btn-secondary text-xs px-3 py-1.5">
-          QR Code
-        </Link>
-      </div>
-
       {!isOwner && (
         <div className="mb-4 px-4 py-3 rounded-md text-sm bg-accent-2-100 text-accent-2-800 border border-accent-2-200">
           You have view-only access to this event as an assigned photographer.
