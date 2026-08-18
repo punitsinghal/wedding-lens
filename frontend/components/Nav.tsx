@@ -44,14 +44,17 @@ export default function Nav() {
   return (
     <header className="nav-app">
       <Link href="/" className="nav-brand">
-        <Image
-          src="/logo-wordmark.png"
-          alt="PicsLeLo"
-          width={156}
-          height={32}
-          className="nav-brand-mark"
-          priority
-        />
+        <span className="nav-brand-row">
+          <Image
+            src="/logo-wordmark.png"
+            alt="PicsLeLo"
+            width={156}
+            height={32}
+            className="nav-brand-mark"
+            priority
+          />
+          <span className="tag tag-outline nav-beta-tag">Beta</span>
+        </span>
         <span className="nav-tagline">{NAV_TAGLINE}</span>
       </Link>
       {!authReady ? (
