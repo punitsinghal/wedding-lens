@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { getEventBySlug, getEventCoverUrl, guestAuth } from '@/lib/api';
 import { setGuestToken, isGuestAuthenticated } from '@/lib/auth';
 import type { EventPublicOut } from '@/types/api';
+import PageLoading from '@/components/PageLoading';
 
 export default function GuestEntryPage() {
   const router = useRouter();
@@ -65,11 +66,7 @@ export default function GuestEntryPage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-gray-400 text-sm">Loading...</p>
-      </div>
-    );
+    return <PageLoading />;
   }
 
   if (loadError === 'not_found' || !event) {

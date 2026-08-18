@@ -10,6 +10,7 @@ import FavouriteToggle from '@/components/photo-actions/FavouriteToggle';
 import ShareButton from '@/components/photo-actions/ShareButton';
 import BulkDownloadButton from '@/components/photo-actions/BulkDownloadButton';
 import type { FavouritePhoto } from '@/types/api';
+import PageLoading from '@/components/PageLoading';
 
 interface FavouriteCardProps {
   photo: FavouritePhoto;
@@ -83,11 +84,7 @@ export default function FavouritesPage() {
   }, [slug, router]);
 
   if (isChecking) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-sm opacity-60">Loading...</p>
-      </div>
-    );
+    return <PageLoading />;
   }
 
   const visiblePhotos = photos.filter((p) => favouriteIds.has(p.photo_id));

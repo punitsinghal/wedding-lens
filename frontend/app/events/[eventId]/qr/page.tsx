@@ -7,6 +7,7 @@ import { getEvent, getQrCodeUrl } from '@/lib/api';
 import { isAuthenticated, getToken } from '@/lib/auth';
 import type { Event } from '@/types/api';
 import StatusBadge from '@/components/StatusBadge';
+import PageLoading from '@/components/PageLoading';
 
 function DownloadIcon() {
   return (
@@ -98,11 +99,7 @@ export default function QrCodePage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="max-w-5xl mx-auto px-4 py-16 text-center text-sm opacity-60">
-        Loading...
-      </div>
-    );
+    return <PageLoading fullScreen={false} />;
   }
 
   if (error || !event) {

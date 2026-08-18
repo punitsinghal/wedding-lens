@@ -18,6 +18,7 @@ import {
   removePhotographer,
   getEventAnalytics,
 } from '@/lib/api';
+import PageLoading from '@/components/PageLoading';
 import type { AssignedPhotographerRow } from '@/lib/api';
 import { isAuthenticated, getCurrentUserId } from '@/lib/auth';
 import { isSlugTakenError } from '@/types/api';
@@ -318,11 +319,7 @@ export default function EventDetailPage() {
   }
 
   if (isLoadingEvent) {
-    return (
-      <div className="max-w-5xl mx-auto px-4 py-16 text-center text-sm opacity-60">
-        Loading event...
-      </div>
-    );
+    return <PageLoading fullScreen={false} />;
   }
 
   if (loadError || !event) {

@@ -13,6 +13,7 @@ import SelfieUpload from '@/components/search/SelfieUpload';
 import SearchResults from '@/components/search/SearchResults';
 import SearchError from '@/components/search/SearchError';
 import type { SearchResultItem } from '@/components/search/SelfieUpload';
+import PageLoading from '@/components/PageLoading';
 
 // Inner component — useParams requires Suspense wrapper
 function SearchContent() {
@@ -54,11 +55,7 @@ function SearchContent() {
   // Render
   // ---------------------------------------------------------------------------
   if (isChecking) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-sm opacity-60">Loading...</p>
-      </div>
-    );
+    return <PageLoading />;
   }
 
   return (
@@ -136,11 +133,7 @@ function SearchContent() {
 export default function GuestSearchPage() {
   return (
     <Suspense
-      fallback={
-        <div className="min-h-screen flex items-center justify-center">
-          <p className="text-sm opacity-60">Loading...</p>
-        </div>
-      }
+      fallback={<PageLoading />}
     >
       <SearchContent />
     </Suspense>

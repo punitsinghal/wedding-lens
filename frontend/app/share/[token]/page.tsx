@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { resolveShareToken, guestFetchBlob, downloadPhoto } from '@/lib/api';
 import { isGuestAuthenticated } from '@/lib/auth';
+import PageLoading from '@/components/PageLoading';
 
 type PageState = 'loading' | 'expired' | 'invalid' | 'unauthenticated' | 'ready';
 
@@ -77,11 +78,7 @@ export default function SharePage() {
   }, [state, photoId, eventId]);
 
   if (state === 'loading') {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-sm opacity-60">Loading...</p>
-      </div>
-    );
+    return <PageLoading />;
   }
 
   if (state === 'expired') {

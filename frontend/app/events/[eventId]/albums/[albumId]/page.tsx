@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { getAlbum, getEvent, getPhotos, updateAlbum, fetchAuthedBlob } from '@/lib/api';
 import { isAuthenticated } from '@/lib/auth';
 import type { Album, Event, Photo } from '@/types/api';
+import PageLoading from '@/components/PageLoading';
 
 export default function AlbumDetailPage() {
   const router = useRouter();
@@ -87,11 +88,7 @@ export default function AlbumDetailPage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="max-w-5xl mx-auto px-4 py-16 text-center text-sm opacity-60">
-        Loading...
-      </div>
-    );
+    return <PageLoading fullScreen={false} />;
   }
 
   if (error || !album) {

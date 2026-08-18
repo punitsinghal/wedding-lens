@@ -11,6 +11,7 @@ import SortSelector from '@/components/gallery/SortSelector';
 import PhotoThumbnail from '@/components/gallery/PhotoThumbnail';
 import Lightbox from '@/components/gallery/Lightbox';
 import type { EventPublicOut, GalleryPhoto, AlbumTab } from '@/types/api';
+import PageLoading from '@/components/PageLoading';
 
 const PAGE_SIZE = 50;
 const VALID_SORTS = ['latest', 'popular', 'photographer-choice'] as const;
@@ -282,11 +283,7 @@ function GalleryContent() {
   // Render
   // ---------------------------------------------------------------------------
   if (isChecking || !event) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-sm opacity-60">Loading...</p>
-      </div>
-    );
+    return <PageLoading />;
   }
 
   return (
@@ -532,11 +529,7 @@ function GalleryContent() {
 export default function GuestGallery() {
   return (
     <Suspense
-      fallback={
-        <div className="min-h-screen flex items-center justify-center">
-          <p className="text-gray-400 text-sm">Loading...</p>
-        </div>
-      }
+      fallback={<PageLoading />}
     >
       <GalleryContent />
     </Suspense>

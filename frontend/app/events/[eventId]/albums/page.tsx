@@ -8,6 +8,7 @@ import { isAuthenticated } from '@/lib/auth';
 import type { Event, Album } from '@/types/api';
 import AlbumList, { MAX_ALBUMS } from '@/components/AlbumList';
 import StatusBadge from '@/components/StatusBadge';
+import PageLoading from '@/components/PageLoading';
 
 export default function AlbumsPage() {
   const router = useRouter();
@@ -37,11 +38,7 @@ export default function AlbumsPage() {
   }, [eventId]);
 
   if (isLoading) {
-    return (
-      <div className="max-w-5xl mx-auto px-4 py-16 text-center text-sm opacity-60">
-        Loading...
-      </div>
-    );
+    return <PageLoading fullScreen={false} />;
   }
 
   if (error || !event) {
