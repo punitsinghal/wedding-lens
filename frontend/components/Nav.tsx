@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from './AuthProvider';
@@ -40,6 +41,7 @@ export default function Nav() {
   return (
     <header className="nav-app">
       <Link href="/" className="nav-brand">
+        <Image src="/logo-mark.png" alt="" width={28} height={28} className="nav-brand-mark" priority />
         PicsLeLo
       </Link>
       {!authReady ? (

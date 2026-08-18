@@ -181,12 +181,20 @@ h1, h2, h3, h4 {
     border-bottom: 1px solid var(--color-divider);
   }
   .nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     font-family: var(--font-heading), system-ui, sans-serif;
     font-weight: 700;
     font-size: 19px;
     margin-right: auto;
     color: var(--color-text);
     text-decoration: none;
+  }
+  .nav-brand-mark {
+    width: 28px;
+    height: 28px;
+    flex: none;
   }
   .nav-app a.nav-link { color: var(--color-text); text-decoration: none; font-size: 14px; opacity: 0.75; }
   .nav-app a.nav-link:hover, .nav-app a.nav-link[aria-current='page'] { color: var(--color-accent); opacity: 1; }
