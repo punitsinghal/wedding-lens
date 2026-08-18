@@ -183,7 +183,7 @@ h1, h2, h3, h4 {
   .nav-brand {
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
     gap: 2px;
     font-family: var(--font-heading), system-ui, sans-serif;
     font-weight: 700;
