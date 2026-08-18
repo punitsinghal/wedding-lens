@@ -1,9 +1,10 @@
 """Event CRUD and guest slug-resolution endpoints."""
 
+import mimetypes
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import (
@@ -18,6 +19,7 @@ from app.schemas.analytics import EventAnalyticsOut
 from app.schemas.event import EventCreate, EventOut, EventPublicOut, EventUpdate
 from app.services import analytics as analytics_service
 from app.services import events as event_svc
+from app.services import gallery as gallery_service
 from app.services import qr as qr_svc
 
 router = APIRouter(prefix="/api/v1/events", tags=["events"])
@@ -71,6 +73,35 @@ async def get_event_by_slug(
             headers={"Location": f"/api/v1/events/by-slug/{event.slug}"},
         )
     return EventPublicOut.model_validate(result)
+
+
+@router.get("/by-slug/{slug}/cover")
+async def get_event_cover_by_slug(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+) -> FileResponse:
+    """Public, unauthenticated cover-photo image for the guest access-code
+    screen (shown before any guest JWT exists). Only ever serves the single
+    photo the photographer explicitly chose as cover_photo_id, and only once
+    the event is published — never leaks the rest of the gallery."""
+    result = await event_svc.resolve_by_slug(db, slug)
+    if result is None or isinstance(result, SlugRedirect):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cover photo not available")
+
+    event = result
+    if event.status != "published" or event.cover_photo_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cover photo not available")
+
+    abs_path = await gallery_service.get_thumbnail_path(db, event.id, event.cover_photo_id)
+    if abs_path is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cover photo not available")
+
+    media_type = mimetypes.guess_type(str(abs_path))[0] or "image/webp"
+    return FileResponse(
+        str(abs_path),
+        media_type=media_type,
+        headers={"Cache-Control": "public, max-age=300"},
+    )
 
 
 # ---------------------------------------------------------------------------

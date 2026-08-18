@@ -1,15 +1,36 @@
 """Gallery service — photo listing and album tab counts."""
 
 import uuid
+from pathlib import Path
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.album import Album, CEREMONY_CATEGORIES
 from app.models.photo import Photo
 
 # Fixed display order for ceremony categories
 _CATEGORY_ORDER = list(CEREMONY_CATEGORIES)
+
+
+async def get_thumbnail_path(
+    db: AsyncSession, event_id: uuid.UUID, photo_id: uuid.UUID
+) -> Path | None:
+    """Resolve a safe absolute thumbnail file path for a photo, or None if
+    the photo/thumbnail doesn't exist or the resolved path escapes storage."""
+    result = await db.execute(
+        select(Photo).where(Photo.id == photo_id, Photo.event_id == event_id)
+    )
+    photo = result.scalar_one_or_none()
+    if photo is None or photo.thumbnail_path is None:
+        return None
+
+    storage_root = Path(settings.STORAGE_PATH).resolve()
+    abs_path = (storage_root / photo.thumbnail_path).resolve()
+    if not abs_path.is_relative_to(storage_root) or not abs_path.exists():
+        return None
+    return abs_path
 
 
 async def list_photos(

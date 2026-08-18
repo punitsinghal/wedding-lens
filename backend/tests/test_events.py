@@ -1,9 +1,14 @@
 """Event endpoint tests."""
 
+import os
 import uuid
+from pathlib import Path
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.photo import Photo
 
 
 
@@ -153,6 +158,81 @@ async def test_by_slug_found(client: AsyncClient, auth_headers: dict):
 async def test_by_slug_not_found(client: AsyncClient):
     resp = await client.get("/api/v1/events/by-slug/does-not-exist")
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Public cover-photo endpoint (guest access-code screen background)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_cover_by_slug_not_found_for_unknown_slug(client: AsyncClient):
+    resp = await client.get("/api/v1/events/by-slug/does-not-exist/cover")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_cover_by_slug_404_when_draft(client: AsyncClient, auth_headers: dict):
+    create_resp = await create_event(client, auth_headers)
+    slug = create_resp.json()["slug"]
+    resp = await client.get(f"/api/v1/events/by-slug/{slug}/cover")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_cover_by_slug_404_when_cover_photo_row_missing(
+    client: AsyncClient, auth_headers: dict
+):
+    # Published events always have a cover_photo_id, but there is no FK
+    # constraint (see models/event.py) — the row itself may not exist.
+    event_id = (await create_event(client, auth_headers)).json()["id"]
+    fake_photo_id = str(uuid.uuid4())
+    await client.put(
+        f"/api/v1/events/{event_id}",
+        json={"cover_photo_id": fake_photo_id},
+        headers=auth_headers,
+    )
+    publish_resp = await client.post(f"/api/v1/events/{event_id}/publish", headers=auth_headers)
+    slug = publish_resp.json()["slug"]
+
+    resp = await client.get(f"/api/v1/events/by-slug/{slug}/cover")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_cover_by_slug_success(
+    client: AsyncClient, db: AsyncSession, auth_headers: dict
+):
+    event_id = (await create_event(client, auth_headers)).json()["id"]
+
+    storage_dir = Path(os.environ["STORAGE_PATH"]) / f"events/{event_id}/thumbs"
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    thumb_filename = f"{uuid.uuid4()}.webp"
+    (storage_dir / thumb_filename).write_bytes(b"fake-thumbnail-bytes")
+    thumbnail_path = f"events/{event_id}/thumbs/{thumb_filename}"
+
+    photo = Photo(
+        id=uuid.uuid4(),
+        event_id=uuid.UUID(event_id),
+        filename="cover.jpg",
+        storage_path=f"events/{event_id}/{uuid.uuid4()}.jpg",
+        file_size=1024,
+        processing_status="complete",
+        thumbnail_path=thumbnail_path,
+    )
+    db.add(photo)
+    await db.commit()
+
+    await client.put(
+        f"/api/v1/events/{event_id}",
+        json={"cover_photo_id": str(photo.id)},
+        headers=auth_headers,
+    )
+    publish_resp = await client.post(f"/api/v1/events/{event_id}/publish", headers=auth_headers)
+    slug = publish_resp.json()["slug"]
+
+    resp = await client.get(f"/api/v1/events/by-slug/{slug}/cover")
+    assert resp.status_code == 200
+    assert resp.content == b"fake-thumbnail-bytes"
 
 
 # ---------------------------------------------------------------------------

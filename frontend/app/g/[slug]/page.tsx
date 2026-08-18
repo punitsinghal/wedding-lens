@@ -2,7 +2,7 @@
 
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { getEventBySlug, guestAuth } from '@/lib/api';
+import { getEventBySlug, getEventCoverUrl, guestAuth } from '@/lib/api';
 import { setGuestToken, isGuestAuthenticated } from '@/lib/auth';
 import type { EventPublicOut } from '@/types/api';
 
@@ -110,8 +110,12 @@ export default function GuestEntryPage() {
   const inputPlaceholder = isOtp ? 'Enter OTP code' : 'Enter access code';
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-gray-50">
-      <div className="max-w-sm w-full bg-white border border-gray-200 rounded-xl shadow-sm p-8">
+    <div
+      className="relative min-h-screen flex items-center justify-center px-4 bg-gray-900 bg-cover bg-center"
+      style={{ backgroundImage: `url(${getEventCoverUrl(slug)})` }}
+    >
+      <div className="absolute inset-0 bg-black/50" />
+      <div className="relative max-w-sm w-full bg-white/95 border border-gray-200 rounded-xl shadow-lg p-8">
         {/* Event heading */}
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-gray-900">{event.name}</h1>

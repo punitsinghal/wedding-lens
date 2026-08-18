@@ -293,6 +293,13 @@ export async function getEventBySlug(slug: string): Promise<EventPublicOut> {
   return apiFetch<EventPublicOut>(`/api/v1/events/by-slug/${slug}`);
 }
 
+// Unauthenticated image URL — safe to use directly as an <img src> or CSS
+// background-image; the backend only ever serves the one photo the
+// photographer chose as cover_photo_id, and only once the event is published.
+export function getEventCoverUrl(slug: string): string {
+  return `${baseUrl()}/api/v1/events/by-slug/${slug}/cover`;
+}
+
 export async function guestAuth(eventId: string, code: string): Promise<GuestTokenOut> {
   return apiFetch<GuestTokenOut>(`/api/v1/events/${eventId}/guest-auth`, {
     method: 'POST',

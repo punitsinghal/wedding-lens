@@ -89,24 +89,10 @@ async def get_thumbnail(
     _event, refreshed_token, _sid = guest_event
     response.headers["X-Guest-Token"] = refreshed_token
 
-    result = await db.execute(
-        select(Photo).where(Photo.id == photo_id, Photo.event_id == event_id)
-    )
-    photo = result.scalar_one_or_none()
-    if photo is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found")
-    if photo.thumbnail_path is None:
+    abs_path = await gallery_service.get_thumbnail_path(db, event_id, photo_id)
+    if abs_path is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Thumbnail not available"
-        )
-
-    storage_root = Path(settings.STORAGE_PATH).resolve()
-    abs_path = (storage_root / photo.thumbnail_path).resolve()
-    if not abs_path.is_relative_to(storage_root):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    if not abs_path.exists():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Thumbnail file not found"
         )
 
     media_type = mimetypes.guess_type(str(abs_path))[0] or "image/webp"
