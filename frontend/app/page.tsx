@@ -3,8 +3,17 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { isAuthenticated } from '@/lib/auth';
 import { IllustrationTile } from '@/components/HomeIllustrations';
+
+function HeroPhoto({ src, alt, className = '' }: { src: string; alt: string; className?: string }) {
+  return (
+    <div className={`relative overflow-hidden ${className}`}>
+      <Image src={src} alt={alt} fill sizes="(min-width: 1024px) 260px, 45vw" className="object-cover" />
+    </div>
+  );
+}
 
 export default function RootPage() {
   const router = useRouter();
@@ -155,12 +164,28 @@ function MarketingHome() {
             />
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-4">
-                <IllustrationTile variant="mandap" className="h-36 sm:h-40 rounded-[26px]" />
-                <IllustrationTile variant="sangeet" className="h-52 sm:h-56 rounded-[26px]" />
+                <HeroPhoto
+                  src="/hero/mandap.png"
+                  alt="Couple under a fairy-lit floral wedding arch"
+                  className="h-36 sm:h-40 rounded-[26px]"
+                />
+                <HeroPhoto
+                  src="/hero/sangeet.png"
+                  alt="Groomsmen dancing at a baraat celebration"
+                  className="h-52 sm:h-56 rounded-[26px]"
+                />
               </div>
               <div className="flex flex-col gap-4 pt-8">
-                <IllustrationTile variant="reception" className="h-52 sm:h-56 rounded-[26px]" />
-                <IllustrationTile variant="corporate" className="h-36 sm:h-40 rounded-[26px]" />
+                <HeroPhoto
+                  src="/hero/reception.png"
+                  alt="Newlyweds raising a toast under string lights"
+                  className="h-52 sm:h-56 rounded-[26px]"
+                />
+                <HeroPhoto
+                  src="/hero/corporate.png"
+                  alt="City skyline at night"
+                  className="h-36 sm:h-40 rounded-[26px]"
+                />
               </div>
             </div>
           </div>
