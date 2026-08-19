@@ -132,4 +132,4 @@ sequenceDiagram
 - [ ] Does a guest-uploaded photo count toward any per-event storage quota, and does that change owner-facing storage analytics (`admin_stats.py`)? — owner: Engineering, deferred; no analytics changes are made in this feature's build.
 
 ## Status
-Designed — ready for /build
+Built — see docs/domain/product-capabilities.md ("Guest Uploads")

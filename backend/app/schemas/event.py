@@ -33,6 +33,7 @@ class EventUpdate(BaseModel):
     cover_photo_id: uuid.UUID | None = None
     access_mode: str | None = None
     access_code: str | None = None
+    guest_uploads_enabled: bool | None = None
 
     @field_validator("access_mode")
     @classmethod
@@ -58,6 +59,7 @@ class EventOut(BaseModel):
     otp_code: str | None
     guest_access_enabled: bool
     guest_access_revoked_at: datetime | None
+    guest_uploads_enabled: bool
     status: str
     deleted_at: datetime | None
     created_at: datetime
@@ -75,6 +77,7 @@ class EventPublicOut(BaseModel):
     slug: str
     cover_photo_id: uuid.UUID | None
     access_mode: str
+    guest_uploads_enabled: bool
     status: str
     created_at: datetime
     updated_at: datetime

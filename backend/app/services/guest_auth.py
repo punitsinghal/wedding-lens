@@ -97,6 +97,36 @@ class GuestRateLimiter:
 rate_limiter = GuestRateLimiter()
 
 
+MAX_GUEST_UPLOADS_PER_SESSION = 20
+
+
+class GuestUploadCounter:
+    """In-process per-(event_id, sid) counter for the guest upload session cap.
+
+    Only accepted (successfully committed) uploads increment the count —
+    rejected/failed files must not count against the cap.
+    """
+
+    def __init__(self, max_uploads: int | None = None) -> None:
+        self._max = max_uploads if max_uploads is not None else MAX_GUEST_UPLOADS_PER_SESSION
+        self._store: dict[tuple[str, str], int] = {}
+
+    def has_capacity(self, event_id: str, sid: str) -> bool:
+        return self._store.get((event_id, sid), 0) < self._max
+
+    def increment(self, event_id: str, sid: str) -> None:
+        key = (event_id, sid)
+        self._store[key] = self._store.get(key, 0) + 1
+
+    def clear_all(self) -> None:
+        """Test helper — reset the entire store."""
+        self._store.clear()
+
+
+# Module-level singleton shared by the guest_uploads router
+upload_counter = GuestUploadCounter()
+
+
 def create_share_token(photo_id: str, event_id: str) -> str:
     now = datetime.now(timezone.utc)
     payload = {

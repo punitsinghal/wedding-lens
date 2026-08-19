@@ -35,6 +35,8 @@ class PhotoOut(BaseModel):
     thumbnail_url: str | None
     is_photographer_choice: bool
     created_at: datetime
+    uploaded_by: str
+    guest_display_name: str | None
 
 
 class PhotoListResponse(BaseModel):

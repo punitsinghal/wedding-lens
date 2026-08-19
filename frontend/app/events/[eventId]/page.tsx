@@ -94,6 +94,10 @@ export default function EventDetailPage() {
   const [isRevoking, setIsRevoking] = useState(false);
   const [revokeError, setRevokeError] = useState('');
 
+  // Guest uploads toggle
+  const [isTogglingGuestUploads, setIsTogglingGuestUploads] = useState(false);
+  const [guestUploadsError, setGuestUploadsError] = useState('');
+
   // Cover photo picker
   const [allPhotos, setAllPhotos] = useState<Photo[]>([]);
   const [coverBlobUrls, setCoverBlobUrls] = useState<Record<string, string>>({});
@@ -266,6 +270,23 @@ export default function EventDetailPage() {
       setRevokeError(apiErr?.detail ?? 'Failed to update guest access.');
     } finally {
       setIsRevoking(false);
+    }
+  }
+
+  async function handleGuestUploadsToggle() {
+    if (!event) return;
+    setIsTogglingGuestUploads(true);
+    setGuestUploadsError('');
+    try {
+      const updated = await updateEvent(eventId, {
+        guest_uploads_enabled: !event.guest_uploads_enabled,
+      });
+      setEvent(updated);
+    } catch (err: unknown) {
+      const apiErr = err as { detail?: string };
+      setGuestUploadsError(apiErr?.detail ?? 'Failed to update guest uploads.');
+    } finally {
+      setIsTogglingGuestUploads(false);
     }
   }
 
@@ -715,6 +736,33 @@ export default function EventDetailPage() {
                   </button>
                 </div>
                 {revokeError && <p className="mt-2 text-xs text-[#8c2018]">{revokeError}</p>}
+              </div>
+            )}
+
+            {isOwner && (
+              <div className="card elev-sm">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h4>Guest Uploads: {event.guest_uploads_enabled ? 'On' : 'Off'}</h4>
+                    <p className="text-xs opacity-60 mt-0.5">
+                      {event.guest_uploads_enabled
+                        ? 'Guests can add their own photos to the gallery.'
+                        : 'The "Upload your photos" option is hidden from guests.'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleGuestUploadsToggle}
+                    disabled={isTogglingGuestUploads}
+                    className={`btn flex-none ${event.guest_uploads_enabled ? 'btn-secondary' : 'btn-primary'}`}
+                  >
+                    {isTogglingGuestUploads
+                      ? 'Updating...'
+                      : event.guest_uploads_enabled
+                      ? 'Turn Off'
+                      : 'Turn On'}
+                  </button>
+                </div>
+                {guestUploadsError && <p className="mt-2 text-xs text-[#8c2018]">{guestUploadsError}</p>}
               </div>
             )}
           </div>

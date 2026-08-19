@@ -52,6 +52,8 @@ class Photo(Base):
     filename: Mapped[str] = mapped_column(String, nullable=False)
     storage_path: Mapped[str] = mapped_column(String, nullable=False)
     file_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    uploaded_by: Mapped[str] = mapped_column(String(20), nullable=False, default="photographer", server_default="photographer")
+    guest_display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     width: Mapped[int | None] = mapped_column(Integer, nullable=True)
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     face_count: Mapped[int | None] = mapped_column(Integer, nullable=True)

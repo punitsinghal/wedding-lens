@@ -12,6 +12,8 @@ class GalleryPhotoOut(BaseModel):
     is_photographer_choice: bool
     download_count: int
     created_at: datetime
+    uploaded_by: str
+    guest_display_name: str | None
 
     model_config = {"from_attributes": True}
 

@@ -73,6 +73,11 @@ export default function PhotoThumbnail({
           ✦
         </span>
       )}
+      {photo.uploaded_by === 'guest' && (
+        <span className="tag tag-neutral absolute bottom-1.5 left-1.5 max-w-[85%] truncate pointer-events-none">
+          Guest photo · {photo.guest_display_name ?? 'Guest'}
+        </span>
+      )}
       <div className="absolute bottom-1.5 right-1.5 flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
         <FavouriteToggle isFavourited={isFavourited} onToggle={onToggleFavourite} />
         <ShareButton eventId={eventId} photoId={photo.id} />

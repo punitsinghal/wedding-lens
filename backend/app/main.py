@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from app.routers import auth, events, albums, admin, guest_auth
 from app.routers.assignments import router as assignments_router
 from app.routers.gallery import router as gallery_router
+from app.routers.guest_uploads import router as guest_uploads_router
 from app.routers.internal import router as internal_router
 from app.routers.photo_actions import router as photo_actions_router
 from app.routers.photos import router as photos_router, status_router as face_status_router
@@ -174,6 +175,7 @@ app.include_router(guest_auth.router)
 app.include_router(photos_router)
 app.include_router(face_status_router)
 app.include_router(gallery_router)
+app.include_router(guest_uploads_router)
 app.include_router(search_router)
 app.include_router(photo_actions_router)
 app.include_router(share_router)

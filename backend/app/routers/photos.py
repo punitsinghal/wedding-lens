@@ -77,6 +77,8 @@ def _photo_to_out(photo: Photo, event_id: uuid.UUID) -> PhotoOut:
         thumbnail_url=thumbnail_url,
         is_photographer_choice=photo.is_photographer_choice,
         created_at=photo.created_at,
+        uploaded_by=photo.uploaded_by,
+        guest_display_name=photo.guest_display_name,
     )
 
 
