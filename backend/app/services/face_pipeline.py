@@ -99,9 +99,13 @@ async def process_photo(photo_id: uuid.UUID, event_id: uuid.UUID) -> None:
 
 def _generate_thumbnail(image_bytes: bytes, photo_id: uuid.UUID, event_id: uuid.UUID) -> str:
     """Generate a 600px-wide WebP thumbnail. Returns SSD-relative path."""
-    from PIL import Image
+    from PIL import Image, ImageOps
 
     img = Image.open(io.BytesIO(image_bytes))
+    # Bake the EXIF orientation into the pixels before resizing — WebP thumbnails
+    # don't carry EXIF, so a phone photo shot in portrait would otherwise render
+    # sideways in the gallery even though the original file (with EXIF) is fine.
+    img = ImageOps.exif_transpose(img)
     # Convert to RGB if needed (e.g. RGBA PNG)
     if img.mode != "RGB":
         img = img.convert("RGB")

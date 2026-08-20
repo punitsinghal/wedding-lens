@@ -1,4 +1,5 @@
 """Tests for the AI face processing pipeline."""
+import io
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -153,6 +154,39 @@ async def test_run_pipeline_zero_faces(db, photo, event, tmp_path):
 
     mock_detect.assert_called_once()
     mock_upsert.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# B2. Thumbnail generation — EXIF orientation
+# ---------------------------------------------------------------------------
+
+
+def test_thumbnail_corrects_exif_orientation(tmp_path):
+    """A portrait phone photo (stored as landscape pixels + EXIF orientation 6)
+    must be thumbnailed upright, not sideways."""
+    from PIL import Image
+
+    import app.services.face_pipeline as fp_module
+
+    # Phones commonly store the sensor's raw landscape pixels with an EXIF
+    # orientation tag describing the rotation needed to display it upright.
+    img = Image.new("RGB", (100, 50), color=(255, 255, 255))
+    exif = img.getexif()
+    exif[0x0112] = 6  # Orientation: rotate 90° CW to display correctly
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", exif=exif.tobytes())
+
+    original_storage = fp_module.settings.STORAGE_PATH
+    fp_module.settings.STORAGE_PATH = str(tmp_path)
+    try:
+        rel_path = fp_module._generate_thumbnail(buf.getvalue(), uuid.uuid4(), uuid.uuid4())
+    finally:
+        fp_module.settings.STORAGE_PATH = original_storage
+
+    thumb = Image.open(tmp_path / rel_path)
+    # Orientation 6 rotates 90°, so a correctly-oriented thumbnail is portrait
+    # (50x100) even though the source pixels are landscape (100x50).
+    assert thumb.size == (50, 100)
 
 
 # ---------------------------------------------------------------------------
