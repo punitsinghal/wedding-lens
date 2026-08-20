@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, ChangeEvent } from 'react';
+import { useRef, useState, ChangeEvent } from 'react';
 import { uploadGuestPhoto } from '@/lib/api';
 import { getGuestToken, setGuestToken } from '@/lib/auth';
 
@@ -17,6 +17,12 @@ interface FileEntry {
   message?: string;
 }
 
+function rateLimitMessage(retryAfter: number | undefined): string {
+  return retryAfter
+    ? `Too many uploads. Please wait about ${retryAfter} second${retryAfter === 1 ? '' : 's'} before trying again.`
+    : 'Too many uploads. Please wait a few minutes before trying again.';
+}
+
 interface GuestUploadModalProps {
   eventId: string;
   onClose: () => void;
@@ -26,8 +32,13 @@ export default function GuestUploadModal({ eventId, onClose }: GuestUploadModalP
   const [displayName, setDisplayName] = useState('');
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [capMessage, setCapMessage] = useState('');
+  const [rateLimitBanner, setRateLimitBanner] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [done, setDone] = useState(false);
+  // Read inside the tight worker loop below — a ref (not state) so a 429
+  // hit by one worker is seen synchronously by the others without waiting
+  // for a re-render.
+  const rateLimitedRef = useRef(false);
 
   function validateFile(file: File): string | null {
     if (!ALLOWED_TYPES.includes(file.type)) return 'Unsupported format';
@@ -59,9 +70,56 @@ export default function GuestUploadModal({ eventId, onClose }: GuestUploadModalP
     setDone(false);
   }
 
+  // Shared by the initial batch loop and the per-file retry button — does
+  // the network call for entries[index] and writes back its outcome.
+  // Returns 'rate_limited' so callers can stop feeding further files.
+  async function attemptUpload(index: number): Promise<'success' | 'error' | 'rate_limited'> {
+    const entry = entries[index];
+    setEntries((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], status: 'uploading' };
+      return next;
+    });
+
+    try {
+      const token = getGuestToken(eventId) ?? '';
+      await uploadGuestPhoto(
+        eventId,
+        token,
+        entry.file,
+        displayName.trim() || undefined,
+        (newToken) => setGuestToken(eventId, newToken)
+      );
+      setEntries((prev) => {
+        const next = [...prev];
+        next[index] = { ...next[index], status: 'success' };
+        return next;
+      });
+      return 'success';
+    } catch (err: unknown) {
+      const apiErr = err as { detail?: string; status?: number; retryAfter?: number };
+      const isRateLimited = apiErr?.status === 429;
+      if (isRateLimited) {
+        setRateLimitBanner(rateLimitMessage(apiErr.retryAfter));
+      }
+      setEntries((prev) => {
+        const next = [...prev];
+        next[index] = {
+          ...next[index],
+          status: 'error',
+          message: isRateLimited ? 'Rate limited' : apiErr?.detail ?? 'Upload failed',
+        };
+        return next;
+      });
+      return isRateLimited ? 'rate_limited' : 'error';
+    }
+  }
+
   async function handleUpload() {
     if (isUploading || entries.length === 0) return;
     setIsUploading(true);
+    setRateLimitBanner('');
+    rateLimitedRef.current = false;
 
     const toUpload = entries
       .map((entry, index) => ({ entry, index }))
@@ -69,42 +127,12 @@ export default function GuestUploadModal({ eventId, onClose }: GuestUploadModalP
 
     let cursor = 0;
     async function worker() {
-      while (cursor < toUpload.length) {
+      while (cursor < toUpload.length && !rateLimitedRef.current) {
         const current = toUpload[cursor];
         cursor += 1;
-        const { entry, index } = current;
-
-        setEntries((prev) => {
-          const next = [...prev];
-          next[index] = { ...next[index], status: 'uploading' };
-          return next;
-        });
-
-        try {
-          const token = getGuestToken(eventId) ?? '';
-          await uploadGuestPhoto(
-            eventId,
-            token,
-            entry.file,
-            displayName.trim() || undefined,
-            (newToken) => setGuestToken(eventId, newToken)
-          );
-          setEntries((prev) => {
-            const next = [...prev];
-            next[index] = { ...next[index], status: 'success' };
-            return next;
-          });
-        } catch (err: unknown) {
-          const apiErr = err as { detail?: string };
-          setEntries((prev) => {
-            const next = [...prev];
-            next[index] = {
-              ...next[index],
-              status: 'error',
-              message: apiErr?.detail ?? 'Upload failed',
-            };
-            return next;
-          });
+        const outcome = await attemptUpload(current.index);
+        if (outcome === 'rate_limited') {
+          rateLimitedRef.current = true;
         }
       }
     }
@@ -114,6 +142,12 @@ export default function GuestUploadModal({ eventId, onClose }: GuestUploadModalP
 
     setIsUploading(false);
     setDone(true);
+  }
+
+  async function retryOne(index: number) {
+    if (isUploading) return;
+    setRateLimitBanner('');
+    await attemptUpload(index);
   }
 
   function handleClose() {
@@ -201,6 +235,12 @@ export default function GuestUploadModal({ eventId, onClose }: GuestUploadModalP
               </p>
             )}
 
+            {rateLimitBanner && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2">
+                {rateLimitBanner}
+              </p>
+            )}
+
             {entries.length > 0 && (
               <ul className="space-y-1.5 max-h-48 overflow-y-auto">
                 {entries.map((entry, i) => (
@@ -209,7 +249,7 @@ export default function GuestUploadModal({ eventId, onClose }: GuestUploadModalP
                     <span
                       className={
                         entry.status === 'error'
-                          ? 'text-[#b3261e] text-xs shrink-0'
+                          ? 'text-[#b3261e] text-xs shrink-0 flex items-center gap-2'
                           : entry.status === 'success'
                           ? 'text-accent-2-600 text-xs shrink-0'
                           : 'opacity-50 text-xs shrink-0'
@@ -218,7 +258,19 @@ export default function GuestUploadModal({ eventId, onClose }: GuestUploadModalP
                       {entry.status === 'pending' && 'Ready'}
                       {entry.status === 'uploading' && 'Uploading...'}
                       {entry.status === 'success' && 'Uploaded'}
-                      {entry.status === 'error' && entry.message}
+                      {entry.status === 'error' && (
+                        <>
+                          {entry.message}
+                          <button
+                            type="button"
+                            onClick={() => retryOne(i)}
+                            disabled={isUploading}
+                            className="text-accent underline disabled:opacity-50"
+                          >
+                            Retry
+                          </button>
+                        </>
+                      )}
                     </span>
                   </li>
                 ))}

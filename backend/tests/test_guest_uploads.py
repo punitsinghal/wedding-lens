@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.event import Event
 from app.models.user import User
 from app.services.auth import create_access_token, hash_password
-from app.services.guest_auth import create_guest_token, upload_counter
+from app.services.guest_auth import create_guest_token, guest_upload_rate_limiter, upload_counter
 
 JPEG_BYTES = b"fake-jpeg-bytes"
 
@@ -23,6 +23,14 @@ def reset_upload_counter():
     upload_counter.clear_all()
     yield
     upload_counter.clear_all()
+
+
+@pytest.fixture(autouse=True)
+def reset_upload_rate_limiter():
+    """Clear the in-process abuse rate limiter before and after every test."""
+    guest_upload_rate_limiter.clear_all()
+    yield
+    guest_upload_rate_limiter.clear_all()
 
 
 @pytest.fixture(autouse=True)
@@ -171,6 +179,32 @@ async def test_session_cap_rejects_21st_upload(client: AsyncClient, event: Event
     resp = await _upload(client, event, headers, filename="photo-21.jpg")
     assert resp.status_code == 422
     assert resp.json()["detail"] == "Upload limit reached for this session."
+
+
+# ---------------------------------------------------------------------------
+# Abuse rate limit — 40/hour per (event_id, ip), independent of session cap
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_41st_upload_across_sessions_returns_429(
+    client: AsyncClient, event: Event
+):
+    """A fresh guest session resets the 20-per-session cap but not the
+    per-IP abuse ceiling — 41 uploads across multiple sessions still 429s."""
+    # Two sessions of 20 each, both under the per-session cap, same client IP
+    for session in range(2):
+        headers = _guest_headers(event, sid=f"session-{session}")
+        for i in range(20):
+            resp = await _upload(client, event, headers, filename=f"s{session}-{i}.jpg")
+            assert resp.status_code == 201, resp.text
+
+    # 41st upload, on a brand-new (unfilled) session — still rate-limited
+    resp = await _upload(client, event, _guest_headers(event, sid="session-3"))
+    assert resp.status_code == 429
+    assert resp.json()["detail"] == "rate_limited"
+    assert "retry-after" in resp.headers
+    assert int(resp.headers["retry-after"]) > 0
 
 
 # ---------------------------------------------------------------------------

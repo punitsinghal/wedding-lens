@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     ADMIN_FAILURE_RATE_THRESHOLD: float = 0.10
     ADMIN_FAILURE_RATE_WINDOW_MINUTES: int = 60
     ADMIN_ALERT_DEDUP_MINUTES: int = 60
+    # Guest uploads — per-(event_id, ip) abuse ceiling, independent of the
+    # per-session cap (a fresh guest token resets that one; this doesn't).
+    # See docs/decisions/2026-08-19-guest-upload-per-file-requests.md.
+    GUEST_UPLOAD_RATE_LIMIT_MAX: int = 40
+    GUEST_UPLOAD_RATE_LIMIT_WINDOW_SECONDS: int = 3600  # 1 hour
 
     @field_validator("DATABASE_URL")
     @classmethod

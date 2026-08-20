@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from jose import ExpiredSignatureError, JWTError, jwt
 
 from app.config import settings
+from app.services.search_rate_limit import SearchRateLimiter
 
 
 def generate_otp_code() -> str:
@@ -125,6 +126,16 @@ class GuestUploadCounter:
 
 # Module-level singleton shared by the guest_uploads router
 upload_counter = GuestUploadCounter()
+
+
+# Abuse ceiling independent of the per-session cap above: a new guest token
+# resets upload_counter's per-(event_id, sid) count, but not this one, since
+# it's keyed on (event_id, ip) instead. Reuses SearchRateLimiter's generic
+# sliding-window implementation rather than duplicating it.
+guest_upload_rate_limiter = SearchRateLimiter(
+    max_requests=settings.GUEST_UPLOAD_RATE_LIMIT_MAX,
+    window_seconds=settings.GUEST_UPLOAD_RATE_LIMIT_WINDOW_SECONDS,
+)
 
 
 def create_share_token(photo_id: str, event_id: str) -> str:

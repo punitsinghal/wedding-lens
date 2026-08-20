@@ -492,7 +492,14 @@ export async function uploadGuestPhoto(
     } catch {
       errorBody = { detail: response.statusText };
     }
-    throw errorBody;
+    // Status (and Retry-After, on a 429) let the caller distinguish a rate
+    // limit from an ordinary rejection and show a wait time.
+    const retryAfterHeader = response.headers.get('Retry-After');
+    throw {
+      ...(errorBody as object),
+      status: response.status,
+      retryAfter: retryAfterHeader ? parseInt(retryAfterHeader, 10) : undefined,
+    };
   }
 
   return response.json() as Promise<PhotoUploadResponse>;
