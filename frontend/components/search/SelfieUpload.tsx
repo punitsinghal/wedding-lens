@@ -247,7 +247,6 @@ export default function SelfieUpload({
         id="selfie-input"
         type="file"
         accept="image/jpeg,image/png"
-        capture="user"
         disabled={isUploading}
         onChange={handleFileChange}
         className="sr-only"

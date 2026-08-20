@@ -222,7 +222,6 @@ export default function GuestUploadModal({ eventId, onClose }: GuestUploadModalP
                 type="file"
                 accept="image/jpeg,image/png"
                 multiple
-                capture="environment"
                 disabled={isUploading}
                 onChange={handleFilesSelected}
                 className="input"
