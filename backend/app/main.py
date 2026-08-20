@@ -149,7 +149,14 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    # All auth is Bearer-token (owner JWT, guest JWT) via the Authorization
+    # header — never cookies — so allow_credentials must stay False. With it
+    # True, Starlette only swaps the wildcard origin for an explicit one on
+    # requests carrying a Cookie header; every other response keeps sending
+    # "Access-Control-Allow-Origin: *" alongside "Allow-Credentials: true",
+    # a combination the CORS spec forbids. Chrome tolerates it; Safari/WebKit
+    # does not and fails the request outright.
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
