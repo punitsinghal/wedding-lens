@@ -167,3 +167,27 @@ Reconciled two gaps found in already-shipped admin code (Event Management #12) a
 - Event owner's event detail page: new analytics section (views/downloads/searches)
 - Lightbox fires the view beacon once per photo opened (fire-and-forget, not on every re-render)
 - New shared `lib/format.ts` helpers (bytes, datetime, percent) — see ADR `2026-08-15-shared-format-helpers`
+
+---
+
+## Guest Uploads
+
+**Status:** Shipped — `feature/guest-uploads`
+
+Lets wedding guests contribute their own photos to the event gallery, no app/account/sign-up — reuses every existing piece of infrastructure (guest access gate, storage, face pipeline, gallery) with no new service or trust boundary. See ADR `2026-08-19-guest-upload-per-file-requests` for why uploads are sent as independent per-file requests rather than a single batch or the photographer's chunked/resumable session.
+
+### What was added
+
+**Backend (`backend/`):**
+- Migration 010: `events.guest_uploads_enabled` (BOOLEAN, default true), `photos.uploaded_by` (`"photographer" | "guest"`, default `"photographer"`), `photos.guest_display_name` (nullable free text)
+- `POST /api/v1/events/{id}/guest-uploads` — guest-JWT-authenticated multipart upload; one file per request; reuses `get_validated_guest_event` (access gate + revocation), the `ALLOWED_CONTENT_TYPES`/`MAX_FILE_SIZE` constants from `photos.py`, and the same `background_tasks.add_task(process_photo, ...)` call as photographer uploads — guest photos enter the identical async face-processing pipeline, no special-casing
+- New in-process `GuestUploadCounter` (`app/services/guest_auth.py`), same pattern as the existing `GuestRateLimiter`: per-`(event_id, sid)` cap of 20 accepted uploads per session; only successfully committed uploads count against the cap
+- Owner toggle: `guest_uploads_enabled` on `EventOut`/`EventUpdate`, edited via the existing `PUT /{id}` (no dedicated action endpoint — unlike guest-access revocation, this flag has no session-invalidation side effect); also exposed on `EventPublicOut` so the guest-facing gallery knows whether to show the upload CTA
+- `GalleryPhotoOut` and `PhotoOut` both gain `uploaded_by` / `guest_display_name`, so album assignment and Photographer's Choice already work on guest photos with zero extra code — they're source-agnostic
+
+**Frontend (`frontend/`):**
+- `components/gallery/GuestUploadModal.tsx`: bottom-sheet modal (mirrors the "Remove my face data" modal pattern) — optional display-name field, native multi-file picker, client-side 25 MB/JPEG-PNG pre-validation, 20-file client-side cap warning, 3-way concurrent per-file upload with per-file status, completion summary
+- `lib/api.ts` — `uploadGuestPhoto`: raw-fetch multipart pattern (per the `2026-06-20-selfie-upload-raw-fetch` ADR), refreshes `X-Guest-Token`, clears the guest token on 401
+- Guest gallery page: "Upload your photos" CTA shown only when `event.guest_uploads_enabled`
+- `PhotoThumbnail.tsx` / `Lightbox.tsx`: "Guest photo · {name}" badge (falls back to "Guest") when `uploaded_by === 'guest'`
+- Owner event detail page: "Guest Uploads: On/Off" toggle card, mirroring the Guest Access card, calling `updateEvent` directly

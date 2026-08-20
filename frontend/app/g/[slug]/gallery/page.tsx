@@ -10,6 +10,7 @@ import AlbumFilterBar from '@/components/gallery/AlbumFilterBar';
 import SortSelector from '@/components/gallery/SortSelector';
 import PhotoThumbnail from '@/components/gallery/PhotoThumbnail';
 import Lightbox from '@/components/gallery/Lightbox';
+import GuestUploadModal from '@/components/gallery/GuestUploadModal';
 import type { EventPublicOut, GalleryPhoto, AlbumTab } from '@/types/api';
 import PageLoading from '@/components/PageLoading';
 
@@ -38,6 +39,9 @@ function GalleryContent() {
   const [loading, setLoading] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const savedScrollY = useRef(0);
+
+  // Guest uploads (REQ-1): upload modal visibility
+  const [showUploadModal, setShowUploadModal] = useState(false);
 
   // S3: removal request form state
   const [showRemovalForm, setShowRemovalForm] = useState(false);
@@ -301,6 +305,12 @@ function GalleryContent() {
             <Link href={`/g/${slug}/search`} className="btn btn-primary">
               Find my photos
             </Link>
+            {/* Guest uploads (REQ-1, REQ-20): CTA hidden when the owner disables uploads */}
+            {event.guest_uploads_enabled && (
+              <button onClick={() => setShowUploadModal(true)} className="btn btn-secondary">
+                Upload your photos
+              </button>
+            )}
             <Link href={`/g/${slug}/favourites`} className="btn btn-secondary">
               Favourites
               {favouriteIds.size > 0 && (
@@ -387,6 +397,11 @@ function GalleryContent() {
           isFavourited={isFavourited(photos[lightboxIndex]?.id ?? '')}
           onToggleFavourite={() => toggleFavourite(photos[lightboxIndex]?.id ?? '')}
         />
+      )}
+
+      {/* Guest uploads (REQ-1..4): upload modal */}
+      {showUploadModal && (
+        <GuestUploadModal eventId={event.id} onClose={() => setShowUploadModal(false)} />
       )}
 
       {/* S3: Removal request modal */}

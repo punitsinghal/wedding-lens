@@ -41,6 +41,7 @@ class Event(Base):
     otp_code: Mapped[str | None] = mapped_column(String(255), nullable=True)
     guest_access_enabled: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=True, server_default="true")
     guest_access_revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    guest_uploads_enabled: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=True, server_default="true")
 
     # status: "draft" | "published" | "suspended" | "deleted"
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")

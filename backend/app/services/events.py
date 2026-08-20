@@ -152,6 +152,11 @@ async def update_event(
         event.access_mode = data.access_mode
     if data.access_code is not None:
         event.access_code = data.access_code
+    # guest_uploads_enabled=False is a legitimate value the owner sets to turn
+    # uploads off — must check `is not None`, not truthiness, or disabling
+    # would be silently ignored.
+    if data.guest_uploads_enabled is not None:
+        event.guest_uploads_enabled = data.guest_uploads_enabled
 
     # Auto-generate OTP code when switching to magic-link-otp mode if not already set
     if data.access_mode == "magic-link-otp" and not event.otp_code:

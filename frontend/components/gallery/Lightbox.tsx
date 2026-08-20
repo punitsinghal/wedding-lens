@@ -170,6 +170,11 @@ export default function Lightbox({
             ✦ Photographer&apos;s Choice
           </span>
         )}
+        {photo.uploaded_by === 'guest' && (
+          <span className="tag tag-neutral absolute bottom-4 left-4">
+            Guest photo · {photo.guest_display_name ?? 'Guest'}
+          </span>
+        )}
       </div>
 
       {/* Navigation */}

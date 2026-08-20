@@ -38,6 +38,7 @@ export interface Event {
   otp_code: string | null;
   guest_access_enabled: boolean;
   guest_access_revoked_at: string | null;
+  guest_uploads_enabled: boolean;
   status: EventStatus;
   deleted_at: string | null;
   created_at: string;
@@ -54,6 +55,7 @@ export interface EventPublicOut {
   cover_photo_id: string | null;
   access_mode: AccessMode;
   status: EventStatus;
+  guest_uploads_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -82,6 +84,7 @@ export interface EventUpdateRequest {
   access_code?: string;
   slug?: string;
   cover_photo_id?: string | null;
+  guest_uploads_enabled?: boolean;
 }
 
 export type AlbumVisibility = 'public' | 'private';
@@ -178,12 +181,16 @@ export function isSlugTakenError(
 // Gallery types
 // ---------------------------------------------------------------------------
 
+export type UploadedBy = 'photographer' | 'guest';
+
 export interface GalleryPhoto {
   id: string;
   thumbnail_url: string | null;
   is_photographer_choice: boolean;
   download_count: number;
   created_at: string;
+  uploaded_by: UploadedBy;
+  guest_display_name: string | null;
 }
 
 export interface GalleryListResponse {

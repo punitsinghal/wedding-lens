@@ -447,6 +447,57 @@ export async function ownerFetchBlob(path: string): Promise<Blob> {
 }
 
 // ---------------------------------------------------------------------------
+// Guest uploads — guest-authenticated multipart upload
+//
+// Follows the raw-fetch-for-multipart pattern established for SelfieUpload
+// (see docs/decisions/2026-06-20-selfie-upload-raw-fetch.md): guestApiFetch
+// JSON.stringifies its body and can't carry a File, so this call builds the
+// request by hand, refreshes the guest token from the response header, and
+// clears the stored token on 401 the same way guestApiFetch does internally.
+// ---------------------------------------------------------------------------
+
+export async function uploadGuestPhoto(
+  eventId: string,
+  guestToken: string,
+  file: File,
+  displayName: string | undefined,
+  onTokenRefresh: (newToken: string) => void
+): Promise<PhotoUploadResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (displayName) formData.append('display_name', displayName);
+
+  const headers: Record<string, string> = {};
+  if (guestToken) headers['Authorization'] = `Bearer ${guestToken}`;
+
+  const response = await fetch(`${baseUrl()}/api/v1/events/${eventId}/guest-uploads`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  const refreshedToken = response.headers.get('X-Guest-Token');
+  if (refreshedToken) {
+    onTokenRefresh(refreshedToken);
+  }
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      clearGuestToken(eventId);
+    }
+    let errorBody: unknown;
+    try {
+      errorBody = await response.json();
+    } catch {
+      errorBody = { detail: response.statusText };
+    }
+    throw errorBody;
+  }
+
+  return response.json() as Promise<PhotoUploadResponse>;
+}
+
+// ---------------------------------------------------------------------------
 // Photo actions — guest-authenticated
 // ---------------------------------------------------------------------------
 

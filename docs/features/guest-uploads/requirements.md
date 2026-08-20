@@ -122,4 +122,4 @@ Let wedding guests contribute their own photos to the event gallery by scanning 
 - AC-8 (Scenario 8): After the event owner revokes guest access, a guest with a previously valid session attempts to upload; the request is rejected with 401 and the guest is redirected to the access entry screen, matching existing gallery-access revocation behavior.
 
 ## Status
-Groomed — ready for /design
+Built — see docs/domain/product-capabilities.md ("Guest Uploads")
