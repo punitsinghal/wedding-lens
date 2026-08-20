@@ -63,8 +63,9 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
     } catch {
       errorBody = { detail: response.statusText };
     }
-    // Re-throw the parsed body so callers can inspect detail / suggestions
-    throw errorBody;
+    // Re-throw the parsed body (plus status, so callers can tell a genuine
+    // 404 apart from a transient 5xx/network failure) for callers to inspect
+    throw { ...(errorBody as object), status: response.status };
   }
 
   // 204 No Content

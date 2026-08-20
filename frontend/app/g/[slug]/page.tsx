@@ -20,7 +20,9 @@ export default function GuestEntryPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
-  useEffect(() => {
+  function loadEvent() {
+    setIsLoading(true);
+    setLoadError('');
     getEventBySlug(slug)
       .then((ev) => {
         setEvent(ev);
@@ -33,10 +35,19 @@ export default function GuestEntryPage() {
           router.replace(nextParam?.startsWith('/') ? nextParam : `/g/${slug}/gallery`);
         }
       })
-      .catch(() => {
-        setLoadError('not_found');
+      .catch((err: unknown) => {
+        // Only a genuine 404 means the event doesn't exist — a 5xx or
+        // network failure (e.g. a backend restart mid-deploy) is transient
+        // and must not tell a guest their link is broken.
+        const apiErr = err as { status?: number };
+        setLoadError(apiErr?.status === 404 ? 'not_found' : 'unavailable');
       })
       .finally(() => setIsLoading(false));
+  }
+
+  useEffect(() => {
+    loadEvent();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, router]);
 
   async function handleSubmit(e: FormEvent) {
@@ -67,6 +78,22 @@ export default function GuestEntryPage() {
 
   if (isLoading) {
     return <PageLoading />;
+  }
+
+  if (loadError === 'unavailable') {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="max-w-sm w-full text-center">
+          <h1 className="text-xl font-semibold text-gray-800 mb-2">Something went wrong</h1>
+          <p className="text-sm text-gray-500 mb-4">
+            We couldn&apos;t reach the gallery. Please try again.
+          </p>
+          <button onClick={loadEvent} className="btn btn-primary">
+            Try again
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (loadError === 'not_found' || !event) {
