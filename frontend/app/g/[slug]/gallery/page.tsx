@@ -294,14 +294,14 @@ function GalleryContent() {
     <div className="min-h-screen bg-bg">
       {/* Header */}
       <header className="bg-bg border-b border-divider px-4 py-4">
-        <div className="max-w-6xl mx-auto flex items-start justify-between">
+        <div className="max-w-6xl mx-auto flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-xl">{event.name}</h1>
             <p className="text-sm opacity-60 mt-0.5">
               {event.bride_name} &amp; {event.groom_name}
             </p>
           </div>
-          <div className="flex gap-2 items-center flex-wrap justify-end">
+          <div className="flex gap-2 items-center flex-wrap sm:justify-end">
             <Link href={`/g/${slug}/search`} className="btn btn-primary">
               Find my photos
             </Link>
