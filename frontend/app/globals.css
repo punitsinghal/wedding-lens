@@ -54,6 +54,9 @@
   --shadow-lg: 0 12px 32px color-mix(in srgb, #18181b 16%, transparent);
 }
 
+html, body {
+  overflow-x: hidden;
+}
 body {
   background: var(--color-bg);
   color: var(--color-text);
@@ -175,7 +178,8 @@ h1, h2, h3, h4 {
   .nav-app {
     display: flex;
     align-items: center;
-    gap: 20px;
+    flex-wrap: wrap;
+    gap: 10px 20px;
     padding: 14px 24px;
     background: var(--color-bg);
     border-bottom: 1px solid var(--color-divider);
@@ -215,7 +219,7 @@ h1, h2, h3, h4 {
     font-size: 11px;
     color: color-mix(in srgb, var(--color-text) 50%, transparent);
   }
-  .nav-app a.nav-link { color: var(--color-text); text-decoration: none; font-size: 14px; opacity: 0.75; }
+  .nav-app a.nav-link { color: var(--color-text); text-decoration: none; font-size: 14px; opacity: 0.75; white-space: nowrap; }
   .nav-app a.nav-link:hover, .nav-app a.nav-link[aria-current='page'] { color: var(--color-accent); opacity: 1; }
   .nav-avatar {
     width: 32px; height: 32px; border-radius: 999px;
