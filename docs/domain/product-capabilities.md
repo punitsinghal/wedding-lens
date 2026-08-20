@@ -191,3 +191,23 @@ Lets wedding guests contribute their own photos to the event gallery, no app/acc
 - Guest gallery page: "Upload your photos" CTA shown only when `event.guest_uploads_enabled`
 - `PhotoThumbnail.tsx` / `Lightbox.tsx`: "Guest photo · {name}" badge (falls back to "Guest") when `uploaded_by === 'guest'`
 - Owner event detail page: "Guest Uploads: On/Off" toggle card, mirroring the Guest Access card, calling `updateEvent` directly
+
+---
+
+## Infrastructure & Reliability Hardening
+
+**Status:** Shipped — same-day follow-up after the Guest Uploads launch, triggered by production bug reports while verifying the release
+
+A cluster of fixes found by actually testing Guest Uploads end-to-end on production and on a real phone, rather than issues in the feature itself.
+
+### What changed
+
+**Backend (`backend/`):**
+- **Backend now served from `api.picslelo.com`**, a custom domain on the Railway service, instead of the shared `backend-production-*.up.railway.app` subdomain. Some mobile carriers block or fail to resolve Railway's shared domain pool — this was silently breaking every API call (gallery load, login, registration) on affected cellular networks while wifi/desktop worked fine. DNS: CNAME `api` → the Railway-provided target, TXT `_railway-verify.api` for ownership verification; the raw `*.up.railway.app` URL still works as a fallback.
+- **CORS fix**: `allow_credentials` set to `False` in `CORSMiddleware` (was `True` alongside `allow_origins=["*"]`, a combination the CORS spec forbids). This app authenticates entirely via Bearer tokens (owner JWT, guest JWT) — never cookies — so credentialed CORS was never actually needed. Starlette only swapped the wildcard origin for an explicit one on requests carrying a `Cookie` header, so every real response kept advertising the forbidden `* ` + `allow-credentials: true` combination; Chrome tolerated it, Safari/WebKit rejected the response outright.
+- **EXIF orientation fix**: `_generate_thumbnail` (`app/services/face_pipeline.py`) now calls `ImageOps.exif_transpose()` before resizing. Phone photos shot in portrait store landscape sensor pixels plus an EXIF rotation tag; the WebP thumbnail (which carries no EXIF) was baking in the wrong orientation, so portrait photos displayed sideways/upside-down in the gallery grid and lightbox even though the original downloadable file was fine. All existing production thumbnails were regenerated in place from their originals (derived files only — originals and DB rows untouched).
+
+**Frontend (`frontend/`):**
+- Guest gallery header now stacks/wraps on narrow phone widths (`flex-col` below `sm:`) instead of colliding with the "Upload your photos" CTA that Guest Uploads added; same fix applied to the global `Nav` bar, which had never wrapped on any page.
+- `apiFetch` now attaches the HTTP status to thrown errors. The guest entry page (`/g/[slug]`) distinguishes a genuine 404 ("Event not found") from a transient failure like a 5xx or network error ("Something went wrong" + a **Try again** retry button) — previously any fetch failure at all showed the permanent-sounding "Event not found" message.
+- `NEXT_PUBLIC_API_URL` now points at `https://api.picslelo.com`.
