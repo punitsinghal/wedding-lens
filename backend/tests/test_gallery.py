@@ -1,5 +1,6 @@
 """Gallery endpoint tests."""
 
+import io
 import uuid
 from pathlib import Path
 from unittest.mock import patch
@@ -587,3 +588,148 @@ async def test_preview_404_when_original_file_missing(
         headers=_guest_headers(event.id),
     )
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Test 13: guests must never receive a raw HEIC/HEIF file on download —
+# single-photo download and ZIP download both convert to JPEG, lazily and
+# cached, leaving already-JPEG/PNG originals untouched. See
+# docs/decisions/2026-08-21-heic-to-jpeg-conversion-for-downloads.md.
+# ---------------------------------------------------------------------------
+
+
+def _write_heic(abs_path: Path, size: tuple[int, int] = (80, 40)) -> None:
+    """Writes a real HEIC file to `abs_path` using pillow-heif."""
+    from PIL import Image
+
+    abs_path.parent.mkdir(parents=True, exist_ok=True)
+    img = Image.new("RGB", size, color=(10, 20, 30))
+    img.save(abs_path, format="HEIF")
+
+
+async def _make_photo_with_heic_original(
+    db: AsyncSession, event: Event, filename: str = "IMG_4521.HEIC"
+) -> Photo:
+    import os
+
+    storage_dir = Path(os.environ["STORAGE_PATH"]) / f"events/{event.id}"
+    storage_filename = f"{uuid.uuid4()}.heic"
+    storage_path = f"events/{event.id}/{storage_filename}"
+    _write_heic(storage_dir / storage_filename)
+
+    photo = Photo(
+        id=uuid.uuid4(),
+        event_id=event.id,
+        filename=filename,
+        storage_path=storage_path,
+        file_size=(storage_dir / storage_filename).stat().st_size,
+        processing_status="complete",
+    )
+    db.add(photo)
+    await db.commit()
+    await db.refresh(photo)
+    return photo
+
+
+@pytest.mark.asyncio
+async def test_download_serves_jpeg_original_unchanged(
+    client: AsyncClient, db: AsyncSession, regular_user: User
+):
+    """An already-JPEG original must be served as-is — no re-encode, same
+    bytes, same filename."""
+    event = await _make_event(db, regular_user)
+    photo = await _make_photo_with_original(db, event, size=(60, 30))
+
+    from app.services import gallery as gallery_service
+
+    original_bytes = (
+        Path(gallery_service.settings.STORAGE_PATH) / photo.storage_path
+    ).read_bytes()
+
+    resp = await client.get(
+        f"/api/v1/events/{event.id}/photos/{photo.id}/download",
+        headers=_guest_headers(event.id),
+    )
+    assert resp.status_code == 200
+    assert resp.content == original_bytes
+    assert resp.headers["content-disposition"].endswith('filename="test.jpg"')
+
+
+@pytest.mark.asyncio
+async def test_download_converts_heic_original_to_cached_jpeg(
+    client: AsyncClient, db: AsyncSession, regular_user: User
+):
+    import os
+
+    from PIL import Image
+
+    event = await _make_event(db, regular_user)
+    photo = await _make_photo_with_heic_original(db, event, filename="IMG_4521.HEIC")
+
+    expected_rel_path = f"events/{event.id}/downloads/{photo.id}.jpg"
+    expected_abs_path = Path(os.environ["STORAGE_PATH"]) / expected_rel_path
+    assert not expected_abs_path.exists()
+
+    resp = await client.get(
+        f"/api/v1/events/{event.id}/photos/{photo.id}/download",
+        headers=_guest_headers(event.id),
+    )
+    assert resp.status_code == 200
+    assert resp.headers["content-disposition"].endswith('filename="IMG_4521.jpg"')
+    assert expected_abs_path.exists()
+
+    converted = Image.open(expected_abs_path)
+    assert converted.format == "JPEG"
+    assert converted.size == (80, 40)
+
+
+@pytest.mark.asyncio
+async def test_download_second_request_reuses_cached_conversion(
+    client: AsyncClient, db: AsyncSession, regular_user: User
+):
+    from app.services import gallery as gallery_service
+
+    event = await _make_event(db, regular_user)
+    photo = await _make_photo_with_heic_original(db, event)
+
+    resp1 = await client.get(
+        f"/api/v1/events/{event.id}/photos/{photo.id}/download",
+        headers=_guest_headers(event.id),
+    )
+    assert resp1.status_code == 200
+
+    with patch.object(
+        gallery_service, "_convert_to_jpeg", wraps=gallery_service._convert_to_jpeg
+    ) as mock_convert:
+        resp2 = await client.get(
+            f"/api/v1/events/{event.id}/photos/{photo.id}/download",
+            headers=_guest_headers(event.id),
+        )
+        assert resp2.status_code == 200
+        mock_convert.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_zip_download_converts_heic_entries_to_jpeg(
+    client: AsyncClient, db: AsyncSession, regular_user: User
+):
+    """A ZIP containing a mix of JPEG and HEIC photos must contain only
+    JPEG bytes — HEIC entries are renamed to .jpg in the archive."""
+    import zipfile
+
+    event = await _make_event(db, regular_user)
+    jpeg_photo = await _make_photo_with_original(db, event, size=(40, 20))
+    heic_photo = await _make_photo_with_heic_original(db, event, filename="IMG_9001.heic")
+
+    resp = await client.post(
+        f"/api/v1/events/{event.id}/photos/zip",
+        headers=_guest_headers(event.id),
+        json={"photo_ids": [str(jpeg_photo.id), str(heic_photo.id)]},
+    )
+    assert resp.status_code == 200
+
+    with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+        names = zf.namelist()
+        assert "test.jpg" in names  # jpeg_photo.filename, unchanged
+        assert "IMG_9001.jpg" in names  # heic_photo.filename, extension swapped
+        assert not any(n.lower().endswith((".heic", ".heif")) for n in names)

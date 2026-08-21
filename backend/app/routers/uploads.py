@@ -19,6 +19,7 @@ from app.models.photo import Photo
 from app.models.upload_session import UploadSession
 from app.models.user import User
 from app.services.face_pipeline import process_photo
+from app.services.image_format import is_allowed_upload_format
 
 logger = logging.getLogger("weddinglens.uploads")
 
@@ -27,10 +28,6 @@ router = APIRouter(prefix="/api/v1/events/{event_id}/uploads", tags=["uploads"])
 CHUNK_SIZE = 2097152  # 2 MB
 MAX_FILE_SIZE = 25 * 1024 * 1024  # 25 MB
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png"}
-
-# Magic bytes for file-type validation
-JPEG_MAGIC = b"\xff\xd8"
-PNG_MAGIC = b"\x89PNG"
 
 
 # ---------------------------------------------------------------------------
@@ -338,12 +335,11 @@ async def complete_upload(
             str(exc),
         )
 
-    # Validate assembled file magic bytes
+    # Validate assembled file magic bytes — authoritative gate, independent of
+    # the filename extension checked above (see app/services/image_format.py).
     with open(final_abs, "rb") as f:
         header = f.read(8)
-    is_jpeg = header[:2] == JPEG_MAGIC
-    is_png = header[:4] == PNG_MAGIC
-    if not is_jpeg and not is_png:
+    if not is_allowed_upload_format(header):
         final_abs.unlink(missing_ok=True)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

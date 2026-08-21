@@ -14,7 +14,10 @@ from app.models.user import User
 from app.services.auth import create_access_token, hash_password
 from app.services.guest_auth import create_guest_token, guest_upload_rate_limiter, upload_counter
 
-JPEG_BYTES = b"fake-jpeg-bytes"
+# Real JPEG magic bytes — required since upload_guest_photo now sniffs actual
+# file content (app/services/image_format.py), not just the client-supplied
+# Content-Type header.
+JPEG_BYTES = b"\xff\xd8fake-jpeg-bytes"
 
 
 @pytest.fixture(autouse=True)
@@ -222,8 +225,30 @@ async def test_unsupported_content_type_returns_422(client: AsyncClient, event: 
 
 
 @pytest.mark.asyncio
+async def test_heic_bytes_with_spoofed_jpeg_content_type_returns_422(
+    client: AsyncClient, event: Event
+):
+    """A real HEIC file (or any non-JPEG/PNG bytes) must be rejected even
+    when the client claims Content-Type: image/jpeg and a .jpg filename —
+    the magic-byte sniff is authoritative, not the client-supplied header."""
+    heic_bytes = b"\x00\x00\x00\x18ftypheic" + b"rest-of-heic-file"
+    resp = await _upload(
+        client,
+        event,
+        _guest_headers(event),
+        filename="photo.jpg",
+        content=heic_bytes,
+        content_type="image/jpeg",
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "Only JPEG and PNG files are accepted"
+
+
+@pytest.mark.asyncio
 async def test_oversized_file_returns_422(client: AsyncClient, event: Event):
-    oversized = b"x" * (25 * 1024 * 1024 + 1)
+    # Must start with real JPEG magic bytes so it clears the format sniff
+    # and actually exercises the size check below it.
+    oversized = b"\xff\xd8" + b"x" * (25 * 1024 * 1024 + 1)
     resp = await _upload(client, event, _guest_headers(event), content=oversized)
     assert resp.status_code == 422
     assert resp.json()["detail"] == "File exceeds the 25 MB limit"

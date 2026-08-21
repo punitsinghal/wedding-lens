@@ -6,14 +6,21 @@ import logging
 import uuid
 from pathlib import Path
 
+import pillow_heif
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.album import Album, CEREMONY_CATEGORIES
 from app.models.photo import Photo
+from app.services.image_format import sniff_image_format
 
 logger = logging.getLogger("weddinglens.gallery")
+
+# Registers the HEIF/HEIC opener with Pillow once, at import time, so
+# `PIL.Image.open` can decode HEIC/HEIF bytes anywhere in this module. See
+# docs/decisions/2026-08-21-heic-to-jpeg-conversion-for-downloads.md.
+pillow_heif.register_heif_opener()
 
 # Fixed display order for ceremony categories
 _CATEGORY_ORDER = list(CEREMONY_CATEGORIES)
@@ -21,6 +28,14 @@ _CATEGORY_ORDER = list(CEREMONY_CATEGORIES)
 # Longest edge, in pixels, for the lightbox "preview" tier — see
 # docs/decisions/2026-08-21-lazy-generated-photo-preview-tier.md
 PREVIEW_MAX_EDGE = 2000
+
+# JPEG quality for the download-time HEIC->JPEG conversion safety net. Kept
+# high (this is a format-compatibility conversion, not a size optimization —
+# see docs/decisions/2026-08-21-heic-to-jpeg-conversion-for-downloads.md,
+# and the prior quality-degradation lesson in
+# docs/decisions/2026-08-21-lazy-generated-photo-preview-tier.md about not
+# re-encoding originals that don't need it).
+DOWNLOAD_CONVERSION_JPEG_QUALITY = 95
 
 
 async def get_thumbnail_path(
@@ -131,6 +146,126 @@ async def get_or_generate_preview_path(
     if not abs_preview_path.exists():
         return None
     return abs_preview_path
+
+
+def _download_rel_path(event_id: uuid.UUID, photo_id: uuid.UUID) -> str:
+    """Deterministic, DB-free cache path for a photo's converted-for-download
+    JPEG. Mirrors `_preview_rel_path` — no new DB column or backfill
+    migration required. See
+    docs/decisions/2026-08-21-heic-to-jpeg-conversion-for-downloads.md.
+    """
+    return f"events/{event_id}/downloads/{photo_id}.jpg"
+
+
+def _swap_ext_to_jpg(filename: str) -> str:
+    """Swap a filename's extension for `.jpg` (e.g. `IMG_4521.HEIC` ->
+    `IMG_4521.jpg`), so a converted download isn't sent with a mismatched
+    extension. Filenames with no extension get `.jpg` appended."""
+    stem, sep, _ext = filename.rpartition(".")
+    return f"{stem}.jpg" if sep else f"{filename}.jpg"
+
+
+def _convert_to_jpeg(image_bytes: bytes, abs_path: Path) -> None:
+    """Decode `image_bytes` (expected HEIC/HEIF, but works for anything
+    Pillow can open) and save as a high-quality JPEG at `abs_path`. Applies
+    the same EXIF-orientation fix used elsewhere in this module. Uses the
+    same atomic temp-file+rename pattern as `_generate_preview`."""
+    from PIL import Image, ImageOps
+
+    img = Image.open(io.BytesIO(image_bytes))
+    img = ImageOps.exif_transpose(img)
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+
+    abs_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = abs_path.with_name(f".{abs_path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        img.save(tmp_path, "JPEG", quality=DOWNLOAD_CONVERSION_JPEG_QUALITY)
+        tmp_path.replace(abs_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
+def _resolve_downloadable(
+    storage_root: Path,
+    event_id: uuid.UUID,
+    photo_id: uuid.UUID,
+    storage_path: str,
+    filename: str,
+) -> tuple[Path, str] | None:
+    """Synchronous core of `get_downloadable_path` — no DB access, so it can
+    also be called directly from the (thread-pool-executed, sync) ZIP
+    streaming generator in `app/services/zip_streaming.py`.
+
+    Returns `(absolute_path, filename_to_send)`, or None if the original file
+    doesn't exist or any resolved path escapes storage. Already-JPEG/PNG
+    originals are returned unchanged (never re-encoded — re-encoding a file
+    that's already in a guest-safe format would degrade quality for no
+    benefit). Anything else is treated as a HEIC/HEIF-or-unknown format that
+    needs converting; on conversion failure, falls back to the original
+    file/filename rather than failing the download outright.
+    """
+    abs_original_path = (storage_root / storage_path).resolve()
+    if not abs_original_path.is_relative_to(storage_root) or not abs_original_path.exists():
+        return None
+
+    try:
+        with abs_original_path.open("rb") as f:
+            header = f.read(16)
+    except OSError:
+        return None
+
+    if sniff_image_format(header) in ("jpeg", "png"):
+        return abs_original_path, filename
+
+    abs_download_path = (storage_root / _download_rel_path(event_id, photo_id)).resolve()
+    if not abs_download_path.is_relative_to(storage_root):
+        return abs_original_path, filename
+
+    converted_filename = _swap_ext_to_jpg(filename)
+
+    if abs_download_path.exists():
+        return abs_download_path, converted_filename
+
+    try:
+        image_bytes = abs_original_path.read_bytes()
+        _convert_to_jpeg(image_bytes, abs_download_path)
+    except Exception as exc:
+        logger.warning(
+            '{"event": "download_conversion_error", "photo_id": "%s", "exc_type": "%s", "detail": "%s"}',
+            photo_id,
+            type(exc).__name__,
+            str(exc),
+        )
+        return abs_original_path, filename
+
+    if not abs_download_path.exists():
+        return abs_original_path, filename
+
+    return abs_download_path, converted_filename
+
+
+async def get_downloadable_path(
+    db: AsyncSession, event_id: uuid.UUID, photo_id: uuid.UUID
+) -> tuple[Path, str] | None:
+    """Resolve `(absolute_path, filename_to_send)` for a guest download
+    (single-photo or ZIP), guaranteeing the result is never a raw
+    HEIC/HEIF file. Returns None if the photo/original doesn't exist or any
+    resolved path escapes storage.
+
+    See docs/decisions/2026-08-21-heic-to-jpeg-conversion-for-downloads.md.
+    """
+    result = await db.execute(
+        select(Photo).where(Photo.id == photo_id, Photo.event_id == event_id)
+    )
+    photo = result.scalar_one_or_none()
+    if photo is None:
+        return None
+
+    storage_root = Path(settings.STORAGE_PATH).resolve()
+    return await asyncio.to_thread(
+        _resolve_downloadable, storage_root, event_id, photo_id, photo.storage_path, photo.filename
+    )
 
 
 async def list_photos(

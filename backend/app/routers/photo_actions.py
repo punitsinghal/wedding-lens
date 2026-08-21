@@ -64,7 +64,7 @@ async def bulk_zip_download(
     zip_filename = f"wedding-{event.slug}-my-photos.zip"
 
     return StreamingResponse(
-        generate_zip_stream(photos_ordered),
+        generate_zip_stream(photos_ordered, event_id),
         media_type="application/zip",
         headers={
             "Content-Disposition": f'attachment; filename="{zip_filename}"',
@@ -209,7 +209,7 @@ async def favourites_zip_download(
     zip_filename = f"wedding-{event.slug}-my-favourites.zip"
 
     return StreamingResponse(
-        generate_zip_stream(photos_ordered),
+        generate_zip_stream(photos_ordered, event_id),
         media_type="application/zip",
         headers={
             "Content-Disposition": f'attachment; filename="{zip_filename}"',

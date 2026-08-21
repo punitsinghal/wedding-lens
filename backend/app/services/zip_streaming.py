@@ -1,10 +1,12 @@
 """Streaming ZIP generation — zero full-buffer memory accumulation."""
 import io
+import uuid
 import zipfile
 from collections.abc import Iterator
 from pathlib import Path
 
 from app.config import settings
+from app.services.gallery import _resolve_downloadable
 
 
 class _ZipBuffer(io.RawIOBase):
@@ -35,24 +37,35 @@ class _ZipBuffer(io.RawIOBase):
 
 class Photo:
     """Minimal DTO used by generate_zip_stream — avoids importing ORM models here."""
-    __slots__ = ("storage_path", "filename")
+    __slots__ = ("id", "storage_path", "filename")
 
-    def __init__(self, storage_path: str, filename: str):
+    def __init__(self, id: uuid.UUID, storage_path: str, filename: str):
+        self.id = id
         self.storage_path = storage_path
         self.filename = filename
 
 
-def generate_zip_stream(photos: list) -> Iterator[bytes]:
-    """Yield compressed ZIP bytes incrementally. Peak memory = max(single photo size)."""
+def generate_zip_stream(photos: list, event_id: uuid.UUID) -> Iterator[bytes]:
+    """Yield compressed ZIP bytes incrementally. Peak memory = max(single photo size).
+
+    Each photo's downloadable path/filename is resolved via
+    `gallery._resolve_downloadable` before being written into the archive,
+    so a HEIC/HEIF original never ends up in the ZIP — it's transparently
+    swapped for a cached JPEG conversion (extension included). See
+    docs/decisions/2026-08-21-heic-to-jpeg-conversion-for-downloads.md.
+    """
     storage_root = Path(settings.STORAGE_PATH).resolve()
     buf = _ZipBuffer()
     seen_names: dict[str, int] = {}
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
         for photo in photos:
-            abs_path = (storage_root / photo.storage_path).resolve()
-            if not abs_path.is_relative_to(storage_root) or not abs_path.exists():
+            resolved = _resolve_downloadable(
+                storage_root, event_id, photo.id, photo.storage_path, photo.filename
+            )
+            if resolved is None:
                 continue
-            base = photo.filename
+            abs_path, download_filename = resolved
+            base = download_filename
             if base in seen_names:
                 seen_names[base] += 1
                 stem, sep, ext = base.rpartition(".")

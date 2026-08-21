@@ -2,14 +2,12 @@
 
 import mimetypes
 import uuid
-from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.dependencies import get_db, get_event_with_photographer_access, get_validated_guest_event
 from app.models.event import Event
 from app.models.photo import Photo
@@ -163,14 +161,15 @@ async def download_photo(
     if photo is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found")
 
-    storage_root = Path(settings.STORAGE_PATH).resolve()
-    abs_path = (storage_root / photo.storage_path).resolve()
-    if not abs_path.is_relative_to(storage_root):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    if not abs_path.exists():
+    # Resolves to a guaranteed-non-HEIC file: the original as-is if it's
+    # already JPEG/PNG, or a lazily-generated/cached JPEG conversion
+    # otherwise — see docs/decisions/2026-08-21-heic-to-jpeg-conversion-for-downloads.md.
+    resolved = await gallery_service.get_downloadable_path(db, event_id, photo_id)
+    if resolved is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Photo file not found"
         )
+    abs_path, download_filename = resolved
 
     # Atomically increment download count — only after confirming file exists
     await db.execute(
@@ -188,7 +187,7 @@ async def download_photo(
     return FileResponse(
         str(abs_path),
         media_type="application/octet-stream",
-        filename=photo.filename,
+        filename=download_filename,
     )
 
 

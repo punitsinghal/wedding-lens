@@ -513,7 +513,7 @@ async def test_upload_returns_201_with_pending_status(client, user, event, auth_
         resp = await client.post(
             f"/api/v1/events/{event.id}/photos",
             headers=auth_headers,
-            files={"file": ("wedding.jpg", b"fake-jpeg-bytes", "image/jpeg")},
+            files={"file": ("wedding.jpg", b"\xff\xd8fake-jpeg-bytes", "image/jpeg")},
         )
 
     assert resp.status_code == 201
@@ -531,7 +531,7 @@ async def test_upload_creates_pending_photo_in_db(client, db, user, event, auth_
         resp = await client.post(
             f"/api/v1/events/{event.id}/photos",
             headers=auth_headers,
-            files={"file": ("shot.jpg", b"fake-jpeg-bytes", "image/jpeg")},
+            files={"file": ("shot.jpg", b"\xff\xd8fake-jpeg-bytes", "image/jpeg")},
         )
 
     assert resp.status_code == 201
@@ -541,7 +541,7 @@ async def test_upload_creates_pending_photo_in_db(client, db, user, event, auth_
     photo = result.scalar_one_or_none()
     assert photo is not None
     assert photo.processing_status == "pending"
-    assert photo.file_size == len(b"fake-jpeg-bytes")
+    assert photo.file_size == len(b"\xff\xd8fake-jpeg-bytes")
     assert photo.event_id == event.id
 
 

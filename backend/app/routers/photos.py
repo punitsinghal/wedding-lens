@@ -28,6 +28,7 @@ from app.schemas.photo import (
     ProcessingStatusCounts,
 )
 from app.services.face_pipeline import process_photo
+from app.services.image_format import is_allowed_upload_format
 
 logger = logging.getLogger("weddinglens.photos")
 router = APIRouter(prefix="/api/v1/events/{event_id}/photos", tags=["photos"])
@@ -103,7 +104,12 @@ async def upload_photo(
 
     contents = await file.read()
 
+    # Content-Type header check is defense-in-depth only — it's client-supplied
+    # and trivially spoofable. The magic-byte sniff below is the authoritative
+    # gate (see app/services/image_format.py).
     if file.content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(status_code=422, detail="Only JPEG and PNG files are accepted")
+    if not is_allowed_upload_format(contents):
         raise HTTPException(status_code=422, detail="Only JPEG and PNG files are accepted")
     if len(contents) > MAX_FILE_SIZE:
         raise HTTPException(status_code=422, detail="File exceeds the 25 MB limit")

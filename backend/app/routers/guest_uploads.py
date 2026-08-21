@@ -13,6 +13,7 @@ from app.routers.photos import ALLOWED_CONTENT_TYPES, MAX_FILE_SIZE
 from app.schemas.photo import PhotoUploadResponse
 from app.services.face_pipeline import process_photo
 from app.services.guest_auth import guest_upload_rate_limiter, upload_counter
+from app.services.image_format import is_allowed_upload_format
 from app.services.search_rate_limit import RateLimitExceeded
 
 router = APIRouter(prefix="/api/v1/events/{event_id}/guest-uploads", tags=["guest-uploads"])
@@ -63,10 +64,15 @@ async def upload_guest_photo(
             detail="Upload limit reached for this session.",
         )
 
+    # Content-Type header check is defense-in-depth only — it's client-supplied
+    # and trivially spoofable. The magic-byte sniff below is the authoritative
+    # gate (see app/services/image_format.py).
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(status_code=422, detail="Only JPEG and PNG files are accepted")
 
     contents = await file.read()
+    if not is_allowed_upload_format(contents):
+        raise HTTPException(status_code=422, detail="Only JPEG and PNG files are accepted")
     if len(contents) > MAX_FILE_SIZE:
         raise HTTPException(status_code=422, detail="File exceeds the 25 MB limit")
 

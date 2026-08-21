@@ -14,6 +14,11 @@ from app.models.photo import Photo
 from app.models.user import User
 from app.services.auth import create_access_token, hash_password
 
+# Real JPEG magic bytes — required since upload_photo now sniffs actual file
+# content (app/services/image_format.py), not just the client-supplied
+# Content-Type header.
+JPEG_BYTES = b"\xff\xd8fake-image"
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -110,7 +115,7 @@ async def test_upload_without_album_id(client: AsyncClient, owner_headers: dict,
         resp = await client.post(
             f"/api/v1/events/{event.id}/photos",
             headers=owner_headers,
-            files={"file": ("photo.jpg", io.BytesIO(b"fake-image"), "image/jpeg")},
+            files={"file": ("photo.jpg", io.BytesIO(JPEG_BYTES), "image/jpeg")},
         )
     assert resp.status_code == 201
     body = resp.json()
@@ -135,12 +140,31 @@ async def test_upload_with_album_id(client: AsyncClient, owner_headers: dict, ev
         resp = await client.post(
             f"/api/v1/events/{event.id}/photos",
             headers=owner_headers,
-            files={"file": ("photo.jpg", io.BytesIO(b"fake-image"), "image/jpeg")},
+            files={"file": ("photo.jpg", io.BytesIO(JPEG_BYTES), "image/jpeg")},
             data={"album_id": str(album.id)},
         )
     assert resp.status_code == 201
     body = resp.json()
     assert body["album_id"] == str(album.id)
+
+
+@pytest.mark.asyncio
+async def test_upload_rejects_heic_bytes_with_spoofed_jpeg_content_type(
+    client: AsyncClient, owner_headers: dict, event: Event
+):
+    """A file whose actual bytes are HEIC (or otherwise not JPEG/PNG) must be
+    rejected even if the client claims Content-Type: image/jpeg — the
+    magic-byte sniff in app/services/image_format.py is the authoritative
+    gate, not the client-supplied header."""
+    heic_bytes = b"\x00\x00\x00\x18ftypheic" + b"rest-of-heic-file"
+    with patch("app.routers.photos.process_photo", new=AsyncMock()):
+        resp = await client.post(
+            f"/api/v1/events/{event.id}/photos",
+            headers=owner_headers,
+            files={"file": ("photo.jpg", io.BytesIO(heic_bytes), "image/jpeg")},
+        )
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "Only JPEG and PNG files are accepted"
 
 
 # ---------------------------------------------------------------------------
