@@ -42,16 +42,22 @@ export default function Nav() {
 
   const initial = (displayName ?? '?').charAt(0).toUpperCase();
 
-  // Guest routes get their own lightweight header; the global Nav (with its
-  // Login/Register/Dashboard links, none of which a guest can use) is never
-  // shown there. See docs/decisions for rationale.
-  if (pathname?.startsWith('/g/')) {
-    return null;
-  }
+  // Guest routes keep the PicsLeLo brand for identity, but never the
+  // Login/Register/Dashboard/profile links, none of which a guest can use.
+  // See docs/decisions for rationale.
+  const isGuestRoute = pathname?.startsWith('/g/') ?? false;
+  const guestSlug = isGuestRoute ? pathname?.split('/')[2] : undefined;
+  const brandHref = isGuestRoute
+    ? guestSlug
+      ? `/g/${guestSlug}/gallery`
+      : '/'
+    : isLoggedIn
+      ? '/dashboard'
+      : '/';
 
   return (
     <header className="nav-app">
-      <Link href={isLoggedIn ? '/dashboard' : '/'} className="nav-brand">
+      <Link href={brandHref} className="nav-brand">
         <span className="nav-brand-row">
           <Image
             src="/logo-wordmark.png"
@@ -65,7 +71,7 @@ export default function Nav() {
         </span>
         <span className="nav-tagline">{NAV_TAGLINE}</span>
       </Link>
-      {!authReady ? (
+      {isGuestRoute ? null : !authReady ? (
         <div className="h-8 w-32" />
       ) : isLoggedIn ? (
         <nav className="flex items-center gap-5">

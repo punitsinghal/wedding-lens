@@ -14,7 +14,7 @@ Introduce two shared components and one behavioral change to `Nav`, and use them
 
 1. **`components/Breadcrumb.tsx`** — the only breadcrumb implementation in the codebase now. Takes `items: { label: string; href?: string }[]` (last item unlinked, current page) and an optional `trailing` slot (e.g. `StatusBadge`). All six owner/admin breadcrumbs (event detail, photos, albums, album detail, QR, admin event detail, new-event) now render through it. Any future page needing a breadcrumb must use this component, not hand-rolled JSX.
 2. **`components/guest/GuestHomeLink.tsx`** — the only "return to gallery" control for guest routes. Used by `search` and `favourites`; any future guest page needing a way back to the gallery hub must use this component.
-3. **`Nav.tsx` is now guest-route-aware**: it returns `null` whenever the current path starts with `/g/`, and its logo now links to `/dashboard` for authenticated users instead of unconditionally to `/`. Guest pages never render the global marketing/photographer nav.
+3. **`Nav.tsx` is now guest-route-aware**: on paths starting with `/g/` it still renders the PicsLeLo brand/logo (for identity — losing it read as broken branding, filed as a follow-up regression), but suppresses the Login/Register/Dashboard/profile-menu links, none of which a guest can use. The logo links to `/dashboard` for authenticated users, to the guest's own `/g/{slug}/gallery` on guest routes, and to `/` otherwise — never unconditionally to `/`, which would eject a guest onto the photographer login form.
 4. Event-scoped pages (`app/events/[eventId]/layout.tsx`) now include an "Overview" entry alongside Photos/Albums/QR, so any event-scoped page can reach any other without returning to the breadcrumb's parent first.
 5. Error-state fallbacks on event-scoped pages now target their own immediate breadcrumb parent (Photos/Albums/QR → Event Overview; Album detail → Albums list) instead of uniformly jumping to `/dashboard`.
 
@@ -29,7 +29,7 @@ Introduce two shared components and one behavioral change to `Nav`, and use them
 ## Consequences
 
 - Easier: adding a new owner-scoped or guest-scoped page with correct, consistent navigation — just import `Breadcrumb`/`GuestHomeLink` rather than inventing new markup.
-- Easier: guest-facing pages can no longer accidentally inherit the photographer/admin nav bar.
+- Easier: guest-facing pages can no longer accidentally inherit the photographer/admin nav links, while still keeping the PicsLeLo brand for identity.
 - Harder/requires discipline: any future ad hoc breadcrumb or back-link added outside these components is now a regression, not just an inconsistency — code review should catch direct `<Link>`-based breadcrumb JSX reappearing.
 - No routing or URL changes; no backend changes; no visual/color/typography redesign — scope was intentionally limited to navigation consistency (see `docs/features/navigation-consistency/ux.md`, "Out of scope").
 
