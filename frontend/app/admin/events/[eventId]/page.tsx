@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import Link from 'next/link';
 import { adminGetEventDetail } from '@/lib/api';
 import type { AdminEventDetail } from '@/types/api';
 import StatusBadge from '@/components/StatusBadge';
+import Breadcrumb from '@/components/Breadcrumb';
 import { formatBytes, formatDateTime } from '@/lib/format';
 
 export default function AdminEventDetailPage() {
@@ -34,11 +34,12 @@ export default function AdminEventDetailPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
-      <div className="flex items-center gap-3 mb-6">
-        <Link href="/admin" className="text-sm opacity-60 hover:text-accent hover:opacity-100">
-          &larr; All events
-        </Link>
-      </div>
+      <Breadcrumb
+        items={[
+          { label: 'All events', href: '/admin' },
+          { label: detail?.name ?? '...' },
+        ]}
+      />
 
       {error && (
         <div className="mb-4 px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">

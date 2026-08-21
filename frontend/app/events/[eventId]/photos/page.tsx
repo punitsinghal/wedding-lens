@@ -20,6 +20,7 @@ import {
 import { isAuthenticated, getToken } from '@/lib/auth';
 import type { Event, Album, Photo } from '@/types/api';
 import StatusBadge from '@/components/StatusBadge';
+import Breadcrumb from '@/components/Breadcrumb';
 
 const LIMIT = 50;
 // Accepted file types and size cap
@@ -522,8 +523,8 @@ export default function PhotosPage() {
         <div className="px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
           {loadError}
         </div>
-        <Link href="/dashboard" className="btn btn-secondary mt-4">
-          Back to Dashboard
+        <Link href={`/events/${eventId}`} className="btn btn-secondary mt-4">
+          Back to Event
         </Link>
       </div>
     );
@@ -536,18 +537,14 @@ export default function PhotosPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 mb-6 text-sm flex-wrap opacity-80">
-        <Link href="/dashboard" className="hover:text-accent">
-          Dashboard
-        </Link>
-        <span className="opacity-50">/</span>
-        <Link href={`/events/${eventId}`} className="hover:text-accent truncate">
-          {event?.name ?? '...'}
-        </Link>
-        <span className="opacity-50">/</span>
-        <span className="font-medium opacity-100">Photos</span>
-        {event && <StatusBadge status={event.status} />}
-      </div>
+      <Breadcrumb
+        items={[
+          { label: 'Dashboard', href: '/dashboard' },
+          { label: event?.name ?? '...', href: `/events/${eventId}` },
+          { label: 'Photos' },
+        ]}
+        trailing={event && <StatusBadge status={event.status} />}
+      />
 
       {/* Upload section */}
       <div className="mb-6 card elev-sm">

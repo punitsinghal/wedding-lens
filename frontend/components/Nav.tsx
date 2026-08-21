@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from './AuthProvider';
 
 // Edit by hand to match the season/month — e.g. a festival or wedding-season variant.
@@ -12,6 +12,7 @@ const NAV_TAGLINE = 'Har Event. Sabki Pics.';
 export default function Nav() {
   const { isLoggedIn, isAdminUser, authReady, displayName, email, signOut } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -41,9 +42,16 @@ export default function Nav() {
 
   const initial = (displayName ?? '?').charAt(0).toUpperCase();
 
+  // Guest routes get their own lightweight header; the global Nav (with its
+  // Login/Register/Dashboard links, none of which a guest can use) is never
+  // shown there. See docs/decisions for rationale.
+  if (pathname?.startsWith('/g/')) {
+    return null;
+  }
+
   return (
     <header className="nav-app">
-      <Link href="/" className="nav-brand">
+      <Link href={isLoggedIn ? '/dashboard' : '/'} className="nav-brand">
         <span className="nav-brand-row">
           <Image
             src="/logo-wordmark.png"

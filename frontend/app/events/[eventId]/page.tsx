@@ -26,6 +26,7 @@ import type { Event, AccessMode, Photo, EventAnalytics } from '@/types/api';
 import SlugField from '@/components/SlugField';
 import StatusBadge from '@/components/StatusBadge';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import Breadcrumb from '@/components/Breadcrumb';
 
 type TabKey = 'overview' | 'publish' | 'photographers' | 'danger';
 
@@ -373,9 +374,7 @@ export default function EventDetailPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
       {/* Header */}
-      <p className="text-sm opacity-60 mb-1">
-        <Link href="/dashboard" className="hover:text-accent">Dashboard</Link> / {event.name}
-      </p>
+      <Breadcrumb items={[{ label: 'Dashboard', href: '/dashboard' }, { label: event.name }]} />
       <div className="flex items-center gap-3 mb-5 flex-wrap">
         <h1 className="text-3xl sm:text-4xl truncate">{event.name}</h1>
         <StatusBadge status={event.status} />

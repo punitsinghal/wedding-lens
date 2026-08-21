@@ -7,6 +7,7 @@ import { getAlbum, getEvent, getPhotos, updateAlbum, fetchAuthedBlob } from '@/l
 import { isAuthenticated } from '@/lib/auth';
 import type { Album, Event, Photo } from '@/types/api';
 import PageLoading from '@/components/PageLoading';
+import Breadcrumb from '@/components/Breadcrumb';
 
 export default function AlbumDetailPage() {
   const router = useRouter();
@@ -97,8 +98,8 @@ export default function AlbumDetailPage() {
         <div className="px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
           {error || 'Album not found.'}
         </div>
-        <Link href="/dashboard" className="btn btn-secondary mt-4">
-          Back to Dashboard
+        <Link href={`/events/${eventId}/albums`} className="btn btn-secondary mt-4">
+          Back to Albums
         </Link>
       </div>
     );
@@ -107,21 +108,14 @@ export default function AlbumDetailPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 mb-6 text-sm flex-wrap opacity-80">
-        <Link href="/dashboard" className="hover:text-accent">
-          Dashboard
-        </Link>
-        <span className="opacity-50">/</span>
-        <Link href={`/events/${eventId}`} className="hover:text-accent truncate">
-          {event?.name ?? eventId}
-        </Link>
-        <span className="opacity-50">/</span>
-        <Link href={`/events/${eventId}/albums`} className="hover:text-accent">
-          Albums
-        </Link>
-        <span className="opacity-50">/</span>
-        <span className="font-medium opacity-100 truncate">{album.name}</span>
-      </div>
+      <Breadcrumb
+        items={[
+          { label: 'Dashboard', href: '/dashboard' },
+          { label: event?.name ?? eventId, href: `/events/${eventId}` },
+          { label: 'Albums', href: `/events/${eventId}/albums` },
+          { label: album.name },
+        ]}
+      />
 
       {/* Header */}
       <div className="mb-6">

@@ -8,6 +8,7 @@ import { isAuthenticated, getToken } from '@/lib/auth';
 import type { Event } from '@/types/api';
 import StatusBadge from '@/components/StatusBadge';
 import PageLoading from '@/components/PageLoading';
+import Breadcrumb from '@/components/Breadcrumb';
 
 function DownloadIcon() {
   return (
@@ -108,8 +109,8 @@ export default function QrCodePage() {
         <div className="px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
           {error || 'Event not found.'}
         </div>
-        <Link href="/dashboard" className="btn btn-secondary mt-4">
-          Back to Dashboard
+        <Link href={`/events/${eventId}`} className="btn btn-secondary mt-4">
+          Back to Event
         </Link>
       </div>
     );
@@ -118,14 +119,14 @@ export default function QrCodePage() {
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
       {/* Breadcrumb */}
-      <p className="text-sm opacity-60 mb-1 flex items-center gap-2 flex-wrap">
-        <Link href="/dashboard" className="hover:text-accent">Dashboard</Link> /{' '}
-        <Link href={`/events/${eventId}`} className="hover:text-accent truncate">
-          {event.name}
-        </Link>{' '}
-        / QR Code
-        <StatusBadge status={event.status} />
-      </p>
+      <Breadcrumb
+        items={[
+          { label: 'Dashboard', href: '/dashboard' },
+          { label: event.name, href: `/events/${eventId}` },
+          { label: 'QR Code' },
+        ]}
+        trailing={<StatusBadge status={event.status} />}
+      />
 
       <div className="mt-5 grid grid-cols-1 md:grid-cols-[1fr,260px] gap-11 items-center">
         {/* Left column — link, copy, download */}

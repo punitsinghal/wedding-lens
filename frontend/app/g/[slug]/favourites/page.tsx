@@ -11,6 +11,7 @@ import ShareButton from '@/components/photo-actions/ShareButton';
 import BulkDownloadButton from '@/components/photo-actions/BulkDownloadButton';
 import type { FavouritePhoto } from '@/types/api';
 import PageLoading from '@/components/PageLoading';
+import GuestHomeLink from '@/components/guest/GuestHomeLink';
 
 interface FavouriteCardProps {
   photo: FavouritePhoto;
@@ -95,9 +96,9 @@ export default function FavouritesPage() {
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div>
             <h1 className="text-xl">My Favourites</h1>
-            <Link href={`/g/${slug}/gallery`} className="text-sm text-accent hover:underline mt-0.5 inline-block">
-              Back to gallery
-            </Link>
+            <div className="mt-0.5">
+              <GuestHomeLink slug={slug} />
+            </div>
           </div>
           {visiblePhotos.length > 0 && (
             <BulkDownloadButton source="favourites" eventId={eventId} disabled={false} />

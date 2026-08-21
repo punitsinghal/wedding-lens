@@ -2,7 +2,6 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import Link from 'next/link';
 import { getEventBySlug } from '@/lib/api';
 import {
   isGuestAuthenticated,
@@ -14,6 +13,7 @@ import SearchResults from '@/components/search/SearchResults';
 import SearchError from '@/components/search/SearchError';
 import type { SearchResultItem } from '@/components/search/SelfieUpload';
 import PageLoading from '@/components/PageLoading';
+import GuestHomeLink from '@/components/guest/GuestHomeLink';
 
 // Inner component — useParams requires Suspense wrapper
 function SearchContent() {
@@ -63,27 +63,7 @@ function SearchContent() {
       {/* Header */}
       <header className="bg-bg border-b border-divider px-4 py-4">
         <div className="max-w-6xl mx-auto flex items-center gap-3">
-          <Link
-            href={`/g/${slug}/gallery`}
-            className="opacity-70 hover:opacity-100 hover:text-accent transition-colors"
-            aria-label="Back to gallery"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-              className="h-5 w-5"
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"
-              />
-            </svg>
-          </Link>
+          <GuestHomeLink slug={slug} />
           <h1 className="text-xl">Find my photos</h1>
         </div>
       </header>

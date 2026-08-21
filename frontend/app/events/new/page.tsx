@@ -9,6 +9,7 @@ import { generateSlug, validateSlug } from '@/lib/slugUtils';
 import { isSlugTakenError } from '@/types/api';
 import type { AccessMode } from '@/types/api';
 import SlugField from '@/components/SlugField';
+import Breadcrumb from '@/components/Breadcrumb';
 
 function InfoIcon() {
   return (
@@ -103,6 +104,7 @@ export default function NewEventPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10">
+      <Breadcrumb items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'New Event' }]} />
       <div className="grid grid-cols-1 md:grid-cols-[1fr,300px] gap-11">
         {/* Left column — form */}
         <div>
