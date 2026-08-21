@@ -1,6 +1,7 @@
 """Gallery endpoint tests."""
 
 import uuid
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -440,3 +441,149 @@ async def test_view_beacon_requires_guest_auth(client: AsyncClient, db: AsyncSes
         f"/api/v1/events/{event.id}/photos/{photo.id}/view",
     )
     assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Test 12: GET /photos/{id}/lightbox — lazily generated, cached medium-res
+# preview for the lightbox (not the /preview route in photos.py, which is
+# the photographer-dashboard route serving the thumbnail — see
+# docs/decisions/2026-08-21-lazy-generated-photo-preview-tier.md)
+# ---------------------------------------------------------------------------
+
+
+async def _make_photo_with_original(
+    db: AsyncSession, event: Event, size: tuple[int, int] = (100, 50)
+) -> Photo:
+    """Creates a Photo row backed by a real JPEG written to STORAGE_PATH,
+    so preview generation has an original file to read from."""
+    import os
+
+    from PIL import Image
+
+    storage_dir = Path(os.environ["STORAGE_PATH"]) / f"events/{event.id}"
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"{uuid.uuid4()}.jpg"
+    storage_path = f"events/{event.id}/{filename}"
+
+    img = Image.new("RGB", size, color=(200, 100, 50))
+    img.save(storage_dir / filename, "JPEG")
+
+    photo = Photo(
+        id=uuid.uuid4(),
+        event_id=event.id,
+        filename="test.jpg",
+        storage_path=storage_path,
+        file_size=(storage_dir / filename).stat().st_size,
+        processing_status="complete",
+    )
+    db.add(photo)
+    await db.commit()
+    await db.refresh(photo)
+    return photo
+
+
+@pytest.mark.asyncio
+async def test_preview_generates_and_caches_on_first_request(
+    client: AsyncClient, db: AsyncSession, regular_user: User
+):
+    import os
+
+    from PIL import Image
+
+    event = await _make_event(db, regular_user)
+    photo = await _make_photo_with_original(db, event, size=(100, 50))
+
+    expected_rel_path = f"events/{event.id}/previews/{photo.id}.webp"
+    expected_abs_path = Path(os.environ["STORAGE_PATH"]) / expected_rel_path
+    assert not expected_abs_path.exists()
+
+    resp = await client.get(
+        f"/api/v1/events/{event.id}/photos/{photo.id}/lightbox",
+        headers=_guest_headers(event.id),
+    )
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "image/webp"
+    assert expected_abs_path.exists()
+
+    preview = Image.open(expected_abs_path)
+    # Small original (100x50) must never be upscaled.
+    assert preview.size == (100, 50)
+
+
+@pytest.mark.asyncio
+async def test_preview_downscales_large_original_to_max_2000px_edge(
+    client: AsyncClient, db: AsyncSession, regular_user: User
+):
+    import os
+
+    from PIL import Image
+
+    event = await _make_event(db, regular_user)
+    photo = await _make_photo_with_original(db, event, size=(4000, 2000))
+
+    resp = await client.get(
+        f"/api/v1/events/{event.id}/photos/{photo.id}/lightbox",
+        headers=_guest_headers(event.id),
+    )
+    assert resp.status_code == 200
+
+    expected_abs_path = (
+        Path(os.environ["STORAGE_PATH"]) / f"events/{event.id}/previews/{photo.id}.webp"
+    )
+    preview = Image.open(expected_abs_path)
+    assert max(preview.size) == 2000
+    assert preview.size == (2000, 1000)
+
+
+@pytest.mark.asyncio
+async def test_preview_second_request_serves_cached_file_without_regenerating(
+    client: AsyncClient, db: AsyncSession, regular_user: User
+):
+    from app.services import gallery as gallery_service
+
+    event = await _make_event(db, regular_user)
+    photo = await _make_photo_with_original(db, event)
+
+    resp1 = await client.get(
+        f"/api/v1/events/{event.id}/photos/{photo.id}/lightbox",
+        headers=_guest_headers(event.id),
+    )
+    assert resp1.status_code == 200
+
+    with patch.object(
+        gallery_service, "_generate_preview", wraps=gallery_service._generate_preview
+    ) as mock_generate:
+        resp2 = await client.get(
+            f"/api/v1/events/{event.id}/photos/{photo.id}/lightbox",
+            headers=_guest_headers(event.id),
+        )
+        assert resp2.status_code == 200
+        mock_generate.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_preview_404_when_photo_not_found(
+    client: AsyncClient, db: AsyncSession, regular_user: User
+):
+    event = await _make_event(db, regular_user)
+
+    resp = await client.get(
+        f"/api/v1/events/{event.id}/photos/{uuid.uuid4()}/lightbox",
+        headers=_guest_headers(event.id),
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_preview_404_when_original_file_missing(
+    client: AsyncClient, db: AsyncSession, regular_user: User
+):
+    event = await _make_event(db, regular_user)
+    # storage_path points at a file that was never written to disk.
+    photo = await _make_photo(db, event)
+
+    resp = await client.get(
+        f"/api/v1/events/{event.id}/photos/{photo.id}/lightbox",
+        headers=_guest_headers(event.id),
+    )
+    assert resp.status_code == 404

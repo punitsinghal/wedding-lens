@@ -35,7 +35,7 @@ export default function Lightbox({
   const photo = photos[currentIndex] ?? null;
   const photoId = photo?.id ?? null;
 
-  // Load thumbnail as display image for lightbox
+  // Load medium-resolution (max 2000px) preview as the full-screen display image
   useEffect(() => {
     if (!photoId) return;
 
@@ -44,7 +44,7 @@ export default function Lightbox({
 
     setBlobUrl(null);
 
-    guestFetchBlob(eventId, photo.thumbnail_url ?? `/api/v1/events/${eventId}/photos/${photoId}/thumbnail`)
+    guestFetchBlob(eventId, `/api/v1/events/${eventId}/photos/${photoId}/lightbox`)
       .then((blob) => {
         if (cancelled) return;
         objectUrl = URL.createObjectURL(blob);
@@ -58,7 +58,7 @@ export default function Lightbox({
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [photoId, eventId, photo?.thumbnail_url]);
+  }, [photoId, eventId]);
 
   // View beacon (S6) — fire-and-forget on the photo actually being opened.
   // Keyed on [photoId, eventId] only, so it fires exactly once per photo

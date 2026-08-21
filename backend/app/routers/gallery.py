@@ -105,6 +105,45 @@ async def get_thumbnail(
     )
 
 
+@router.get("/photos/{photo_id}/lightbox")
+async def get_lightbox_preview(
+    event_id: uuid.UUID,
+    photo_id: uuid.UUID,
+    response: Response,
+    guest_event: tuple = Depends(get_validated_guest_event),
+    db: AsyncSession = Depends(get_db),
+) -> FileResponse:
+    """Medium-resolution (<=2000px) preview for the lightbox — generated
+    lazily from the original on first request and cached to disk on subsequent
+    requests. See docs/decisions/2026-08-21-lazy-generated-photo-preview-tier.md.
+
+    Named `/lightbox` rather than `/preview` because
+    `GET /api/v1/events/{event_id}/photos/{photo_id}/preview` already exists
+    in app/routers/photos.py — a photographer-only endpoint (gated by
+    get_event_with_photographer_access) that just re-serves the existing
+    thumbnail_path for the dashboard's photo grid. That route has different
+    auth and different bytes; reusing its path here would either collide
+    (whichever router registers first in main.py wins, silently making the
+    other dead code) or require changing that endpoint's guest-facing
+    behavior, which is out of scope.
+    """
+    _event, refreshed_token, _sid = guest_event
+    response.headers["X-Guest-Token"] = refreshed_token
+
+    abs_path = await gallery_service.get_or_generate_preview_path(db, event_id, photo_id)
+    if abs_path is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Preview not available"
+        )
+
+    media_type = mimetypes.guess_type(str(abs_path))[0] or "image/webp"
+    return FileResponse(
+        str(abs_path),
+        media_type=media_type,
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
+
+
 @router.get("/photos/{photo_id}/download")
 async def download_photo(
     event_id: uuid.UUID,

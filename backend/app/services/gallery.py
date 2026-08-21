@@ -1,5 +1,8 @@
-"""Gallery service — photo listing and album tab counts."""
+"""Gallery service — photo listing, album tab counts, and derived image assets."""
 
+import asyncio
+import io
+import logging
 import uuid
 from pathlib import Path
 
@@ -10,8 +13,14 @@ from app.config import settings
 from app.models.album import Album, CEREMONY_CATEGORIES
 from app.models.photo import Photo
 
+logger = logging.getLogger("weddinglens.gallery")
+
 # Fixed display order for ceremony categories
 _CATEGORY_ORDER = list(CEREMONY_CATEGORIES)
+
+# Longest edge, in pixels, for the lightbox "preview" tier — see
+# docs/decisions/2026-08-21-lazy-generated-photo-preview-tier.md
+PREVIEW_MAX_EDGE = 2000
 
 
 async def get_thumbnail_path(
@@ -31,6 +40,97 @@ async def get_thumbnail_path(
     if not abs_path.is_relative_to(storage_root) or not abs_path.exists():
         return None
     return abs_path
+
+
+def _preview_rel_path(event_id: uuid.UUID, photo_id: uuid.UUID) -> str:
+    """Deterministic, DB-free cache path for a photo's lightbox preview.
+
+    Derived purely from event_id/photo_id (mirrors the `thumbs/` convention
+    used by face_pipeline._generate_thumbnail) so no new DB column or
+    backfill migration is required — see ADR
+    2026-08-21-lazy-generated-photo-preview-tier.md.
+    """
+    return f"events/{event_id}/previews/{photo_id}.webp"
+
+
+def _generate_preview(image_bytes: bytes, abs_path: Path) -> None:
+    """Generate a medium-resolution WebP preview for the lightbox and save it
+    to `abs_path`. Longest edge is capped at PREVIEW_MAX_EDGE px; smaller
+    originals are never upscaled. Mirrors the EXIF-orientation fix used by
+    face_pipeline._generate_thumbnail so previews aren't rendered sideways."""
+    from PIL import Image, ImageOps
+
+    img = Image.open(io.BytesIO(image_bytes))
+    img = ImageOps.exif_transpose(img)
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+
+    w, h = img.size
+    longest = max(w, h)
+    if longest > PREVIEW_MAX_EDGE:
+        scale = PREVIEW_MAX_EDGE / longest
+        new_size = (max(1, round(w * scale)), max(1, round(h * scale)))
+        img = img.resize(new_size, Image.LANCZOS)
+    # else: original is already <= PREVIEW_MAX_EDGE on its longest edge —
+    # never upscale.
+
+    abs_path.parent.mkdir(parents=True, exist_ok=True)
+    # Write to a unique temp file then atomically rename into place, so a
+    # concurrent request that hits the cache mid-write always sees either
+    # nothing (falls through to the read-original path below) or a complete
+    # file — never a partially-written one.
+    tmp_path = abs_path.with_name(f".{abs_path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        img.save(tmp_path, "WEBP", quality=90)
+        tmp_path.replace(abs_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
+async def get_or_generate_preview_path(
+    db: AsyncSession, event_id: uuid.UUID, photo_id: uuid.UUID
+) -> Path | None:
+    """Resolve the absolute path of a photo's lightbox preview, generating
+    and caching it from the original file on first request. Returns None if
+    the photo/original doesn't exist or any resolved path escapes storage.
+
+    See docs/decisions/2026-08-21-lazy-generated-photo-preview-tier.md.
+    """
+    result = await db.execute(
+        select(Photo).where(Photo.id == photo_id, Photo.event_id == event_id)
+    )
+    photo = result.scalar_one_or_none()
+    if photo is None:
+        return None
+
+    storage_root = Path(settings.STORAGE_PATH).resolve()
+
+    abs_preview_path = (storage_root / _preview_rel_path(event_id, photo_id)).resolve()
+    if not abs_preview_path.is_relative_to(storage_root):
+        return None
+
+    if abs_preview_path.exists():
+        return abs_preview_path
+
+    abs_original_path = (storage_root / photo.storage_path).resolve()
+    if not abs_original_path.is_relative_to(storage_root) or not abs_original_path.exists():
+        return None
+
+    try:
+        image_bytes = await asyncio.to_thread(abs_original_path.read_bytes)
+        await asyncio.to_thread(_generate_preview, image_bytes, abs_preview_path)
+    except Exception as exc:
+        logger.warning(
+            '{"event": "preview_generation_error", "photo_id": "%s", "exc_type": "%s", "detail": "%s"}',
+            photo_id,
+            type(exc).__name__,
+            str(exc),
+        )
+        return None
+
+    if not abs_preview_path.exists():
+        return None
+    return abs_preview_path
 
 
 async def list_photos(
