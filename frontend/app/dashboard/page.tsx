@@ -6,6 +6,7 @@ import { getDashboardEvents, getMyAssignedEvents } from '@/lib/api';
 import type { Event, AssignedEvent } from '@/types/api';
 import EventCard from '@/components/EventCard';
 import AssignedEventCard from '@/components/AssignedEventCard';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 function PlusIcon() {
   return (
@@ -52,30 +53,38 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {isLoading ? (
-        <div className="text-center py-16 text-neutral-600 text-sm">Loading events...</div>
-      ) : events.length === 0 ? (
-        <div className="text-center py-16 border-2 border-dashed border-divider rounded-lg">
-          <p className="text-neutral-600 text-sm mb-4">No events yet.</p>
-          <Link href="/events/new" className="btn btn-primary">
-            <PlusIcon />
-            Create your first event
-          </Link>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {events.map((event) => (
-            <EventCard key={event.id} event={event} />
-          ))}
-          <Link
-            href="/events/new"
-            className="flex flex-col items-center justify-center gap-2 min-h-[240px] rounded-lg border-2 border-dashed border-divider text-neutral-600 hover:border-accent hover:text-accent transition-colors text-center p-6"
-          >
-            <PlusIcon />
-            <span className="text-sm font-medium">Create your next event</span>
-          </Link>
-        </div>
-      )}
+      <ErrorBoundary
+        fallback={
+          <div className="mb-6 px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
+            Could not load events — try refreshing.
+          </div>
+        }
+      >
+        {isLoading ? (
+          <div className="text-center py-16 text-neutral-600 text-sm">Loading events...</div>
+        ) : events.length === 0 ? (
+          <div className="text-center py-16 border-2 border-dashed border-divider rounded-lg">
+            <p className="text-neutral-600 text-sm mb-4">No events yet.</p>
+            <Link href="/events/new" className="btn btn-primary">
+              <PlusIcon />
+              Create your first event
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {events.map((event) => (
+              <EventCard key={event.id} event={event} />
+            ))}
+            <Link
+              href="/events/new"
+              className="flex flex-col items-center justify-center gap-2 min-h-[240px] rounded-lg border-2 border-dashed border-divider text-neutral-600 hover:border-accent hover:text-accent transition-colors text-center p-6"
+            >
+              <PlusIcon />
+              <span className="text-sm font-medium">Create your next event</span>
+            </Link>
+          </div>
+        )}
+      </ErrorBoundary>
 
       {assignedEventsError && (
         <div className="mt-4 px-4 py-3 rounded-md text-sm bg-[#fdeceb] text-[#8c2018] border border-[#f3c6c2]">
