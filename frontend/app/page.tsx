@@ -7,10 +7,23 @@ import Image from 'next/image';
 import { isAuthenticated } from '@/lib/auth';
 import { IllustrationTile } from '@/components/HomeIllustrations';
 
-function HeroPhoto({ src, alt, className = '' }: { src: string; alt: string; className?: string }) {
+function HeroPhoto({
+  src,
+  alt,
+  label,
+  className = '',
+}: {
+  src: string;
+  alt: string;
+  label?: string;
+  className?: string;
+}) {
   return (
     <div className={`relative overflow-hidden ${className}`}>
       <Image src={src} alt={alt} fill sizes="(min-width: 1024px) 260px, 45vw" className="object-cover" />
+      {label && (
+        <span className="absolute bottom-3 left-3 tag bg-white/90 text-ink backdrop-blur-sm">{label}</span>
+      )}
     </div>
   );
 }
@@ -87,13 +100,13 @@ const HOW_IT_WORKS_STEPS = [
     icon: CalendarIcon,
     tone: 'accent' as const,
     title: 'Create your event',
-    body: 'Add your names and date, pick how guests get in — a link, a code, or open access.',
+    body: 'Wedding or conference, set the date and pick how guests get in — a link, a code, or open access.',
   },
   {
     icon: ScanShareIcon,
     tone: 'accent-2' as const,
     title: 'Guests scan & share',
-    body: "A QR code on the table cards or invite. No app, no sign-up — they're uploading in one tap.",
+    body: "A QR code on table cards, badges, or the invite. No app, no sign-up — they're uploading in one tap.",
   },
   {
     icon: FaceSearchIcon,
@@ -106,7 +119,7 @@ const HOW_IT_WORKS_STEPS = [
 const HOST_BENEFITS = [
   {
     title: 'Albums that sort themselves',
-    body: 'Ceremony, sangeet, reception — photos land in the right album as they come in.',
+    body: 'Ceremony, sangeet, reception — or keynotes, breakouts, after-party. Photos land in the right album as they come in.',
   },
   {
     title: 'Download everything, in full resolution',
@@ -127,11 +140,12 @@ function MarketingHome() {
           <div>
             <span className="tag tag-accent mb-5">No app to download</span>
             <h1 className="text-4xl sm:text-5xl lg:text-6xl mb-5">
-              Every guest&apos;s photos, in one gallery.
+              Every guest&apos;s photos, from weddings to conferences.
             </h1>
             <p className="text-base sm:text-lg opacity-75 mb-8 max-w-md">
-              Guests scan a QR code and start uploading in seconds — no account, no app. You get
-              one private gallery with everything, searchable by face.
+              Wedding, offsite, or annual conference — guests scan a QR code and start uploading
+              in seconds, no account, no app. You get one private gallery with everything,
+              searchable by face.
             </p>
             <div className="flex flex-wrap gap-3 mb-12">
               <Link href="/register" className="btn btn-primary">
@@ -167,11 +181,13 @@ function MarketingHome() {
                 <HeroPhoto
                   src="/hero/mandap.png"
                   alt="Couple under a fairy-lit floral wedding arch"
+                  label="Wedding"
                   className="h-36 sm:h-40 rounded-[26px]"
                 />
                 <HeroPhoto
                   src="/hero/sangeet.png"
                   alt="Groomsmen dancing at a baraat celebration"
+                  label="Wedding"
                   className="h-52 sm:h-56 rounded-[26px]"
                 />
               </div>
@@ -179,11 +195,13 @@ function MarketingHome() {
                 <HeroPhoto
                   src="/hero/reception.png"
                   alt="Newlyweds raising a toast under string lights"
+                  label="Wedding"
                   className="h-52 sm:h-56 rounded-[26px]"
                 />
                 <HeroPhoto
                   src="/hero/corporate.png"
-                  alt="City skyline at night"
+                  alt="City skyline behind a corporate venue at night"
+                  label="Corporate"
                   className="h-36 sm:h-40 rounded-[26px]"
                 />
               </div>
@@ -234,7 +252,7 @@ function MarketingHome() {
           <div className="order-1 lg:order-2">
             <span className="tag tag-accent mb-4">Built for hosts</span>
             <h2 className="text-3xl sm:text-4xl mb-6">
-              Every angle of the day, organized automatically
+              Every angle of the event, organized automatically
             </h2>
             <ul className="space-y-6">
               {HOST_BENEFITS.map((benefit) => (

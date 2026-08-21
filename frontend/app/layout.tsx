@@ -20,7 +20,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: 'PicsLeLo',
-  description: 'Private wedding photo sharing with AI face recognition',
+  description: 'Private photo sharing for weddings and corporate events, powered by AI face recognition',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
