@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { guestFetchBlob, recordPhotoView } from '@/lib/api';
+import { downloadPhoto, guestFetchBlob, recordPhotoView } from '@/lib/api';
 import type { GalleryPhoto } from '@/types/api';
 import FavouriteToggle from '@/components/photo-actions/FavouriteToggle';
 import ShareButton from '@/components/photo-actions/ShareButton';
@@ -98,16 +98,7 @@ export default function Lightbox({
     if (!photo || downloading) return;
     setDownloading(true);
     try {
-      const blob = await guestFetchBlob(
-        eventId,
-        `/api/v1/events/${eventId}/photos/${photo.id}/download`
-      );
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = '';
-      a.click();
-      URL.revokeObjectURL(url);
+      await downloadPhoto(eventId, photo.id);
     } catch {
       // silently fail — could add a toast notification in future
     } finally {
