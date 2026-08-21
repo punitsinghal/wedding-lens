@@ -51,7 +51,7 @@ export default function EventCard({ event }: Props) {
           <img
             src={coverUrl}
             alt=""
-            className="absolute inset-0 w-full h-full object-cover"
+            className="absolute inset-0 w-full h-full object-cover object-top"
           />
         )}
       </div>
