@@ -159,6 +159,10 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Response headers are NOT exposed to frontend JS cross-origin by default
+    # (only a small CORS safelist is) — without this, fetch()-based downloads
+    # can't read the real filename and always fall back to a generic name.
+    expose_headers=["Content-Disposition"],
 )
 
 
