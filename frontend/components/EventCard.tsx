@@ -1,4 +1,8 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { ownerFetchBlob } from '@/lib/api';
 import type { Event } from '@/types/api';
 import StatusBadge from './StatusBadge';
 
@@ -7,6 +11,32 @@ interface Props {
 }
 
 export default function EventCard({ event }: Props) {
+  const [coverUrl, setCoverUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!event.cover_photo_id) return;
+
+    let objectUrl: string | null = null;
+    let cancelled = false;
+
+    ownerFetchBlob(`/api/v1/events/${event.id}/cover-thumbnail`)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setCoverUrl(objectUrl);
+      })
+      .catch(() => {
+        // leave coverUrl as null — placeholder stays visible
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [event.id, event.cover_photo_id]);
+
   const formattedDate = new Date(event.event_date).toLocaleDateString('en-IN', {
     day: 'numeric',
     month: 'long',
@@ -15,7 +45,16 @@ export default function EventCard({ event }: Props) {
 
   return (
     <div className="card elev-sm">
-      <div className="aspect-[4/3] w-full rounded-md bg-neutral-200" />
+      <div className="relative aspect-[4/3] w-full overflow-hidden rounded-md bg-neutral-200">
+        {coverUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={coverUrl}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        )}
+      </div>
 
       <div className="flex items-center gap-2 flex-wrap">
         <StatusBadge status={event.status} />

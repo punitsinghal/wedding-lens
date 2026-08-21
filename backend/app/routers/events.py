@@ -143,6 +143,30 @@ async def get_event(
     return EventOut.model_validate(event)
 
 
+@router.get("/{event_id}/cover-thumbnail")
+async def get_event_cover_thumbnail(
+    event_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    event: Event = Depends(get_event_owner_only),
+) -> FileResponse:
+    """Owner-authenticated cover-photo thumbnail, unlike the public by-slug
+    variant this is not gated on the event being published — the dashboard
+    needs to show a Draft event's chosen cover too."""
+    if event.cover_photo_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cover photo not available")
+
+    abs_path = await gallery_service.get_thumbnail_path(db, event.id, event.cover_photo_id)
+    if abs_path is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cover photo not available")
+
+    media_type = mimetypes.guess_type(str(abs_path))[0] or "image/webp"
+    return FileResponse(
+        str(abs_path),
+        media_type=media_type,
+        headers={"Cache-Control": "private, max-age=300"},
+    )
+
+
 @router.put("/{event_id}", response_model=EventOut)
 async def update_event(
     event_id: uuid.UUID,

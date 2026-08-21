@@ -236,6 +236,80 @@ async def test_cover_by_slug_success(
 
 
 # ---------------------------------------------------------------------------
+# Owner-authenticated cover thumbnail (dashboard event cards)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_owner_cover_thumbnail_404_without_cover_photo(
+    client: AsyncClient, auth_headers: dict
+):
+    event_id = (await create_event(client, auth_headers)).json()["id"]
+    resp = await client.get(
+        f"/api/v1/events/{event_id}/cover-thumbnail", headers=auth_headers
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_owner_cover_thumbnail_success_while_draft(
+    client: AsyncClient, db: AsyncSession, auth_headers: dict
+):
+    # Unlike the public by-slug endpoint, the owner-authenticated variant
+    # must serve the cover thumbnail even before the event is published.
+    event_id = (await create_event(client, auth_headers)).json()["id"]
+
+    storage_dir = Path(os.environ["STORAGE_PATH"]) / f"events/{event_id}/thumbs"
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    thumb_filename = f"{uuid.uuid4()}.webp"
+    (storage_dir / thumb_filename).write_bytes(b"fake-thumbnail-bytes")
+    thumbnail_path = f"events/{event_id}/thumbs/{thumb_filename}"
+
+    photo = Photo(
+        id=uuid.uuid4(),
+        event_id=uuid.UUID(event_id),
+        filename="cover.jpg",
+        storage_path=f"events/{event_id}/{uuid.uuid4()}.jpg",
+        file_size=1024,
+        processing_status="complete",
+        thumbnail_path=thumbnail_path,
+    )
+    db.add(photo)
+    await db.commit()
+
+    await client.put(
+        f"/api/v1/events/{event_id}",
+        json={"cover_photo_id": str(photo.id)},
+        headers=auth_headers,
+    )
+
+    resp = await client.get(
+        f"/api/v1/events/{event_id}/cover-thumbnail", headers=auth_headers
+    )
+    assert resp.status_code == 200
+    assert resp.content == b"fake-thumbnail-bytes"
+
+
+@pytest.mark.asyncio
+async def test_owner_cover_thumbnail_403_for_non_owner(
+    client: AsyncClient, auth_headers: dict
+):
+    event_id = (await create_event(client, auth_headers)).json()["id"]
+    await client.post(
+        "/api/v1/auth/register",
+        json={"email": "other-cover@example.com", "password": "pass"},
+    )
+    login_resp = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "other-cover@example.com", "password": "pass"},
+    )
+    other_headers = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
+    resp = await client.get(
+        f"/api/v1/events/{event_id}/cover-thumbnail", headers=other_headers
+    )
+    assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
 # Publish validation (REQ-31)
 # ---------------------------------------------------------------------------
 
