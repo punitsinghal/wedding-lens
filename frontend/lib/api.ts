@@ -34,6 +34,25 @@ function baseUrl(): string {
   return process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 }
 
+// Parses a Content-Disposition header for the real filename. Handles both
+// the quoted form (`filename="IMG_4521.JPG"`) and the RFC 5987 form used
+// whenever the name has spaces/parens/unicode (`filename*=UTF-8''IMG%20...`),
+// which Starlette emits instead of (never alongside) the quoted form.
+function filenameFromContentDisposition(header: string | null): string | null {
+  if (!header) return null;
+  const quoted = header.match(/filename="(.+?)"/)?.[1];
+  if (quoted) return quoted;
+  const encoded = header.match(/filename\*=(?:UTF-8|utf-8)''([^;]+)/)?.[1];
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded);
+    } catch {
+      return encoded;
+    }
+  }
+  return null;
+}
+
 interface FetchOptions extends Omit<RequestInit, 'body'> {
   body?: unknown;
 }
@@ -567,7 +586,7 @@ export async function downloadZip(eventId: string, photoIds: string[]): Promise<
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = response.headers.get('Content-Disposition')?.match(/filename="(.+?)"/)?.[1]
+  a.download = filenameFromContentDisposition(response.headers.get('Content-Disposition'))
     ?? 'wedding-my-photos.zip';
   document.body.appendChild(a);
   a.click();
@@ -591,7 +610,7 @@ export async function downloadPhoto(eventId: string, photoId: string): Promise<v
 
   const blob = await response.blob();
   const filename =
-    response.headers.get('Content-Disposition')?.match(/filename="(.+?)"/)?.[1] ?? 'photo.jpg';
+    filenameFromContentDisposition(response.headers.get('Content-Disposition')) ?? 'photo.jpg';
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -828,7 +847,7 @@ export async function downloadFavouritesZip(eventId: string): Promise<void> {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = response.headers.get('Content-Disposition')?.match(/filename="(.+?)"/)?.[1]
+  a.download = filenameFromContentDisposition(response.headers.get('Content-Disposition'))
     ?? 'wedding-my-favourites.zip';
   document.body.appendChild(a);
   a.click();
