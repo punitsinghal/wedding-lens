@@ -11,7 +11,6 @@ import asyncio
 import io
 import logging
 import uuid
-from pathlib import Path
 
 import pillow_heif
 from sqlalchemy import func, or_, select
@@ -193,79 +192,6 @@ def _convert_to_jpeg(image_bytes: bytes) -> bytes:
     return buf.getvalue()
 
 
-def _resolve_downloadable(
-    storage_root: Path,
-    event_id: uuid.UUID,
-    photo_id: uuid.UUID,
-    storage_path: str,
-    filename: str,
-) -> tuple[Path, str] | None:
-    """DEPRECATED compatibility shim, kept ONLY because
-    `app/services/zip_streaming.py` still imports and calls this sync,
-    local-disk function directly from its thread-pool-executed generator.
-
-    Everything else in this module now reads/writes R2 (see
-    `get_downloadable_key` below) — this function still assumes photo
-    originals are reachable on local disk under `storage_root`, which is no
-    longer true for photos uploaded through the R2-backed multipart flow
-    (`app/routers/uploads.py`, `app/routers/guest_uploads.py`). It is
-    retained, unmigrated, so `zip_streaming.py`'s import doesn't break the
-    whole app (it's imported at module load time via
-    `app/routers/photo_actions.py`) while that module gets its own R2
-    adaptation in a later task (concurrent per-object R2 fetch into the
-    archive, per docs/features/photo-storage-migration/design.md's "ZIP
-    generation" section). Do not add new callers of this function — use
-    `get_downloadable_key` instead.
-    """
-    abs_original_path = (storage_root / storage_path).resolve()
-    if not abs_original_path.is_relative_to(storage_root) or not abs_original_path.exists():
-        return None
-
-    try:
-        with abs_original_path.open("rb") as f:
-            header = f.read(16)
-    except OSError:
-        return None
-
-    if sniff_image_format(header) in ("jpeg", "png"):
-        return abs_original_path, filename
-
-    abs_download_path = (storage_root / _download_rel_path(event_id, photo_id)).resolve()
-    if not abs_download_path.is_relative_to(storage_root):
-        return abs_original_path, filename
-
-    converted_filename = _swap_ext_to_jpg(filename)
-
-    if abs_download_path.exists():
-        return abs_download_path, converted_filename
-
-    try:
-        image_bytes = abs_original_path.read_bytes()
-        jpeg_bytes = _convert_to_jpeg(image_bytes)
-        abs_download_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = abs_download_path.with_name(
-            f".{abs_download_path.name}.{uuid.uuid4().hex}.tmp"
-        )
-        try:
-            tmp_path.write_bytes(jpeg_bytes)
-            tmp_path.replace(abs_download_path)
-        finally:
-            tmp_path.unlink(missing_ok=True)
-    except Exception as exc:
-        logger.warning(
-            '{"event": "download_conversion_error", "photo_id": "%s", "exc_type": "%s", "detail": "%s"}',
-            photo_id,
-            type(exc).__name__,
-            str(exc),
-        )
-        return abs_original_path, filename
-
-    if not abs_download_path.exists():
-        return abs_original_path, filename
-
-    return abs_download_path, converted_filename
-
-
 async def get_downloadable_key(
     db: AsyncSession, event_id: uuid.UUID, photo_id: uuid.UUID
 ) -> tuple[str, str] | None:
@@ -275,12 +201,6 @@ async def get_downloadable_key(
     unavailable. Already-JPEG/PNG originals are returned unchanged (never
     re-encoded). Anything else is treated as HEIC/HEIF-or-unknown and
     converted, cached, lazily.
-
-    NOTE: `app/services/zip_streaming.py` currently imports and calls the
-    old sync `_resolve_downloadable` helper directly from a thread-pool
-    generator (it needs a real filesystem path, which no longer applies
-    under R2). That module will need its own adaptation in a later task —
-    it is intentionally not touched here.
 
     See docs/decisions/2026-08-21-heic-to-jpeg-conversion-for-downloads.md.
     """

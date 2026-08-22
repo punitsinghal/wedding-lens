@@ -788,74 +788,10 @@ async def test_download_second_request_reuses_cached_conversion(
 
 # ---------------------------------------------------------------------------
 # Test 14: ZIP download still converts HEIC entries to JPEG. `zip_streaming.py`
-# is unmigrated (still reads originals from local disk via the retained
-# `gallery._resolve_downloadable` compatibility shim — see its docstring)
-# so this test still writes real files to STORAGE_PATH, unlike the R2-backed
-# tests above.
+# now fetches originals from R2 (like the rest of this module), so this test
+# mocks `app.services.zip_streaming.r2.*` the same way the single-download
+# tests above mock `app.services.gallery.r2.*`.
 # ---------------------------------------------------------------------------
-
-
-async def _make_photo_with_original(
-    db: AsyncSession, event: Event, size: tuple[int, int] = (100, 50)
-):
-    import os
-    from pathlib import Path
-
-    from PIL import Image
-
-    storage_dir = Path(os.environ["STORAGE_PATH"]) / f"events/{event.id}"
-    storage_dir.mkdir(parents=True, exist_ok=True)
-    filename = f"{uuid.uuid4()}.jpg"
-    storage_path = f"events/{event.id}/{filename}"
-
-    img = Image.new("RGB", size, color=(200, 100, 50))
-    img.save(storage_dir / filename, "JPEG")
-
-    photo = Photo(
-        id=uuid.uuid4(),
-        event_id=event.id,
-        filename="test.jpg",
-        storage_path=storage_path,
-        file_size=(storage_dir / filename).stat().st_size,
-        processing_status="complete",
-    )
-    db.add(photo)
-    await db.commit()
-    await db.refresh(photo)
-    return photo
-
-
-def _write_heic(abs_path, size: tuple[int, int] = (80, 40)) -> None:
-    from PIL import Image
-
-    abs_path.parent.mkdir(parents=True, exist_ok=True)
-    img = Image.new("RGB", size, color=(10, 20, 30))
-    img.save(abs_path, format="HEIF")
-
-
-async def _make_photo_with_heic_original(
-    db: AsyncSession, event: Event, filename: str = "IMG_4521.HEIC"
-):
-    import os
-    from pathlib import Path
-
-    storage_dir = Path(os.environ["STORAGE_PATH"]) / f"events/{event.id}"
-    storage_filename = f"{uuid.uuid4()}.heic"
-    storage_path = f"events/{event.id}/{storage_filename}"
-    _write_heic(storage_dir / storage_filename)
-
-    photo = Photo(
-        id=uuid.uuid4(),
-        event_id=event.id,
-        filename=filename,
-        storage_path=storage_path,
-        file_size=(storage_dir / storage_filename).stat().st_size,
-        processing_status="complete",
-    )
-    db.add(photo)
-    await db.commit()
-    await db.refresh(photo)
-    return photo
 
 
 @pytest.mark.asyncio
@@ -867,14 +803,30 @@ async def test_zip_download_converts_heic_entries_to_jpeg(
     import zipfile
 
     event = await _make_event(db, regular_user)
-    jpeg_photo = await _make_photo_with_original(db, event, size=(40, 20))
-    heic_photo = await _make_photo_with_heic_original(db, event, filename="IMG_9001.heic")
+    jpeg_photo = await _make_photo_row(db, event, filename="test.jpg")
+    heic_photo = await _make_photo_row(db, event, filename="IMG_9001.heic")
 
-    resp = await client.post(
-        f"/api/v1/events/{event.id}/photos/zip",
-        headers=_guest_headers(event.id),
-        json={"photo_ids": [str(jpeg_photo.id), str(heic_photo.id)]},
-    )
+    jpeg_bytes = _real_jpeg_bytes(size=(40, 20))
+    heic_bytes = _real_heic_bytes(size=(80, 40))
+    originals = {
+        jpeg_photo.storage_path: jpeg_bytes,
+        heic_photo.storage_path: heic_bytes,
+    }
+
+    with patch(
+        "app.services.zip_streaming.r2.read_range",
+        side_effect=lambda key, start, end: originals[key][:16],
+    ), patch(
+        "app.services.zip_streaming.r2.download_object",
+        side_effect=lambda key: originals[key],
+    ), patch(
+        "app.services.zip_streaming.r2.head_object", return_value=False
+    ), patch("app.services.zip_streaming.r2.put_object"):
+        resp = await client.post(
+            f"/api/v1/events/{event.id}/photos/zip",
+            headers=_guest_headers(event.id),
+            json={"photo_ids": [str(jpeg_photo.id), str(heic_photo.id)]},
+        )
     assert resp.status_code == 200
 
     with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:

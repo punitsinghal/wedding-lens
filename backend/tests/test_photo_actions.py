@@ -1,9 +1,8 @@
 """Photo actions endpoint tests."""
 
-import os
+import io
 import uuid
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 from unittest.mock import patch
 
@@ -88,6 +87,14 @@ def _guest_sid(event_id: uuid.UUID) -> tuple[dict, str]:
     sid = str(uuid.uuid4())
     headers = _guest_headers(event_id, sid=sid)
     return headers, sid
+
+
+def _real_jpeg_bytes(size: tuple[int, int] = (10, 10), color=(200, 100, 50)) -> bytes:
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", size, color=color).save(buf, "JPEG")
+    return buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
@@ -284,14 +291,10 @@ async def test_favourites_zip_writes_one_download_event(
     event = await _make_event(db, regular_user)
     headers, sid = _guest_sid(event.id)
 
-    storage_dir = Path(os.environ["STORAGE_PATH"]) / f"events/{event.id}"
-    storage_dir.mkdir(parents=True, exist_ok=True)
-
     photos = []
     for i in range(2):
         photo_filename = f"{uuid.uuid4()}.jpg"
         storage_path = f"events/{event.id}/{photo_filename}"
-        (storage_dir / photo_filename).write_bytes(b"fake-photo-data")
         photos.append(
             await _make_photo(db, event, storage_path=storage_path, filename=f"f{i}.jpg")
         )
@@ -302,10 +305,13 @@ async def test_favourites_zip_writes_one_download_event(
         )
         assert add_resp.status_code == 204
 
-    resp = await client.post(
-        f"/api/v1/events/{event.id}/favourites/zip",
-        headers=headers,
-    )
+    jpeg_bytes = _real_jpeg_bytes()
+    with patch("app.services.zip_streaming.r2.read_range", return_value=jpeg_bytes[:16]), \
+         patch("app.services.zip_streaming.r2.download_object", return_value=jpeg_bytes):
+        resp = await client.post(
+            f"/api/v1/events/{event.id}/favourites/zip",
+            headers=headers,
+        )
     assert resp.status_code == 200
     assert resp.content[:2] == b"PK"
 
@@ -431,20 +437,18 @@ async def test_bulk_zip_valid_photos(
 ):
     event = await _make_event(db, regular_user)
 
-    # Create a real file on disk
-    storage_dir = Path(os.environ["STORAGE_PATH"]) / f"events/{event.id}"
-    storage_dir.mkdir(parents=True, exist_ok=True)
     photo_filename = f"{uuid.uuid4()}.jpg"
     storage_path = f"events/{event.id}/{photo_filename}"
-    (storage_dir / photo_filename).write_bytes(b"fake-photo-data")
-
     photo = await _make_photo(db, event, storage_path=storage_path, filename="myphoto.jpg")
 
-    resp = await client.post(
-        f"/api/v1/events/{event.id}/photos/zip",
-        json={"photo_ids": [str(photo.id)]},
-        headers=_guest_headers(event.id),
-    )
+    jpeg_bytes = _real_jpeg_bytes()
+    with patch("app.services.zip_streaming.r2.read_range", return_value=jpeg_bytes[:16]), \
+         patch("app.services.zip_streaming.r2.download_object", return_value=jpeg_bytes):
+        resp = await client.post(
+            f"/api/v1/events/{event.id}/photos/zip",
+            json={"photo_ids": [str(photo.id)]},
+            headers=_guest_headers(event.id),
+        )
     assert resp.status_code == 200
     assert resp.headers["content-type"] == "application/zip"
     assert "attachment" in resp.headers["content-disposition"]
@@ -464,23 +468,22 @@ async def test_bulk_zip_writes_one_download_event_not_per_photo(
 ):
     event = await _make_event(db, regular_user)
 
-    storage_dir = Path(os.environ["STORAGE_PATH"]) / f"events/{event.id}"
-    storage_dir.mkdir(parents=True, exist_ok=True)
-
     photos = []
     for i in range(3):
         photo_filename = f"{uuid.uuid4()}.jpg"
         storage_path = f"events/{event.id}/{photo_filename}"
-        (storage_dir / photo_filename).write_bytes(b"fake-photo-data")
         photos.append(
             await _make_photo(db, event, storage_path=storage_path, filename=f"p{i}.jpg")
         )
 
-    resp = await client.post(
-        f"/api/v1/events/{event.id}/photos/zip",
-        json={"photo_ids": [str(p.id) for p in photos]},
-        headers=_guest_headers(event.id),
-    )
+    jpeg_bytes = _real_jpeg_bytes()
+    with patch("app.services.zip_streaming.r2.read_range", return_value=jpeg_bytes[:16]), \
+         patch("app.services.zip_streaming.r2.download_object", return_value=jpeg_bytes):
+        resp = await client.post(
+            f"/api/v1/events/{event.id}/photos/zip",
+            json={"photo_ids": [str(p.id) for p in photos]},
+            headers=_guest_headers(event.id),
+        )
     assert resp.status_code == 200
     assert resp.content[:2] == b"PK"
 
