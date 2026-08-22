@@ -467,33 +467,30 @@ export async function ownerFetchBlob(path: string): Promise<Blob> {
 }
 
 // ---------------------------------------------------------------------------
-// Guest uploads — guest-authenticated multipart upload
+// Guest uploads — guest-authenticated, presigned-R2 upload
 //
-// Follows the raw-fetch-for-multipart pattern established for SelfieUpload
-// (see docs/decisions/2026-06-20-selfie-upload-raw-fetch.md): guestApiFetch
-// JSON.stringifies its body and can't carry a File, so this call builds the
-// request by hand, refreshes the guest token from the response header, and
-// clears the stored token on 401 the same way guestApiFetch does internally.
+// The guest-token/refresh/error-handling logic here is shared by both the
+// `initiate` and `complete` calls below (either could plausibly 401 or
+// 429) — the guest-token param (not guestApiFetch's internal
+// getGuestToken(eventId)) and onTokenRefresh callback (not setGuestToken)
+// are preserved exactly as this file's raw-fetch guest-upload calls have
+// always used them.
 // ---------------------------------------------------------------------------
 
-export async function uploadGuestPhoto(
+async function guestUploadFetch<T>(
   eventId: string,
+  path: string,
   guestToken: string,
-  file: File,
-  displayName: string | undefined,
+  body: unknown,
   onTokenRefresh: (newToken: string) => void
-): Promise<PhotoUploadResponse> {
-  const formData = new FormData();
-  formData.append('file', file);
-  if (displayName) formData.append('display_name', displayName);
-
-  const headers: Record<string, string> = {};
+): Promise<T> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (guestToken) headers['Authorization'] = `Bearer ${guestToken}`;
 
-  const response = await fetch(`${baseUrl()}/api/v1/events/${eventId}/guest-uploads`, {
+  const response = await fetch(`${baseUrl()}${path}`, {
     method: 'POST',
     headers,
-    body: formData,
+    body: JSON.stringify(body),
   });
 
   const refreshedToken = response.headers.get('X-Guest-Token');
@@ -521,7 +518,38 @@ export async function uploadGuestPhoto(
     };
   }
 
-  return response.json() as Promise<PhotoUploadResponse>;
+  return response.json() as Promise<T>;
+}
+
+export async function uploadGuestPhoto(
+  eventId: string,
+  guestToken: string,
+  file: File,
+  displayName: string | undefined,
+  onTokenRefresh: (newToken: string) => void
+): Promise<PhotoUploadResponse> {
+  const { photo_id, upload_url } = await guestUploadFetch<{ photo_id: string; upload_url: string }>(
+    eventId,
+    `/api/v1/events/${eventId}/guest-uploads/initiate`,
+    guestToken,
+    { filename: file.name, file_size_bytes: file.size, display_name: displayName ?? null },
+    onTokenRefresh
+  );
+
+  // PUT the file bytes straight to R2 — no guest token, no custom headers,
+  // the presigned URL's query string is self-authenticating.
+  const uploadResponse = await fetch(upload_url, { method: 'PUT', body: file });
+  if (!uploadResponse.ok) {
+    throw { status: uploadResponse.status };
+  }
+
+  return guestUploadFetch<PhotoUploadResponse>(
+    eventId,
+    `/api/v1/events/${eventId}/guest-uploads/${photo_id}/complete`,
+    guestToken,
+    { filename: file.name, display_name: displayName ?? null },
+    onTokenRefresh
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -697,19 +725,24 @@ export async function uploadChunk(
   chunkIndex: number,
   bytes: Uint8Array
 ): Promise<void> {
-  const token = getToken();
-  const headers: Record<string, string> = { 'Content-Type': 'application/octet-stream' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-
-  const response = await fetch(
-    `${baseUrl()}/api/v1/events/${eventId}/uploads/${sessionId}/chunks/${chunkIndex}`,
-    { method: 'PUT', headers, body: bytes.buffer as ArrayBuffer }
+  // Ask the backend for a presigned R2 URL for this chunk (owner-scoped,
+  // same Bearer auth + `.detail` error handling as every other apiFetch call).
+  const { url } = await apiFetch<{ chunk_index: number; url: string }>(
+    `/api/v1/events/${eventId}/uploads/${sessionId}/chunks/${chunkIndex}/url`
   );
 
+  // PUT the chunk bytes straight to R2 — the presigned URL's query string is
+  // self-authenticating, so no Authorization header (or any other custom
+  // header) is sent here, per docs/decisions/2026-08-22-presigned-url-image-delivery.md.
+  const response = await fetch(url, { method: 'PUT', body: bytes.buffer as ArrayBuffer });
+
   if (!response.ok) {
-    let errorBody: unknown;
-    try { errorBody = await response.json(); } catch { errorBody = { detail: response.statusText }; }
-    throw errorBody;
+    // R2 returns an XML error body on failure, not JSON — don't try to parse
+    // it. Throwing an object with no `.detail` matches this file's existing
+    // error shape and makes the caller's retry loop fall through to its
+    // generic "Chunk upload failed" message, same as any other error without
+    // a `.detail` field.
+    throw { status: response.status };
   }
 }
 
