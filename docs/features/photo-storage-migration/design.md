@@ -94,18 +94,19 @@ Presigning is a local cryptographic operation (no network round-trip to R2), so 
 ### Presigned read URL TTL (resolves REQ-10 / OQ-4)
 **Decision: 6-hour TTL** on all read URLs (thumbnail, lightbox, single-download, cover). Rationale: comfortably exceeds any realistic single browsing session (guest session idle window is 24h, but active browsing in one sitting is realistically under an hour); short enough that a leaked URL has bounded exposure, unlike the guest's actual session token. Because gallery/lightbox data is already re-fetched on pagination, filter/sort change, and page load (existing behavior, unchanged), URLs refresh naturally in the overwhelming majority of cases. For the edge case of a tab left open past 6 hours with no interaction: add an `onError` handler on `<img>` that triggers a lightweight re-fetch of just that photo's URL rather than a full gallery reload — a small, additive frontend behavior, not a structural change.
 
-### Component-by-component frontend change (per `2026-08-22-presigned-url-image-delivery.md`)
+### Delivery mechanism (revised during Phase 3 implementation — see amendment in `2026-08-22-presigned-url-image-delivery.md`)
+Two mechanisms, chosen per endpoint's request volume:
+- **Redirect (302) to the presigned URL** — for every one-off/on-demand endpoint: `/thumbnail` (photographer preview), `/lightbox`, `/download`, cover, cover-thumbnail. `fetch()` follows redirects transparently, so the existing `guestFetchBlob`/`ownerFetchBlob`/`fetchAuthedBlob` pattern keeps working with **zero frontend changes** — bytes still flow R2→browser directly, same egress saving.
+- **Embedded URL in the JSON response** — only for the gallery list endpoint's `thumbnail_url` field, since that's fetched up to 50-at-a-time per page load; a redirect per thumbnail would be 50 wasted round-trips to the backend. The list endpoint computes and embeds a ready-to-use presigned URL per photo instead.
+
+### Component-by-component frontend change (revised — most of this is now deferred indefinitely, not just to a later phase)
 | Component | Change |
 |---|---|
-| `PhotoThumbnail.tsx` | Drop `guestFetchBlob` + `useEffect`; render `<img src={photo.thumbnail_url}>` directly |
-| Favourites grid, `SearchResults` result cards | Same pattern |
-| Photographer `PhotoCard` (photos.tsx), album detail grid, event-dashboard cover picker | Same pattern, using `ownerFetchBlob`'s call sites |
-| `Lightbox.tsx` | Same pattern; additionally, backend response for the photo detail must now include a `lightbox_url` field — today this component hand-builds the `/lightbox` path itself, which no longer works once the endpoint returns a presigned R2 URL instead of proxying |
-| Share page (`app/share/[token]/page.tsx`) | Same pattern; the `ShareTokenResponse` payload needs a `thumbnail_url` field added, since it currently hand-builds a `/thumbnail` path the same way `Lightbox` does |
-| `downloadPhoto` (`lib/api.ts`) | Change from fetch-blob-then-synthetic-`<a>`-click to receiving `{ download_url }` from the backend and navigating/anchoring to it directly |
-| `downloadZip`, `downloadFavouritesZip` | **Unchanged** — ZIP stays backend-proxied |
-| `getEventCoverUrl` | Unchanged call shape; URL now points at R2 instead of the backend route |
-| `guestFetchBlob`/`ownerFetchBlob`/`fetchAuthedBlob` | No longer needed for photo display after this ships; remove once confirmed no other caller depends on them |
+| `PhotoThumbnail.tsx`, favourites grid, `SearchResults` result cards | These render from the gallery/favourites/search list endpoints' `thumbnail_url` field — once that field is a real presigned URL, drop `guestFetchBlob` + `useEffect`, render `<img src={photo.thumbnail_url}>` directly. This is the one frontend change that still matters. |
+| Photographer `PhotoCard` (photos.tsx), album detail grid, event-dashboard cover picker, `Lightbox.tsx`, share page, `downloadPhoto` | **No change needed.** These hit redirect-based endpoints; the existing fetch+blob pattern already follows the redirect and works unchanged. |
+| `downloadZip`, `downloadFavouritesZip` | Unchanged — ZIP stays backend-proxied |
+| `getEventCoverUrl` | Unchanged — already a direct URL pattern; now redirects to R2 under the hood |
+| `guestFetchBlob`/`ownerFetchBlob`/`fetchAuthedBlob` | Still needed — they're what makes the redirect-based endpoints work. Not being removed. |
 
 ## ZIP generation (unchanged pattern, new object source)
 `zip_streaming.py`'s `zipfile.ZipFile.write(path)` needs a real filesystem path, which R2 objects aren't. Design approach: stream each constituent object from R2 (`GetObject`, chunked read) into a bounded-size local temp file (or directly into `zipfile.writestr` via a file-like wrapper around the streamed response body — avoids a temp file per photo, keeps the existing "no full in-memory buffering" guarantee from REQ-14/NFR-5), write it into the archive, then discard. This keeps peak memory/disk bounded per-photo regardless of the 200-photo cap, matching today's guarantee. To hit the 30-second/100-photo bar (REQ-15) despite now paying network latency per photo instead of a local disk read, fetch several objects concurrently (bounded pool, e.g. 4-8 in flight) ahead of the point where they're written into the archive, rather than the current fully sequential per-photo loop — sizing the concurrency is a `/build`-time tuning question, not a design decision.
