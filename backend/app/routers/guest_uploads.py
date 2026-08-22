@@ -18,6 +18,7 @@ multipart machinery since guest uploads are always single-request:
    back from R2, then writes the Photo row and enqueues face processing.
 """
 
+import asyncio
 import uuid
 from pathlib import Path
 
@@ -170,7 +171,7 @@ async def complete_guest_upload(
     key = _object_key(event_id, photo_id, body.filename)
 
     try:
-        size = r2.get_object_size(key)
+        size = await asyncio.to_thread(r2.get_object_size, key)
     except r2.StorageUnavailableError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -185,7 +186,7 @@ async def complete_guest_upload(
 
     if size > MAX_FILE_SIZE:
         try:
-            r2.delete_object(key)
+            await asyncio.to_thread(r2.delete_object, key)
         except r2.StorageUnavailableError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -197,7 +198,7 @@ async def complete_guest_upload(
         )
 
     try:
-        header = r2.read_range(key, 0, 15)
+        header = await asyncio.to_thread(r2.read_range, key, 0, 15)
     except r2.StorageUnavailableError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -206,7 +207,7 @@ async def complete_guest_upload(
 
     if not is_allowed_upload_format(header):
         try:
-            r2.delete_object(key)
+            await asyncio.to_thread(r2.delete_object, key)
         except r2.StorageUnavailableError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

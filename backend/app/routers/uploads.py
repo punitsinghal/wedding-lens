@@ -6,6 +6,7 @@ path. See docs/features/photo-storage-migration/design.md ("Chunked
 upload (photographer)") and
 docs/decisions/2026-08-22-presigned-url-image-delivery.md.
 """
+import asyncio
 import logging
 import math
 import uuid
@@ -153,7 +154,7 @@ async def initiate_upload(
     if dup_session is not None:
         dup_key = _object_key(event_id, dup_session.photo_id, dup_session.filename)
         try:
-            parts = r2.list_parts(dup_key, dup_session.r2_upload_id)
+            parts = await asyncio.to_thread(r2.list_parts, dup_key, dup_session.r2_upload_id)
         except r2.StorageUnavailableError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -194,7 +195,7 @@ async def initiate_upload(
     key = f"events/{event_id}/{photo_id}{ext}"
 
     try:
-        r2_upload_id = r2.create_multipart_upload(key)
+        r2_upload_id = await asyncio.to_thread(r2.create_multipart_upload, key)
     except r2.StorageUnavailableError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -255,7 +256,7 @@ async def get_session_status(
 
     key = _object_key(event_id, session.photo_id, session.filename)
     try:
-        parts = r2.list_parts(key, session.r2_upload_id)
+        parts = await asyncio.to_thread(r2.list_parts, key, session.r2_upload_id)
     except r2.StorageUnavailableError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -346,7 +347,7 @@ async def complete_upload(
     key = _object_key(event_id, session.photo_id, session.filename)
 
     try:
-        parts = r2.list_parts(key, session.r2_upload_id)
+        parts = await asyncio.to_thread(r2.list_parts, key, session.r2_upload_id)
     except r2.StorageUnavailableError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -362,9 +363,9 @@ async def complete_upload(
         )
 
     try:
-        r2.complete_multipart_upload(key, session.r2_upload_id, parts)
+        await asyncio.to_thread(r2.complete_multipart_upload, key, session.r2_upload_id, parts)
 
-        if not r2.head_object(key):
+        if not await asyncio.to_thread(r2.head_object, key):
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Upload completed but object not found in storage",
@@ -372,7 +373,7 @@ async def complete_upload(
 
         # Validate assembled file magic bytes — authoritative gate, independent
         # of the filename extension (see app/services/image_format.py).
-        header = r2.read_range(key, 0, 15)
+        header = await asyncio.to_thread(r2.read_range, key, 0, 15)
     except r2.StorageUnavailableError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -381,7 +382,7 @@ async def complete_upload(
 
     if not is_allowed_upload_format(header):
         try:
-            r2.delete_object(key)
+            await asyncio.to_thread(r2.delete_object, key)
         except r2.StorageUnavailableError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
