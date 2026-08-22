@@ -1,16 +1,35 @@
-"""Guest photo upload endpoint — REQ-1..REQ-24, docs/features/guest-uploads."""
+"""Guest photo upload endpoints — REQ-1..REQ-24, docs/features/guest-uploads.
+
+Guests upload directly to Cloudflare R2 via a presigned single-shot PUT URL
+instead of sending file bytes through the backend as multipart/form-data.
+See docs/features/photo-storage-migration/design.md ("Guest upload / event
+cover upload") and docs/decisions/2026-08-22-presigned-url-image-delivery.md.
+
+Two-step flow, mirroring the "backend issues URL -> client PUTs directly ->
+backend verifies before writing the DB row" shape used by the chunked
+photographer upload flow (app/routers/uploads.py), just without the
+multipart machinery since guest uploads are always single-request:
+
+1. POST /initiate  - runs all client-supplied-metadata validation (rate
+   limit, capacity, display name, extension, size sanity check), then
+   returns a presigned PUT URL. No DB write yet.
+2. POST /{photo_id}/complete - after the browser has PUT the bytes to R2,
+   verifies the object actually exists and is a real JPEG/PNG by reading it
+   back from R2, then writes the Photo row and enqueues face processing.
+"""
 
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, Response, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.dependencies import get_db, get_validated_guest_event
 from app.models.photo import Photo
-from app.routers.photos import ALLOWED_CONTENT_TYPES, MAX_FILE_SIZE
+from app.routers.photos import MAX_FILE_SIZE
 from app.schemas.photo import PhotoUploadResponse
+from app.services import r2
 from app.services.face_pipeline import process_photo
 from app.services.guest_auth import guest_upload_rate_limiter, upload_counter
 from app.services.image_format import is_allowed_upload_format
@@ -20,6 +39,12 @@ router = APIRouter(prefix="/api/v1/events/{event_id}/guest-uploads", tags=["gues
 
 MAX_DISPLAY_NAME_LENGTH = 100
 
+# Same allow-list as the photographer chunked-upload flow
+# (app/routers/uploads.py) — kept as a literal here rather than imported to
+# match this file's existing style of importing shared constants
+# (MAX_FILE_SIZE) only from app.routers.photos, not from sibling routers.
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png"}
+
 
 def _get_client_ip(request: Request) -> str:
     forwarded = request.headers.get("X-Forwarded-For")
@@ -28,17 +53,38 @@ def _get_client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-@router.post("", response_model=PhotoUploadResponse, status_code=status.HTTP_201_CREATED)
-async def upload_guest_photo(
+def _object_key(event_id: uuid.UUID, photo_id: uuid.UUID, filename: str) -> str:
+    return f"events/{event_id}/{photo_id}_{filename}"
+
+
+class InitiateGuestUploadRequest(BaseModel):
+    filename: str
+    file_size_bytes: int
+    display_name: str | None = None
+
+
+class InitiateGuestUploadResponse(BaseModel):
+    photo_id: uuid.UUID
+    upload_url: str
+
+
+class CompleteGuestUploadRequest(BaseModel):
+    filename: str
+    display_name: str | None = None
+
+
+@router.post(
+    "/initiate",
+    response_model=InitiateGuestUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def initiate_guest_upload(
     event_id: uuid.UUID,
+    body: InitiateGuestUploadRequest,
     request: Request,
     response: Response,
-    background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
-    display_name: str | None = Form(None),
     guest_event: tuple = Depends(get_validated_guest_event),
-    db: AsyncSession = Depends(get_db),
-) -> PhotoUploadResponse:
+) -> InitiateGuestUploadResponse:
     event, refreshed_token, sid = guest_event
     response.headers["X-Guest-Token"] = refreshed_token
 
@@ -64,40 +110,123 @@ async def upload_guest_photo(
             detail="Upload limit reached for this session.",
         )
 
-    # Content-Type header check is defense-in-depth only — it's client-supplied
-    # and trivially spoofable. The magic-byte sniff below is the authoritative
-    # gate (see app/services/image_format.py).
-    if file.content_type not in ALLOWED_CONTENT_TYPES:
-        raise HTTPException(status_code=422, detail="Only JPEG and PNG files are accepted")
-
-    contents = await file.read()
-    if not is_allowed_upload_format(contents):
-        raise HTTPException(status_code=422, detail="Only JPEG and PNG files are accepted")
-    if len(contents) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=422, detail="File exceeds the 25 MB limit")
-
-    if display_name is not None and len(display_name) > MAX_DISPLAY_NAME_LENGTH:
+    if body.display_name is not None and len(body.display_name) > MAX_DISPLAY_NAME_LENGTH:
         raise HTTPException(
             status_code=422,
             detail="Display name must be 100 characters or fewer.",
         )
 
+    # Extension check is defense-in-depth only — there are no file bytes to
+    # sniff yet at this point. The magic-byte sniff in /complete is the
+    # authoritative gate (see app/services/image_format.py).
+    ext = Path(body.filename).suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=422, detail="Only JPEG and PNG files are accepted")
+
+    # file_size_bytes is client-reported and only defense-in-depth — the
+    # real check happens in /complete against R2's actual object size.
+    if body.file_size_bytes > MAX_FILE_SIZE:
+        raise HTTPException(status_code=422, detail="File exceeds the 25 MB limit")
+
     photo_id = uuid.uuid4()
-    relative_path = f"events/{event_id}/{photo_id}_{file.filename}"
-    abs_path = Path(settings.STORAGE_PATH) / relative_path
-    abs_path.parent.mkdir(parents=True, exist_ok=True)
-    abs_path.write_bytes(contents)
+    key = _object_key(event_id, photo_id, body.filename)
+
+    try:
+        upload_url = r2.generate_put_url(key)
+    except r2.StorageUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Storage service is temporarily unavailable. Please try again.",
+        ) from exc
+
+    return InitiateGuestUploadResponse(photo_id=photo_id, upload_url=upload_url)
+
+
+@router.post(
+    "/{photo_id}/complete",
+    response_model=PhotoUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def complete_guest_upload(
+    event_id: uuid.UUID,
+    photo_id: uuid.UUID,
+    body: CompleteGuestUploadRequest,
+    response: Response,
+    background_tasks: BackgroundTasks,
+    guest_event: tuple = Depends(get_validated_guest_event),
+    db: AsyncSession = Depends(get_db),
+) -> PhotoUploadResponse:
+    event, refreshed_token, sid = guest_event
+    response.headers["X-Guest-Token"] = refreshed_token
+
+    # Re-checked here (defense in depth) — the event could have been toggled
+    # off between /initiate and /complete.
+    if event.guest_uploads_enabled is False:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Guest uploads are disabled for this event.",
+        )
+
+    key = _object_key(event_id, photo_id, body.filename)
+
+    try:
+        size = r2.get_object_size(key)
+    except r2.StorageUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Storage service is temporarily unavailable. Please try again.",
+        ) from exc
+
+    if size is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Upload not found or incomplete",
+        )
+
+    if size > MAX_FILE_SIZE:
+        try:
+            r2.delete_object(key)
+        except r2.StorageUnavailableError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Storage service is temporarily unavailable. Please try again.",
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="File exceeds the 25 MB limit",
+        )
+
+    try:
+        header = r2.read_range(key, 0, 15)
+    except r2.StorageUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Storage service is temporarily unavailable. Please try again.",
+        ) from exc
+
+    if not is_allowed_upload_format(header):
+        try:
+            r2.delete_object(key)
+        except r2.StorageUnavailableError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Storage service is temporarily unavailable. Please try again.",
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Only JPEG and PNG files are accepted",
+        )
 
     photo = Photo(
         id=photo_id,
         event_id=event_id,
         album_id=None,
-        filename=file.filename or "upload",
-        storage_path=relative_path,
-        file_size=len(contents),
+        filename=body.filename,
+        storage_path=key,
+        file_size=size,
         processing_status="pending",
         uploaded_by="guest",
-        guest_display_name=display_name or None,
+        guest_display_name=body.display_name or None,
     )
     db.add(photo)
     await db.commit()
