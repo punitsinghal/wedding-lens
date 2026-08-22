@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { isGuestAuthenticated } from '@/lib/auth';
-import { getEventBySlug, guestFetchBlob } from '@/lib/api';
+import { getEventBySlug } from '@/lib/api';
 import { useFavourites } from '@/hooks/useFavourites';
 import FavouriteToggle from '@/components/photo-actions/FavouriteToggle';
 import ShareButton from '@/components/photo-actions/ShareButton';
@@ -21,33 +21,14 @@ interface FavouriteCardProps {
 }
 
 function FavouriteCard({ photo, eventId, isFavourited, onToggle }: FavouriteCardProps) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!photo.thumbnail_url) return;
-    let objectUrl: string | null = null;
-    let cancelled = false;
-    guestFetchBlob(eventId, photo.thumbnail_url)
-      .then((blob) => {
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setBlobUrl(objectUrl);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [photo.photo_id, photo.thumbnail_url, eventId]);
-
   // Hide card immediately when unfavourited
   if (!isFavourited) return null;
 
   return (
     <div className="relative aspect-square w-full overflow-hidden rounded-sm bg-gray-200 group">
-      {blobUrl ? (
+      {photo.thumbnail_url ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={blobUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        <img src={photo.thumbnail_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
       ) : (
         <div className="absolute inset-0 bg-gray-200 animate-pulse" />
       )}

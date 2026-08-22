@@ -1,7 +1,5 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { guestFetchBlob } from '@/lib/api';
 import type { GalleryPhoto } from '@/types/api';
 import FavouriteToggle from '@/components/photo-actions/FavouriteToggle';
 import ShareButton from '@/components/photo-actions/ShareButton';
@@ -21,32 +19,6 @@ export default function PhotoThumbnail({
   isFavourited,
   onToggleFavourite,
 }: PhotoThumbnailProps) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!photo.thumbnail_url) return;
-
-    let objectUrl: string | null = null;
-    let cancelled = false;
-
-    guestFetchBlob(eventId, photo.thumbnail_url!)
-      .then((blob) => {
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setBlobUrl(objectUrl);
-      })
-      .catch(() => {
-        // leave blobUrl as null — placeholder stays visible
-      });
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
-    };
-  }, [photo.id, photo.thumbnail_url, eventId]);
-
   return (
     <div className="relative aspect-square w-full overflow-hidden rounded-sm bg-gray-200 group">
       <button
@@ -54,10 +26,10 @@ export default function PhotoThumbnail({
         className="absolute inset-0 w-full h-full hover:opacity-90 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gray-900"
         aria-label="View photo"
       >
-        {blobUrl ? (
+        {photo.thumbnail_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={blobUrl}
+            src={photo.thumbnail_url}
             alt=""
             className="absolute inset-0 w-full h-full object-cover"
           />
