@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.event import Event
 from app.models.photo import Photo
 from app.models.user import User
+from app.services import r2
 from app.services.auth import hash_password
 from app.services.guest_auth import create_guest_token
 from app.services.search_cache import search_cache
@@ -37,6 +38,20 @@ def clear_cache():
 def patch_analytics_session():
     """Redirect search_events BackgroundTasks writes to the test SQLite session."""
     with patch("app.services.analytics.AsyncSessionLocal", TestSessionLocal):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def patch_thumbnail_signing():
+    """Default stub for r2.generate_get_url so tests that aren't specifically
+    exercising the presigned-URL behavior don't need to know about it (the
+    `photo` fixture always sets thumbnail_path, so run_search always calls
+    this). Tests that care about the exact signed URL / failure behavior
+    override this with their own nested `patch(...)`."""
+    with patch(
+        "app.services.face_search.r2.generate_get_url",
+        return_value="https://r2.example.com/default-signed-thumb",
+    ):
         yield
 
 
@@ -224,8 +239,10 @@ async def test_search_single_face_returns_results(
     faces = [{"bbox": [0, 0, 100, 100], "embedding": emb, "det_score": 0.99}]
     qdrant_hits = [{"photo_id": str(photo.id), "score": 0.95}]
 
+    signed_url = "https://r2.example.com/signed-thumb?X-Amz-Signature=abc"
     with patch("app.services.face_search._detect_faces", return_value=faces), \
-         patch("app.services.face_search.search_faces", return_value=qdrant_hits):
+         patch("app.services.face_search.search_faces", return_value=qdrant_hits), \
+         patch("app.services.face_search.r2.generate_get_url", return_value=signed_url) as mock_gen:
         resp = await client.post(
             f"/api/v1/events/{event.id}/search",
             files={"selfie": ("selfie.jpg", _fake_selfie(), "image/jpeg")},
@@ -237,7 +254,74 @@ async def test_search_single_face_returns_results(
     body = resp.json()
     assert len(body["results"]) == 1
     assert body["results"][0]["photo_id"] == str(photo.id)
-    assert "/thumbnail" in body["results"][0]["thumbnail_url"]
+    assert body["results"][0]["thumbnail_url"] == signed_url
+    mock_gen.assert_called_once_with(photo.thumbnail_path)
+
+
+# ---------------------------------------------------------------------------
+# Test 6b: results embed a real presigned URL (rather than a backend-relative
+# path) — see docs/decisions/2026-08-22-presigned-url-image-delivery.md.
+# A photo with no thumbnail yet is excluded from the results entirely (no
+# reason to sign a URL for an object we know doesn't exist), and a
+# per-result signing failure degrades to skipping that result rather than
+# failing the whole search.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_search_result_excludes_photo_missing_thumbnail(
+    client: AsyncClient, db: AsyncSession, event: Event, photo: Photo
+):
+    photo.thumbnail_path = None
+    db.add(photo)
+    await db.commit()
+
+    emb = _fake_embedding()
+    faces = [{"bbox": [0, 0, 100, 100], "embedding": emb, "det_score": 0.99}]
+    qdrant_hits = [{"photo_id": str(photo.id), "score": 0.95}]
+
+    with patch("app.services.face_search._detect_faces", return_value=faces), \
+         patch("app.services.face_search.search_faces", return_value=qdrant_hits), \
+         patch("app.services.face_search.r2.generate_get_url") as mock_gen:
+        resp = await client.post(
+            f"/api/v1/events/{event.id}/search",
+            files={"selfie": ("selfie.jpg", _fake_selfie(), "image/jpeg")},
+            data={"consent_ack": "true"},
+            headers=_guest_headers(event.id),
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["results"] == []
+    mock_gen.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_search_result_skips_photo_on_sign_failure(
+    client: AsyncClient, event: Event, photo: Photo
+):
+    """A signing failure for one photo's thumbnail must not 500 the whole
+    search — it degrades to excluding that photo from the results."""
+    emb = _fake_embedding()
+    faces = [{"bbox": [0, 0, 100, 100], "embedding": emb, "det_score": 0.99}]
+    qdrant_hits = [{"photo_id": str(photo.id), "score": 0.95}]
+
+    with patch("app.services.face_search._detect_faces", return_value=faces), \
+         patch("app.services.face_search.search_faces", return_value=qdrant_hits), \
+         patch(
+             "app.services.face_search.r2.generate_get_url",
+             side_effect=r2.StorageUnavailableError("boom"),
+         ):
+        resp = await client.post(
+            f"/api/v1/events/{event.id}/search",
+            files={"selfie": ("selfie.jpg", _fake_selfie(), "image/jpeg")},
+            data={"consent_ack": "true"},
+            headers=_guest_headers(event.id),
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["results"] == []
 
 
 # ---------------------------------------------------------------------------

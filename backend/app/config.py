@@ -37,6 +37,13 @@ class Settings(BaseSettings):
     # See docs/decisions/2026-08-19-guest-upload-per-file-requests.md.
     GUEST_UPLOAD_RATE_LIMIT_MAX: int = 40
     GUEST_UPLOAD_RATE_LIMIT_WINDOW_SECONDS: int = 3600  # 1 hour
+    # Cloudflare R2 (S3-compatible) photo storage.
+    # See docs/decisions/2026-08-22-cloudflare-r2-photo-storage.md.
+    R2_ACCOUNT_ID: str = ""
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
+    R2_BUCKET_NAME: str = ""
+    R2_ENDPOINT: str = ""
 
     @field_validator("DATABASE_URL")
     @classmethod

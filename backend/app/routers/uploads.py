@@ -1,23 +1,30 @@
-"""Chunked photo upload endpoints for the photographer dashboard."""
+"""Chunked photo upload endpoints for the photographer dashboard.
+
+Chunks upload directly to Cloudflare R2 via presigned S3-compatible
+multipart-upload URLs — the backend never receives chunk bytes on this
+path. See docs/features/photo-storage-migration/design.md ("Chunked
+upload (photographer)") and
+docs/decisions/2026-08-22-presigned-url-image-delivery.md.
+"""
+import asyncio
 import logging
 import math
-import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.dependencies import get_current_user, get_db, get_event_with_photographer_access
 from app.models.event import Event
 from app.models.photo import Photo
 from app.models.upload_session import UploadSession
 from app.models.user import User
+from app.services import r2
 from app.services.face_pipeline import process_photo
 from app.services.image_format import is_allowed_upload_format
 
@@ -25,7 +32,11 @@ logger = logging.getLogger("weddinglens.uploads")
 
 router = APIRouter(prefix="/api/v1/events/{event_id}/uploads", tags=["uploads"])
 
-CHUNK_SIZE = 2097152  # 2 MB
+# 8 MiB. S3-compatible multipart upload requires every part except the last
+# to be >= 5 MiB; the app's chunk size now maps 1:1 onto R2 multipart parts,
+# so it must stay comfortably above that floor. See
+# docs/features/photo-storage-migration/design.md.
+CHUNK_SIZE = 8 * 1024 * 1024
 MAX_FILE_SIZE = 25 * 1024 * 1024  # 25 MB
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 
@@ -67,9 +78,9 @@ class SessionStatusResponse(BaseModel):
     status: str
 
 
-class ChunkUploadResponse(BaseModel):
+class ChunkUploadUrlResponse(BaseModel):
     chunk_index: int
-    received: bool
+    url: str
 
 
 class CompleteUploadRequest(BaseModel):
@@ -78,6 +89,25 @@ class CompleteUploadRequest(BaseModel):
 
 class CompleteUploadResponse(BaseModel):
     photo_id: uuid.UUID
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _object_key(event_id: uuid.UUID, photo_id: uuid.UUID, filename: str) -> str:
+    """Reconstruct the R2 object key for a session — same scheme as before
+    the migration: events/{event_id}/{photo_id}{ext}."""
+    ext = Path(filename).suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        ext = ".jpg"
+    return f"events/{event_id}/{photo_id}{ext}"
+
+
+def _received_chunk_indices(parts: list[dict]) -> list[int]:
+    """Convert 1-indexed R2 PartNumbers to 0-indexed chunk indices."""
+    return [part["PartNumber"] - 1 for part in parts]
 
 
 # ---------------------------------------------------------------------------
@@ -122,13 +152,21 @@ async def initiate_upload(
     )
     dup_session = dup_session_result.scalar_one_or_none()
     if dup_session is not None:
+        dup_key = _object_key(event_id, dup_session.photo_id, dup_session.filename)
+        try:
+            parts = await asyncio.to_thread(r2.list_parts, dup_key, dup_session.r2_upload_id)
+        except r2.StorageUnavailableError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Storage service is temporarily unavailable. Please try again.",
+            ) from exc
         return JSONResponse(
             status_code=200,
             content={
                 "session_id": str(dup_session.id),
                 "chunk_size_bytes": dup_session.chunk_size_bytes,
                 "total_chunks": dup_session.total_chunks,
-                "received_chunks": dup_session.received_chunks or [],
+                "received_chunks": _received_chunk_indices(parts),
                 "status": "resumable",
             },
         )
@@ -151,7 +189,21 @@ async def initiate_upload(
     # Calculate total chunks
     total_chunks = max(1, math.ceil(body.file_size_bytes / CHUNK_SIZE))
 
-    # Create upload session
+    # Generate the photo id and object key up front so the multipart upload
+    # and the (eventual) Photo row agree on the same key.
+    photo_id = uuid.uuid4()
+    key = f"events/{event_id}/{photo_id}{ext}"
+
+    try:
+        r2_upload_id = await asyncio.to_thread(r2.create_multipart_upload, key)
+    except r2.StorageUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Storage service is temporarily unavailable. Please try again.",
+        ) from exc
+
+    # Only create the DB row once the R2 multipart upload actually exists —
+    # never let Postgres reference an upload_id that R2 doesn't have.
     session = UploadSession(
         id=uuid.uuid4(),
         event_id=event_id,
@@ -163,13 +215,11 @@ async def initiate_upload(
         total_chunks=total_chunks,
         received_chunks=[],
         status="in_progress",
+        photo_id=photo_id,
+        r2_upload_id=r2_upload_id,
     )
     db.add(session)
     await db.commit()
-
-    # Create tmp directory for chunks
-    tmp_dir = Path(settings.STORAGE_PATH) / "tmp" / str(session.id)
-    tmp_dir.mkdir(parents=True, exist_ok=True)
 
     return InitiateUploadResponse(
         session_id=session.id,
@@ -204,24 +254,34 @@ async def get_session_status(
             detail="Access denied: not the uploader or event owner",
         )
 
+    key = _object_key(event_id, session.photo_id, session.filename)
+    try:
+        parts = await asyncio.to_thread(r2.list_parts, key, session.r2_upload_id)
+    except r2.StorageUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Storage service is temporarily unavailable. Please try again.",
+        ) from exc
+
     return SessionStatusResponse(
         session_id=session.id,
-        received_chunks=session.received_chunks or [],
+        received_chunks=_received_chunk_indices(parts),
         total_chunks=session.total_chunks,
         status=session.status,
     )
 
 
-@router.put("/{session_id}/chunks/{chunk_index}", response_model=ChunkUploadResponse)
-async def upload_chunk(
+@router.get("/{session_id}/chunks/{chunk_index}/url", response_model=ChunkUploadUrlResponse)
+async def get_chunk_upload_url(
     event_id: uuid.UUID,
     session_id: uuid.UUID,
     chunk_index: int,
-    request: Request,
     event: Event = Depends(get_event_with_photographer_access),
     db: AsyncSession = Depends(get_db),
-) -> ChunkUploadResponse:
-    """Upload a single chunk. Idempotent — returns 200 if chunk already received."""
+) -> ChunkUploadUrlResponse:
+    """Return a presigned R2 UploadPart URL for one chunk. Pure read + presign —
+    no database writes; R2's list_parts is the source of truth for what's
+    actually been received (see complete_upload / get_session_status)."""
     result = await db.execute(
         select(UploadSession).where(
             UploadSession.id == session_id,
@@ -244,32 +304,17 @@ async def upload_chunk(
             detail=f"chunk_index {chunk_index} out of range (total_chunks={session.total_chunks})",
         )
 
-    # Idempotency: already received
-    received = session.received_chunks or []
-    if chunk_index in received:
-        return ChunkUploadResponse(chunk_index=chunk_index, received=True)
+    key = _object_key(event_id, session.photo_id, session.filename)
+    part_number = chunk_index + 1
+    try:
+        url = r2.generate_upload_part_url(key, session.r2_upload_id, part_number)
+    except r2.StorageUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Storage service is temporarily unavailable. Please try again.",
+        ) from exc
 
-    # Write chunk bytes to disk
-    chunk_bytes = await request.body()
-    chunk_dir = Path(settings.STORAGE_PATH) / "tmp" / str(session_id)
-    chunk_dir.mkdir(parents=True, exist_ok=True)
-    chunk_path = chunk_dir / f"{chunk_index}.bin"
-    chunk_path.write_bytes(chunk_bytes)
-
-    # Update received_chunks — load, append, write back (works on both PostgreSQL and SQLite)
-    new_chunks = list(received) + [chunk_index]
-    await db.execute(
-        sa_update(UploadSession)
-        .where(UploadSession.id == session_id)
-        .values(
-            received_chunks=new_chunks,
-            updated_at=datetime.now(timezone.utc),
-        )
-    )
-    # Commit immediately so other processes can see the chunk list
-    await db.commit()
-
-    return ChunkUploadResponse(chunk_index=chunk_index, received=True)
+    return ChunkUploadUrlResponse(chunk_index=chunk_index, url=url)
 
 
 @router.post("/{session_id}/complete", status_code=status.HTTP_201_CREATED)
@@ -281,7 +326,8 @@ async def complete_upload(
     event: Event = Depends(get_event_with_photographer_access),
     db: AsyncSession = Depends(get_db),
 ) -> CompleteUploadResponse:
-    """Finalize chunked upload: assemble file, insert Photo record, enqueue processing."""
+    """Finalize chunked upload: complete the R2 multipart upload, insert the
+    Photo record, enqueue processing."""
     result = await db.execute(
         select(UploadSession).where(
             UploadSession.id == session_id,
@@ -298,53 +344,56 @@ async def complete_upload(
             detail=f"Session is not in_progress (current status: {session.status})",
         )
 
-    received = session.received_chunks or []
-    if len(received) < session.total_chunks:
+    key = _object_key(event_id, session.photo_id, session.filename)
+
+    try:
+        parts = await asyncio.to_thread(r2.list_parts, key, session.r2_upload_id)
+    except r2.StorageUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Storage service is temporarily unavailable. Please try again.",
+        ) from exc
+
+    if len(parts) < session.total_chunks:
+        received = _received_chunk_indices(parts)
         missing = [i for i in range(session.total_chunks) if i not in received]
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Missing chunks: {missing}",
         )
 
-    # Determine file extension
-    ext = Path(session.filename).suffix.lower()
-    if ext not in ALLOWED_EXTENSIONS:
-        ext = ".jpg"
-
-    # Generate final photo path
-    photo_id = uuid.uuid4()
-    final_rel = f"events/{event_id}/{photo_id}{ext}"
-    final_abs = Path(settings.STORAGE_PATH) / final_rel
-    final_abs.parent.mkdir(parents=True, exist_ok=True)
-
-    # Stream-assemble chunks
-    tmp_dir = Path(settings.STORAGE_PATH) / "tmp" / str(session_id)
-    with open(final_abs, "wb") as out:
-        for i in range(session.total_chunks):
-            chunk_path = tmp_dir / f"{i}.bin"
-            with open(chunk_path, "rb") as src:
-                shutil.copyfileobj(src, out, length=CHUNK_SIZE)
-
-    # Clean up temp dir
     try:
-        shutil.rmtree(tmp_dir)
-    except Exception as exc:
-        logger.warning(
-            '{"event": "upload_tmp_cleanup_failed", "session_id": "%s", "error": "%s"}',
-            session_id,
-            str(exc),
-        )
+        await asyncio.to_thread(r2.complete_multipart_upload, key, session.r2_upload_id, parts)
 
-    # Validate assembled file magic bytes — authoritative gate, independent of
-    # the filename extension checked above (see app/services/image_format.py).
-    with open(final_abs, "rb") as f:
-        header = f.read(8)
+        if not await asyncio.to_thread(r2.head_object, key):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Upload completed but object not found in storage",
+            )
+
+        # Validate assembled file magic bytes — authoritative gate, independent
+        # of the filename extension (see app/services/image_format.py).
+        header = await asyncio.to_thread(r2.read_range, key, 0, 15)
+    except r2.StorageUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Storage service is temporarily unavailable. Please try again.",
+        ) from exc
+
     if not is_allowed_upload_format(header):
-        final_abs.unlink(missing_ok=True)
+        try:
+            await asyncio.to_thread(r2.delete_object, key)
+        except r2.StorageUnavailableError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Storage service is temporarily unavailable. Please try again.",
+            ) from exc
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Assembled file is not a valid JPEG or PNG",
         )
+
+    photo_id = session.photo_id
 
     # Insert Photo record
     photo = Photo(
@@ -352,7 +401,7 @@ async def complete_upload(
         event_id=event_id,
         album_id=body.album_id,
         filename=session.filename,
-        storage_path=final_rel,
+        storage_path=key,
         file_size=session.file_size_bytes,
         content_hash=session.content_hash,
         processing_status="pending",

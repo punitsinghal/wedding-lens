@@ -4,7 +4,6 @@ import io
 import logging
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 
 import numpy as np
 from sqlalchemy import func, select, update
@@ -12,6 +11,7 @@ from sqlalchemy import func, select, update
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.photo import FaceRecord, Photo
+from app.services import r2
 from app.utils.crypto import encrypt_embedding
 
 logger = logging.getLogger("weddinglens.face_pipeline")
@@ -98,7 +98,14 @@ async def process_photo(photo_id: uuid.UUID, event_id: uuid.UUID) -> None:
 
 
 def _generate_thumbnail(image_bytes: bytes, photo_id: uuid.UUID, event_id: uuid.UUID) -> str:
-    """Generate a 600px-wide WebP thumbnail. Returns SSD-relative path."""
+    """Generate a 600px-wide WebP thumbnail and upload it to R2. Returns its
+    R2 key.
+
+    This function is already called via `asyncio.to_thread` by its caller
+    (`_run_pipeline`), i.e. it already runs off the event loop in a worker
+    thread — so `r2.put_object` (a network call) is called directly here,
+    without an additional nested `asyncio.to_thread`.
+    """
     from PIL import Image, ImageOps
 
     img = Image.open(io.BytesIO(image_bytes))
@@ -115,9 +122,9 @@ def _generate_thumbnail(image_bytes: bytes, photo_id: uuid.UUID, event_id: uuid.
     img = img.resize((new_w, new_h), Image.LANCZOS)
 
     rel_path = f"events/{event_id}/thumbs/{photo_id}.webp"
-    abs_path = Path(settings.STORAGE_PATH) / rel_path
-    abs_path.parent.mkdir(parents=True, exist_ok=True)
-    img.save(abs_path, "WEBP", quality=85)
+    buf = io.BytesIO()
+    img.save(buf, "WEBP", quality=85)
+    r2.put_object(rel_path, buf.getvalue(), "image/webp")
     return rel_path
 
 
@@ -136,9 +143,10 @@ async def _run_pipeline(photo_id: uuid.UUID, event_id: uuid.UUID) -> None:
         attempts = photo.processing_attempts
 
     try:
-        # Read image bytes from storage
-        image_path = Path(settings.STORAGE_PATH) / storage_path
-        image_bytes = image_path.read_bytes()
+        # Read image bytes from storage — a network call, so it must run off
+        # the event loop even though this async function isn't itself
+        # thread-pool-executed.
+        image_bytes = await asyncio.to_thread(r2.download_object, storage_path)
 
         # CPU-bound ONNXRuntime inference — offload to a thread to keep the event loop free
         faces = await asyncio.to_thread(_detect_faces, image_bytes)

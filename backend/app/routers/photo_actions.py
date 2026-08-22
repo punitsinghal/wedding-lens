@@ -1,4 +1,5 @@
 """Photo action endpoints — ZIP download, share link, favourites CRUD."""
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
@@ -13,9 +14,12 @@ from app.config import settings
 from app.dependencies import get_db, get_validated_guest_event
 from app.models.photo import Photo
 from app.services import analytics as analytics_service
+from app.services import r2
 from app.services.favourites_store import favourites_store
 from app.services.guest_auth import create_share_token
 from app.services.zip_streaming import generate_zip_stream
+
+logger = logging.getLogger("weddinglens.photo_actions")
 
 router = APIRouter(prefix="/api/v1/events/{event_id}", tags=["photo-actions"])
 
@@ -127,7 +131,18 @@ async def list_favourites(
     )
     photos = []
     for row in result.all():
-        thumbnail_url = f"/api/v1/events/{event_id}/photos/{row.id}/thumbnail" if row.thumbnail_path else None
+        thumbnail_url = None
+        if row.thumbnail_path:
+            try:
+                thumbnail_url = r2.generate_get_url(row.thumbnail_path)
+            except r2.StorageUnavailableError as exc:
+                logger.warning(
+                    '{"event": "thumbnail_url_sign_error", "photo_id": "%s", "exc_type": "%s", "detail": "%s"}',
+                    row.id,
+                    type(exc).__name__,
+                    str(exc),
+                )
+                thumbnail_url = None
         photos.append({"photo_id": str(row.id), "thumbnail_url": thumbnail_url})
 
     return {"photos": photos}

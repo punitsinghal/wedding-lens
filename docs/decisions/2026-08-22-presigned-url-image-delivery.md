@@ -1,6 +1,27 @@
 # ADR: Presigned R2 URLs Replace Fetch+Blob Image Delivery
 Date: 2026-08-22
-Status: accepted
+Status: accepted (delivery mechanism refined during /build — see amendment below)
+
+> **Amendment (2026-08-22, during Phase 3 implementation):** the delivery
+> mechanism for one-off/on-demand endpoints (lightbox, single download,
+> photographer preview, cover photo) changed from "return `{url}` as JSON,
+> rewrite the frontend to consume it directly" to **302-redirecting the
+> existing authenticated endpoint straight to the presigned R2 URL**.
+> `fetch()` follows redirects transparently and drops `Authorization` on the
+> cross-origin hop (harmless — the presigned URL's signature is the real
+> auth), so the existing `guestFetchBlob`/`ownerFetchBlob`/`fetchAuthedBlob`
+> pattern keeps working completely unchanged for these endpoints, while
+> bytes still flow R2→browser directly — the same egress saving, zero
+> frontend rewrite. The "8 components need rewriting" consequence below no
+> longer holds for 7 of them. The one exception is the gallery list
+> endpoint's `thumbnail_url` field: it's fetched up to 50-at-a-time per page
+> load, so embedding a ready-to-use presigned URL directly in the list
+> response (rather than 50 individual redirect round-trips) is worth the
+> small frontend change — `PhotoThumbnail`/favourites-grid/search-results
+> components still need to switch from fetch+blob to `<img src>` directly
+> for that one field. Everything else in this ADR's reasoning (why a
+> presigned URL is self-authenticating, why the original blob-fetch ADR's
+> problem no longer applies, why ZIP stays backend-proxied) is unchanged.
 
 ## Context
 

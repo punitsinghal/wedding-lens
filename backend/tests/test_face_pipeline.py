@@ -118,29 +118,15 @@ def test_encrypt_produces_different_nonces():
 # ---------------------------------------------------------------------------
 
 
-async def test_run_pipeline_zero_faces(db, photo, event, tmp_path):
+async def test_run_pipeline_zero_faces(db, photo, event):
     """When no faces are detected, photo is marked complete with face_count=0."""
-    # Write a dummy image file so the path read doesn't fail
-    img_dir = tmp_path / "events" / str(event.id)
-    img_dir.mkdir(parents=True)
-    img_file = img_dir / "test.jpg"
-    img_file.write_bytes(b"fake-image-bytes")
-
-    # Update photo storage_path to point to tmp_path
-    photo.storage_path = f"events/{event.id}/test.jpg"
-    await db.commit()
-
-    import app.services.face_pipeline as fp_module
-    original_storage = fp_module.settings.STORAGE_PATH
-    fp_module.settings.STORAGE_PATH = str(tmp_path)
-    try:
-        with patch("app.services.face_pipeline._detect_faces", return_value=[]) as mock_detect, \
-             patch("app.services.qdrant.ensure_collection"), \
-             patch("app.services.qdrant.upsert_face_vectors") as mock_upsert:
-            from app.services.face_pipeline import _run_pipeline
-            await _run_pipeline(photo.id, event.id)
-    finally:
-        fp_module.settings.STORAGE_PATH = original_storage
+    with patch("app.services.face_pipeline.r2.download_object", return_value=b"fake-image-bytes"), \
+         patch("app.services.face_pipeline.r2.put_object"), \
+         patch("app.services.face_pipeline._detect_faces", return_value=[]) as mock_detect, \
+         patch("app.services.qdrant.ensure_collection"), \
+         patch("app.services.qdrant.upsert_face_vectors") as mock_upsert:
+        from app.services.face_pipeline import _run_pipeline
+        await _run_pipeline(photo.id, event.id)
 
     # Refresh photo from DB
     await db.refresh(photo)
@@ -161,7 +147,7 @@ async def test_run_pipeline_zero_faces(db, photo, event, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_thumbnail_corrects_exif_orientation(tmp_path):
+def test_thumbnail_corrects_exif_orientation():
     """A portrait phone photo (stored as landscape pixels + EXIF orientation 6)
     must be thumbnailed upright, not sideways."""
     from PIL import Image
@@ -176,14 +162,22 @@ def test_thumbnail_corrects_exif_orientation(tmp_path):
     buf = io.BytesIO()
     img.save(buf, "JPEG", exif=exif.tobytes())
 
-    original_storage = fp_module.settings.STORAGE_PATH
-    fp_module.settings.STORAGE_PATH = str(tmp_path)
-    try:
-        rel_path = fp_module._generate_thumbnail(buf.getvalue(), uuid.uuid4(), uuid.uuid4())
-    finally:
-        fp_module.settings.STORAGE_PATH = original_storage
+    captured: dict = {}
 
-    thumb = Image.open(tmp_path / rel_path)
+    def fake_put_object(key, body, content_type):
+        captured["key"] = key
+        captured["body"] = body
+        captured["content_type"] = content_type
+
+    photo_id, event_id = uuid.uuid4(), uuid.uuid4()
+    with patch("app.services.face_pipeline.r2.put_object", side_effect=fake_put_object):
+        rel_path = fp_module._generate_thumbnail(buf.getvalue(), photo_id, event_id)
+
+    assert rel_path == f"events/{event_id}/thumbs/{photo_id}.webp"
+    assert captured["key"] == rel_path
+    assert captured["content_type"] == "image/webp"
+
+    thumb = Image.open(io.BytesIO(captured["body"]))
     # Orientation 6 rotates 90°, so a correctly-oriented thumbnail is portrait
     # (50x100) even though the source pixels are landscape (100x50).
     assert thumb.size == (50, 100)
@@ -194,27 +188,19 @@ def test_thumbnail_corrects_exif_orientation(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-async def test_run_pipeline_multiple_faces(db, photo, event, tmp_path):
+async def test_run_pipeline_multiple_faces(db, photo, event):
     """When faces are detected, face_records are created and Qdrant is called."""
-    img_dir = tmp_path / "events" / str(event.id)
-    img_dir.mkdir(parents=True)
-    (img_dir / "test.jpg").write_bytes(b"fake-image-bytes")
-
     face1 = {"bbox": [10, 20, 60, 80], "embedding": np.random.rand(512).astype(np.float32)}
     face2 = {"bbox": [100, 120, 70, 90], "embedding": np.random.rand(512).astype(np.float32)}
     fake_faces = [face1, face2]
 
-    import app.services.face_pipeline as fp_module
-    original_storage = fp_module.settings.STORAGE_PATH
-    fp_module.settings.STORAGE_PATH = str(tmp_path)
-    try:
-        with patch("app.services.face_pipeline._detect_faces", return_value=fake_faces), \
-             patch("app.services.qdrant.ensure_collection"), \
-             patch("app.services.qdrant.upsert_face_vectors") as mock_upsert:
-            from app.services.face_pipeline import _run_pipeline
-            await _run_pipeline(photo.id, event.id)
-    finally:
-        fp_module.settings.STORAGE_PATH = original_storage
+    with patch("app.services.face_pipeline.r2.download_object", return_value=b"fake-image-bytes"), \
+         patch("app.services.face_pipeline.r2.put_object"), \
+         patch("app.services.face_pipeline._detect_faces", return_value=fake_faces), \
+         patch("app.services.qdrant.ensure_collection"), \
+         patch("app.services.qdrant.upsert_face_vectors") as mock_upsert:
+        from app.services.face_pipeline import _run_pipeline
+        await _run_pipeline(photo.id, event.id)
 
     await db.refresh(photo)
     assert photo.processing_status == "complete"
@@ -297,25 +283,16 @@ async def test_process_photo_skips_in_processing(db, event):
 # ---------------------------------------------------------------------------
 
 
-async def test_run_pipeline_error_sets_failed(db, photo, event, tmp_path):
+async def test_run_pipeline_error_sets_failed(db, photo, event):
     """When an error occurs with attempts < 5, status becomes 'failed'."""
-    img_dir = tmp_path / "events" / str(event.id)
-    img_dir.mkdir(parents=True)
-    (img_dir / "test.jpg").write_bytes(b"fake")
-
     # Manually set processing_attempts to 1 to simulate gate passage
     photo.processing_attempts = 1
     await db.commit()
 
-    import app.services.face_pipeline as fp_module
-    original_storage = fp_module.settings.STORAGE_PATH
-    fp_module.settings.STORAGE_PATH = str(tmp_path)
-    try:
-        with patch("app.services.face_pipeline._detect_faces", side_effect=RuntimeError("boom")):
-            from app.services.face_pipeline import _run_pipeline
-            await _run_pipeline(photo.id, event.id)
-    finally:
-        fp_module.settings.STORAGE_PATH = original_storage
+    with patch("app.services.face_pipeline.r2.download_object", return_value=b"fake"), \
+         patch("app.services.face_pipeline._detect_faces", side_effect=RuntimeError("boom")):
+        from app.services.face_pipeline import _run_pipeline
+        await _run_pipeline(photo.id, event.id)
 
     await db.refresh(photo)
     assert photo.processing_status == "failed"
@@ -326,12 +303,8 @@ async def test_run_pipeline_error_sets_failed(db, photo, event, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-async def test_run_pipeline_error_sets_error_at_max_attempts(db, event, tmp_path):
+async def test_run_pipeline_error_sets_error_at_max_attempts(db, event):
     """When attempts >= 5, error status is set instead of failed."""
-    img_dir = tmp_path / "events" / str(event.id)
-    img_dir.mkdir(parents=True)
-    (img_dir / "test.jpg").write_bytes(b"fake")
-
     exhausted_photo = Photo(
         id=uuid.uuid4(),
         event_id=event.id,
@@ -345,15 +318,10 @@ async def test_run_pipeline_error_sets_error_at_max_attempts(db, event, tmp_path
     db.add(exhausted_photo)
     await db.commit()
 
-    import app.services.face_pipeline as fp_module
-    original_storage = fp_module.settings.STORAGE_PATH
-    fp_module.settings.STORAGE_PATH = str(tmp_path)
-    try:
-        with patch("app.services.face_pipeline._detect_faces", side_effect=RuntimeError("boom")):
-            from app.services.face_pipeline import _run_pipeline
-            await _run_pipeline(exhausted_photo.id, event.id)
-    finally:
-        fp_module.settings.STORAGE_PATH = original_storage
+    with patch("app.services.face_pipeline.r2.download_object", return_value=b"fake"), \
+         patch("app.services.face_pipeline._detect_faces", side_effect=RuntimeError("boom")):
+        from app.services.face_pipeline import _run_pipeline
+        await _run_pipeline(exhausted_photo.id, event.id)
 
     await db.refresh(exhausted_photo)
     assert exhausted_photo.processing_status == "error"
@@ -599,29 +567,21 @@ async def test_upload_wrong_owner_returns_404(client, db, auth_headers, tmp_path
 # ---------------------------------------------------------------------------
 
 
-async def test_run_pipeline_three_faces(db, photo, event, tmp_path):
+async def test_run_pipeline_three_faces(db, photo, event):
     """TC-06: 3-face photo → exactly 3 face_records and Qdrant upsert with 3 points."""
-    img_dir = tmp_path / "events" / str(event.id)
-    img_dir.mkdir(parents=True)
-    (img_dir / "test.jpg").write_bytes(b"fake-image")
-
     faces = [
         {"bbox": [10, 20, 60, 80], "embedding": np.random.rand(512).astype(np.float32)},
         {"bbox": [100, 120, 70, 90], "embedding": np.random.rand(512).astype(np.float32)},
         {"bbox": [200, 220, 65, 85], "embedding": np.random.rand(512).astype(np.float32)},
     ]
 
-    import app.services.face_pipeline as fp_module
-    original_storage = fp_module.settings.STORAGE_PATH
-    fp_module.settings.STORAGE_PATH = str(tmp_path)
-    try:
-        with patch("app.services.face_pipeline._detect_faces", return_value=faces), \
-             patch("app.services.qdrant.ensure_collection"), \
-             patch("app.services.qdrant.upsert_face_vectors") as mock_upsert:
-            from app.services.face_pipeline import _run_pipeline
-            await _run_pipeline(photo.id, event.id)
-    finally:
-        fp_module.settings.STORAGE_PATH = original_storage
+    with patch("app.services.face_pipeline.r2.download_object", return_value=b"fake-image"), \
+         patch("app.services.face_pipeline.r2.put_object"), \
+         patch("app.services.face_pipeline._detect_faces", return_value=faces), \
+         patch("app.services.qdrant.ensure_collection"), \
+         patch("app.services.qdrant.upsert_face_vectors") as mock_upsert:
+        from app.services.face_pipeline import _run_pipeline
+        await _run_pipeline(photo.id, event.id)
 
     await db.refresh(photo)
     assert photo.processing_status == "complete"
@@ -640,12 +600,8 @@ async def test_run_pipeline_three_faces(db, photo, event, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-async def test_pipeline_skips_sub_40px_face(db, event, tmp_path):
+async def test_pipeline_skips_sub_40px_face(db, event):
     """TC-10: A face whose bbox is smaller than 40×40 is silently skipped."""
-    img_dir = tmp_path / "events" / str(event.id)
-    img_dir.mkdir(parents=True)
-    (img_dir / "small.jpg").write_bytes(b"fake")
-
     small_photo = Photo(
         id=uuid.uuid4(),
         event_id=event.id,
@@ -658,19 +614,14 @@ async def test_pipeline_skips_sub_40px_face(db, event, tmp_path):
     db.add(small_photo)
     await db.commit()
 
-    import app.services.face_pipeline as fp_module
-
     # _detect_faces already filters sub-40px faces; simulate it returning empty after filtering
-    original_storage = fp_module.settings.STORAGE_PATH
-    fp_module.settings.STORAGE_PATH = str(tmp_path)
-    try:
-        with patch("app.services.face_pipeline._detect_faces", return_value=[]), \
-             patch("app.services.qdrant.ensure_collection"), \
-             patch("app.services.qdrant.upsert_face_vectors") as mock_upsert:
-            from app.services.face_pipeline import _run_pipeline
-            await _run_pipeline(small_photo.id, event.id)
-    finally:
-        fp_module.settings.STORAGE_PATH = original_storage
+    with patch("app.services.face_pipeline.r2.download_object", return_value=b"fake"), \
+         patch("app.services.face_pipeline.r2.put_object"), \
+         patch("app.services.face_pipeline._detect_faces", return_value=[]), \
+         patch("app.services.qdrant.ensure_collection"), \
+         patch("app.services.qdrant.upsert_face_vectors") as mock_upsert:
+        from app.services.face_pipeline import _run_pipeline
+        await _run_pipeline(small_photo.id, event.id)
 
     await db.refresh(small_photo)
     assert small_photo.processing_status == "complete"
@@ -678,12 +629,8 @@ async def test_pipeline_skips_sub_40px_face(db, event, tmp_path):
     mock_upsert.assert_not_called()
 
 
-async def test_pipeline_skips_small_keeps_large_face(db, event, tmp_path):
+async def test_pipeline_skips_small_keeps_large_face(db, event):
     """TC-11: Mix of valid and sub-40px faces — only large face stored."""
-    img_dir = tmp_path / "events" / str(event.id)
-    img_dir.mkdir(parents=True)
-    (img_dir / "mix.jpg").write_bytes(b"fake")
-
     mixed_photo = Photo(
         id=uuid.uuid4(),
         event_id=event.id,
@@ -701,17 +648,13 @@ async def test_pipeline_skips_small_keeps_large_face(db, event, tmp_path):
         {"bbox": [10, 20, 60, 80], "embedding": np.random.rand(512).astype(np.float32)},
     ]
 
-    import app.services.face_pipeline as fp_module
-    original_storage = fp_module.settings.STORAGE_PATH
-    fp_module.settings.STORAGE_PATH = str(tmp_path)
-    try:
-        with patch("app.services.face_pipeline._detect_faces", return_value=one_valid_face), \
-             patch("app.services.qdrant.ensure_collection"), \
-             patch("app.services.qdrant.upsert_face_vectors"):
-            from app.services.face_pipeline import _run_pipeline
-            await _run_pipeline(mixed_photo.id, event.id)
-    finally:
-        fp_module.settings.STORAGE_PATH = original_storage
+    with patch("app.services.face_pipeline.r2.download_object", return_value=b"fake"), \
+         patch("app.services.face_pipeline.r2.put_object"), \
+         patch("app.services.face_pipeline._detect_faces", return_value=one_valid_face), \
+         patch("app.services.qdrant.ensure_collection"), \
+         patch("app.services.qdrant.upsert_face_vectors"):
+        from app.services.face_pipeline import _run_pipeline
+        await _run_pipeline(mixed_photo.id, event.id)
 
     await db.refresh(mixed_photo)
     assert mixed_photo.processing_status == "complete"
@@ -813,28 +756,20 @@ async def test_status_endpoint_pending_count(client, db, user, event, auth_heade
 # ---------------------------------------------------------------------------
 
 
-async def test_qdrant_write_error_sets_failed_no_face_records(db, photo, event, tmp_path):
+async def test_qdrant_write_error_sets_failed_no_face_records(db, photo, event):
     """TC-23: Qdrant upsert failure → status=failed, no face_records persisted."""
-    img_dir = tmp_path / "events" / str(event.id)
-    img_dir.mkdir(parents=True)
-    (img_dir / "test.jpg").write_bytes(b"fake")
-
     photo.processing_attempts = 1
     await db.commit()
 
     faces = [{"bbox": [10, 20, 60, 80], "embedding": np.random.rand(512).astype(np.float32)}]
 
-    import app.services.face_pipeline as fp_module
-    original_storage = fp_module.settings.STORAGE_PATH
-    fp_module.settings.STORAGE_PATH = str(tmp_path)
-    try:
-        with patch("app.services.face_pipeline._detect_faces", return_value=faces), \
-             patch("app.services.qdrant.ensure_collection"), \
-             patch("app.services.qdrant.upsert_face_vectors", side_effect=RuntimeError("Qdrant down")):
-            from app.services.face_pipeline import _run_pipeline
-            await _run_pipeline(photo.id, event.id)
-    finally:
-        fp_module.settings.STORAGE_PATH = original_storage
+    with patch("app.services.face_pipeline.r2.download_object", return_value=b"fake"), \
+         patch("app.services.face_pipeline.r2.put_object"), \
+         patch("app.services.face_pipeline._detect_faces", return_value=faces), \
+         patch("app.services.qdrant.ensure_collection"), \
+         patch("app.services.qdrant.upsert_face_vectors", side_effect=RuntimeError("Qdrant down")):
+        from app.services.face_pipeline import _run_pipeline
+        await _run_pipeline(photo.id, event.id)
 
     await db.refresh(photo)
     assert photo.processing_status == "failed"
@@ -895,25 +830,16 @@ async def test_retry_picks_up_failed_photos(db, event):
 # ---------------------------------------------------------------------------
 
 
-async def test_pipeline_error_log_contains_required_fields(db, photo, event, tmp_path, caplog):
+async def test_pipeline_error_log_contains_required_fields(db, photo, event, caplog):
     """TC-26: On failure, log contains event_id, photo_id, and exc_type."""
-    img_dir = tmp_path / "events" / str(event.id)
-    img_dir.mkdir(parents=True)
-    (img_dir / "test.jpg").write_bytes(b"fake")
-
     photo.processing_attempts = 1
     await db.commit()
 
-    import app.services.face_pipeline as fp_module
-    original_storage = fp_module.settings.STORAGE_PATH
-    fp_module.settings.STORAGE_PATH = str(tmp_path)
-    try:
-        with patch("app.services.face_pipeline._detect_faces", side_effect=ValueError("bad image")), \
-             caplog.at_level(logging.ERROR, logger="weddinglens.face_pipeline"):
-            from app.services.face_pipeline import _run_pipeline
-            await _run_pipeline(photo.id, event.id)
-    finally:
-        fp_module.settings.STORAGE_PATH = original_storage
+    with patch("app.services.face_pipeline.r2.download_object", return_value=b"fake"), \
+         patch("app.services.face_pipeline._detect_faces", side_effect=ValueError("bad image")), \
+         caplog.at_level(logging.ERROR, logger="weddinglens.face_pipeline"):
+        from app.services.face_pipeline import _run_pipeline
+        await _run_pipeline(photo.id, event.id)
 
     assert len(caplog.records) >= 1
     error_log = caplog.records[-1].getMessage()

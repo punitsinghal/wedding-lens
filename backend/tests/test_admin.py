@@ -136,7 +136,8 @@ async def test_suspend_nonexistent_event(client: AsyncClient, admin_headers: dic
 async def test_admin_hard_delete(
     client: AsyncClient, auth_headers: dict, admin_headers: dict
 ):
-    with patch("app.services.qdrant.delete_collection") as mock_delete:
+    with patch("app.services.qdrant.delete_collection") as mock_delete, \
+         patch("app.services.purge.r2.delete_prefix", return_value=0) as mock_delete_prefix:
         event_id = await make_event(client, auth_headers, "hard-delete-me")
         resp = await client.delete(
             f"/api/v1/admin/events/{event_id}", headers=admin_headers
@@ -147,6 +148,9 @@ async def test_admin_hard_delete(
     assert resp.status_code == 404
     # REQ-3a/D2 — the stub is gone; the real qdrant.delete_collection is called.
     mock_delete.assert_called_once_with(uuid.UUID(event_id))
+    # Storage cleanup goes through the shared purge_event_files -> R2 delete_prefix,
+    # not a local shutil.rmtree.
+    mock_delete_prefix.assert_called_once_with(f"events/{event_id}/")
 
 
 @pytest.mark.asyncio
@@ -159,7 +163,8 @@ async def test_admin_hard_delete_calls_real_qdrant_delete_not_stub(
 
     assert not hasattr(purge_module, "_stub_qdrant_delete")
 
-    with patch("app.services.qdrant.delete_collection") as mock_delete:
+    with patch("app.services.qdrant.delete_collection") as mock_delete, \
+         patch("app.services.purge.r2.delete_prefix", return_value=0):
         event_id = await make_event(client, auth_headers, "hard-delete-real")
         resp = await client.delete(
             f"/api/v1/admin/events/{event_id}", headers=admin_headers

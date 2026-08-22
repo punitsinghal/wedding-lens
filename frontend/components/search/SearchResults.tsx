@@ -1,7 +1,5 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { guestFetchBlob } from '@/lib/api';
 import { useFavourites } from '@/hooks/useFavourites';
 import FavouriteToggle from '@/components/photo-actions/FavouriteToggle';
 import ShareButton from '@/components/photo-actions/ShareButton';
@@ -22,31 +20,11 @@ interface ResultCardProps {
 }
 
 function ResultCard({ result, eventId, isFavourited, onToggleFavourite }: ResultCardProps) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    let objectUrl: string | null = null;
-    let cancelled = false;
-
-    guestFetchBlob(eventId, result.thumbnail_url)
-      .then((blob) => {
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setBlobUrl(objectUrl);
-      })
-      .catch(() => {});
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [result.photo_id, result.thumbnail_url, eventId]);
-
   return (
     <div className="relative aspect-square w-full overflow-hidden rounded-sm bg-gray-200 group">
-      {blobUrl ? (
+      {result.thumbnail_url ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={blobUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        <img src={result.thumbnail_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
       ) : (
         <div className="absolute inset-0 bg-gray-200 animate-pulse" />
       )}

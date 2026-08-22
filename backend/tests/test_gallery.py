@@ -2,7 +2,6 @@
 
 import io
 import uuid
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -15,6 +14,8 @@ from app.models.analytics import DownloadEvent, ViewEvent
 from app.models.event import Event
 from app.models.photo import Photo
 from app.models.user import User
+from app.services import gallery as gallery_service
+from app.services import r2
 from app.services.auth import create_access_token
 from app.services.guest_auth import create_guest_token
 from tests.conftest import TestSessionLocal
@@ -75,12 +76,13 @@ async def _make_photo(
     download_count: int = 0,
     is_photographer_choice: bool = False,
     thumbnail_path: str | None = None,
+    filename: str = "test.jpg",
 ) -> Photo:
     photo = Photo(
         id=uuid.uuid4(),
         event_id=event.id,
         album_id=album.id if album else None,
-        filename="test.jpg",
+        filename=filename,
         storage_path=f"events/{event.id}/{uuid.uuid4()}.jpg",
         file_size=1024,
         processing_status="complete",
@@ -102,6 +104,22 @@ def _guest_headers(event_id: uuid.UUID) -> dict:
 def _owner_headers(user: User) -> dict:
     token = create_access_token(str(user.id))
     return {"Authorization": f"Bearer {token}"}
+
+
+def _real_jpeg_bytes(size: tuple[int, int] = (100, 50), color=(200, 100, 50)) -> bytes:
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", size, color=color).save(buf, "JPEG")
+    return buf.getvalue()
+
+
+def _real_heic_bytes(size: tuple[int, int] = (80, 40), color=(10, 20, 30)) -> bytes:
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", size, color=color).save(buf, format="HEIF")
+    return buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +149,54 @@ async def test_gallery_list_default_sort_latest(
     # Verify sorted descending by created_at
     times = [p["created_at"] for p in body["photos"]]
     assert times == sorted(times, reverse=True)
+
+
+# ---------------------------------------------------------------------------
+# Test 1b: gallery list embeds a real presigned URL for thumbnail_url
+# (rather than a backend-relative path) — see
+# docs/decisions/2026-08-22-presigned-url-image-delivery.md.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_gallery_list_thumbnail_url_is_presigned(
+    client: AsyncClient, db: AsyncSession, regular_user: User
+):
+    event = await _make_event(db, regular_user)
+    photo = await _make_photo(db, event, thumbnail_path=f"events/{event.id}/thumbs/x.webp")
+
+    signed_url = "https://r2.example.com/signed-thumb?X-Amz-Signature=abc"
+    with patch("app.routers.gallery.r2.generate_get_url", return_value=signed_url) as mock_gen:
+        resp = await client.get(
+            f"/api/v1/events/{event.id}/gallery",
+            headers=_guest_headers(event.id),
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["photos"][0]["thumbnail_url"] == signed_url
+    mock_gen.assert_called_once_with(photo.thumbnail_path)
+
+
+@pytest.mark.asyncio
+async def test_gallery_list_thumbnail_url_none_on_sign_failure(
+    client: AsyncClient, db: AsyncSession, regular_user: User
+):
+    """A signing failure for one photo's thumbnail must not 500 the whole
+    gallery batch — it degrades to thumbnail_url=None for that photo."""
+    event = await _make_event(db, regular_user)
+    await _make_photo(db, event, thumbnail_path=f"events/{event.id}/thumbs/x.webp")
+
+    with patch(
+        "app.routers.gallery.r2.generate_get_url",
+        side_effect=r2.StorageUnavailableError("boom"),
+    ):
+        resp = await client.get(
+            f"/api/v1/events/{event.id}/gallery",
+            headers=_guest_headers(event.id),
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["photos"][0]["thumbnail_url"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -300,7 +366,8 @@ async def test_photographer_choice_guest_gets_403(
 
 
 # ---------------------------------------------------------------------------
-# Test 8: GET /photos/{id}/download increments download_count by 1
+# Test 8: GET /photos/{id}/download increments download_count by 1 and
+# 302-redirects to the presigned R2 URL.
 # ---------------------------------------------------------------------------
 
 
@@ -308,36 +375,20 @@ async def test_photographer_choice_guest_gets_403(
 async def test_download_increments_count(
     client: AsyncClient, db: AsyncSession, regular_user: User
 ):
-    import os
-    from pathlib import Path
-
     event = await _make_event(db, regular_user)
+    photo = await _make_photo(db, event)
 
-    # Create a real file on disk so FileResponse doesn't 404
-    storage_dir = Path(os.environ["STORAGE_PATH"]) / f"events/{event.id}"
-    storage_dir.mkdir(parents=True, exist_ok=True)
-    photo_filename = f"{uuid.uuid4()}.jpg"
-    storage_path = f"events/{event.id}/{photo_filename}"
-    (storage_dir / photo_filename).write_bytes(b"fake-image-data")
+    jpeg_header = _real_jpeg_bytes()[:16]
+    signed_url = "https://r2.example.com/signed-download"
 
-    photo = Photo(
-        id=uuid.uuid4(),
-        event_id=event.id,
-        filename="test.jpg",
-        storage_path=storage_path,
-        file_size=16,
-        processing_status="complete",
-        download_count=0,
-    )
-    db.add(photo)
-    await db.commit()
-    await db.refresh(photo)
-
-    resp = await client.get(
-        f"/api/v1/events/{event.id}/photos/{photo.id}/download",
-        headers=_guest_headers(event.id),
-    )
-    assert resp.status_code == 200
+    with patch("app.services.gallery.r2.read_range", return_value=jpeg_header), \
+         patch("app.routers.gallery.r2.generate_get_url", return_value=signed_url):
+        resp = await client.get(
+            f"/api/v1/events/{event.id}/photos/{photo.id}/download",
+            headers=_guest_headers(event.id),
+        )
+    assert resp.status_code == 302
+    assert resp.headers["location"] == signed_url
 
     # Verify download_count incremented
     await db.refresh(photo)
@@ -363,6 +414,42 @@ async def test_thumbnail_404_when_path_is_null(
     assert resp.status_code == 404
 
 
+@pytest.mark.asyncio
+async def test_thumbnail_redirects_to_presigned_url(
+    client: AsyncClient, db: AsyncSession, regular_user: User
+):
+    event = await _make_event(db, regular_user)
+    photo = await _make_photo(db, event, thumbnail_path=f"events/{event.id}/thumbs/x.webp")
+
+    signed_url = "https://r2.example.com/signed-thumb"
+    with patch("app.routers.gallery.r2.generate_get_url", return_value=signed_url) as mock_gen:
+        resp = await client.get(
+            f"/api/v1/events/{event.id}/photos/{photo.id}/thumbnail",
+            headers=_guest_headers(event.id),
+        )
+    assert resp.status_code == 302
+    assert resp.headers["location"] == signed_url
+    mock_gen.assert_called_once_with(photo.thumbnail_path)
+
+
+@pytest.mark.asyncio
+async def test_thumbnail_503_when_storage_unavailable(
+    client: AsyncClient, db: AsyncSession, regular_user: User
+):
+    event = await _make_event(db, regular_user)
+    photo = await _make_photo(db, event, thumbnail_path=f"events/{event.id}/thumbs/x.webp")
+
+    with patch(
+        "app.routers.gallery.r2.generate_get_url",
+        side_effect=r2.StorageUnavailableError("boom"),
+    ):
+        resp = await client.get(
+            f"/api/v1/events/{event.id}/photos/{photo.id}/thumbnail",
+            headers=_guest_headers(event.id),
+        )
+    assert resp.status_code == 503
+
+
 # ---------------------------------------------------------------------------
 # Test 10: download writes a download_events row (D5, S6) — separate from
 # Photo.download_count above.
@@ -373,35 +460,18 @@ async def test_thumbnail_404_when_path_is_null(
 async def test_download_writes_download_event(
     client: AsyncClient, db: AsyncSession, regular_user: User
 ):
-    import os
-    from pathlib import Path
-
     event = await _make_event(db, regular_user)
+    photo = await _make_photo(db, event)
 
-    storage_dir = Path(os.environ["STORAGE_PATH"]) / f"events/{event.id}"
-    storage_dir.mkdir(parents=True, exist_ok=True)
-    photo_filename = f"{uuid.uuid4()}.jpg"
-    storage_path = f"events/{event.id}/{photo_filename}"
-    (storage_dir / photo_filename).write_bytes(b"fake-image-data")
+    jpeg_header = _real_jpeg_bytes()[:16]
 
-    photo = Photo(
-        id=uuid.uuid4(),
-        event_id=event.id,
-        filename="test.jpg",
-        storage_path=storage_path,
-        file_size=16,
-        processing_status="complete",
-        download_count=0,
-    )
-    db.add(photo)
-    await db.commit()
-    await db.refresh(photo)
-
-    resp = await client.get(
-        f"/api/v1/events/{event.id}/photos/{photo.id}/download",
-        headers=_guest_headers(event.id),
-    )
-    assert resp.status_code == 200
+    with patch("app.services.gallery.r2.read_range", return_value=jpeg_header), \
+         patch("app.routers.gallery.r2.generate_get_url", return_value="https://r2.example.com/x"):
+        resp = await client.get(
+            f"/api/v1/events/{event.id}/photos/{photo.id}/download",
+            headers=_guest_headers(event.id),
+        )
+    assert resp.status_code == 302
 
     result = await db.execute(
         select(DownloadEvent).where(DownloadEvent.event_id == event.id)
@@ -452,29 +522,17 @@ async def test_view_beacon_requires_guest_auth(client: AsyncClient, db: AsyncSes
 # ---------------------------------------------------------------------------
 
 
-async def _make_photo_with_original(
-    db: AsyncSession, event: Event, size: tuple[int, int] = (100, 50)
+async def _make_photo_row(
+    db: AsyncSession, event: Event, filename: str = "test.jpg"
 ) -> Photo:
-    """Creates a Photo row backed by a real JPEG written to STORAGE_PATH,
-    so preview generation has an original file to read from."""
-    import os
-
-    from PIL import Image
-
-    storage_dir = Path(os.environ["STORAGE_PATH"]) / f"events/{event.id}"
-    storage_dir.mkdir(parents=True, exist_ok=True)
-    filename = f"{uuid.uuid4()}.jpg"
-    storage_path = f"events/{event.id}/{filename}"
-
-    img = Image.new("RGB", size, color=(200, 100, 50))
-    img.save(storage_dir / filename, "JPEG")
-
+    """A Photo row with no real bytes anywhere — original bytes are provided
+    by mocking `r2.download_object` in each test."""
     photo = Photo(
         id=uuid.uuid4(),
         event_id=event.id,
-        filename="test.jpg",
-        storage_path=storage_path,
-        file_size=(storage_dir / filename).stat().st_size,
+        filename=filename,
+        storage_path=f"events/{event.id}/{uuid.uuid4()}.jpg",
+        file_size=1024,
         processing_status="complete",
     )
     db.add(photo)
@@ -487,26 +545,35 @@ async def _make_photo_with_original(
 async def test_preview_generates_and_caches_on_first_request(
     client: AsyncClient, db: AsyncSession, regular_user: User
 ):
-    import os
-
     from PIL import Image
 
     event = await _make_event(db, regular_user)
-    photo = await _make_photo_with_original(db, event, size=(100, 50))
+    photo = await _make_photo_row(db, event)
+    original_bytes = _real_jpeg_bytes(size=(100, 50))
 
-    expected_rel_path = f"events/{event.id}/previews/{photo.id}.webp"
-    expected_abs_path = Path(os.environ["STORAGE_PATH"]) / expected_rel_path
-    assert not expected_abs_path.exists()
+    captured: dict = {}
 
-    resp = await client.get(
-        f"/api/v1/events/{event.id}/photos/{photo.id}/lightbox",
-        headers=_guest_headers(event.id),
-    )
-    assert resp.status_code == 200
-    assert resp.headers["content-type"] == "image/webp"
-    assert expected_abs_path.exists()
+    def fake_put_object(key, body, content_type):
+        captured["key"] = key
+        captured["body"] = body
+        captured["content_type"] = content_type
 
-    preview = Image.open(expected_abs_path)
+    expected_key = f"events/{event.id}/previews/{photo.id}.webp"
+
+    with patch("app.services.gallery.r2.head_object", return_value=False), \
+         patch("app.services.gallery.r2.download_object", return_value=original_bytes), \
+         patch("app.services.gallery.r2.put_object", side_effect=fake_put_object), \
+         patch("app.routers.gallery.r2.generate_get_url", return_value="https://r2.example.com/preview"):
+        resp = await client.get(
+            f"/api/v1/events/{event.id}/photos/{photo.id}/lightbox",
+            headers=_guest_headers(event.id),
+        )
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "https://r2.example.com/preview"
+    assert captured["key"] == expected_key
+    assert captured["content_type"] == "image/webp"
+
+    preview = Image.open(io.BytesIO(captured["body"]))
     # Small original (100x50) must never be upscaled.
     assert preview.size == (100, 50)
 
@@ -515,23 +582,28 @@ async def test_preview_generates_and_caches_on_first_request(
 async def test_preview_downscales_large_original_to_max_2000px_edge(
     client: AsyncClient, db: AsyncSession, regular_user: User
 ):
-    import os
-
     from PIL import Image
 
     event = await _make_event(db, regular_user)
-    photo = await _make_photo_with_original(db, event, size=(4000, 2000))
+    photo = await _make_photo_row(db, event)
+    original_bytes = _real_jpeg_bytes(size=(4000, 2000))
 
-    resp = await client.get(
-        f"/api/v1/events/{event.id}/photos/{photo.id}/lightbox",
-        headers=_guest_headers(event.id),
-    )
-    assert resp.status_code == 200
+    captured: dict = {}
 
-    expected_abs_path = (
-        Path(os.environ["STORAGE_PATH"]) / f"events/{event.id}/previews/{photo.id}.webp"
-    )
-    preview = Image.open(expected_abs_path)
+    def fake_put_object(key, body, content_type):
+        captured["body"] = body
+
+    with patch("app.services.gallery.r2.head_object", return_value=False), \
+         patch("app.services.gallery.r2.download_object", return_value=original_bytes), \
+         patch("app.services.gallery.r2.put_object", side_effect=fake_put_object), \
+         patch("app.routers.gallery.r2.generate_get_url", return_value="https://r2.example.com/preview"):
+        resp = await client.get(
+            f"/api/v1/events/{event.id}/photos/{photo.id}/lightbox",
+            headers=_guest_headers(event.id),
+        )
+    assert resp.status_code == 302
+
+    preview = Image.open(io.BytesIO(captured["body"]))
     assert max(preview.size) == 2000
     assert preview.size == (2000, 1000)
 
@@ -540,25 +612,30 @@ async def test_preview_downscales_large_original_to_max_2000px_edge(
 async def test_preview_second_request_serves_cached_file_without_regenerating(
     client: AsyncClient, db: AsyncSession, regular_user: User
 ):
-    from app.services import gallery as gallery_service
-
     event = await _make_event(db, regular_user)
-    photo = await _make_photo_with_original(db, event)
+    photo = await _make_photo_row(db, event)
+    original_bytes = _real_jpeg_bytes()
 
-    resp1 = await client.get(
-        f"/api/v1/events/{event.id}/photos/{photo.id}/lightbox",
-        headers=_guest_headers(event.id),
-    )
-    assert resp1.status_code == 200
+    with patch("app.services.gallery.r2.head_object", return_value=False), \
+         patch("app.services.gallery.r2.download_object", return_value=original_bytes), \
+         patch("app.services.gallery.r2.put_object"), \
+         patch("app.routers.gallery.r2.generate_get_url", return_value="https://r2.example.com/preview1"):
+        resp1 = await client.get(
+            f"/api/v1/events/{event.id}/photos/{photo.id}/lightbox",
+            headers=_guest_headers(event.id),
+        )
+    assert resp1.status_code == 302
 
-    with patch.object(
-        gallery_service, "_generate_preview", wraps=gallery_service._generate_preview
-    ) as mock_generate:
+    with patch("app.services.gallery.r2.head_object", return_value=True), \
+         patch.object(
+             gallery_service, "_generate_preview", wraps=gallery_service._generate_preview
+         ) as mock_generate, \
+         patch("app.routers.gallery.r2.generate_get_url", return_value="https://r2.example.com/preview2"):
         resp2 = await client.get(
             f"/api/v1/events/{event.id}/photos/{photo.id}/lightbox",
             headers=_guest_headers(event.id),
         )
-        assert resp2.status_code == 200
+        assert resp2.status_code == 302
         mock_generate.assert_not_called()
 
 
@@ -580,133 +657,141 @@ async def test_preview_404_when_original_file_missing(
     client: AsyncClient, db: AsyncSession, regular_user: User
 ):
     event = await _make_event(db, regular_user)
-    # storage_path points at a file that was never written to disk.
-    photo = await _make_photo(db, event)
+    photo = await _make_photo_row(db, event)
 
-    resp = await client.get(
-        f"/api/v1/events/{event.id}/photos/{photo.id}/lightbox",
-        headers=_guest_headers(event.id),
-    )
+    with patch("app.services.gallery.r2.head_object", return_value=False), \
+         patch(
+             "app.services.gallery.r2.download_object",
+             side_effect=r2.StorageUnavailableError("missing"),
+         ):
+        resp = await client.get(
+            f"/api/v1/events/{event.id}/photos/{photo.id}/lightbox",
+            headers=_guest_headers(event.id),
+        )
     assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------
 # Test 13: guests must never receive a raw HEIC/HEIF file on download —
-# single-photo download and ZIP download both convert to JPEG, lazily and
-# cached, leaving already-JPEG/PNG originals untouched. See
+# single-photo download converts to JPEG, lazily and cached, leaving
+# already-JPEG/PNG originals untouched. See
 # docs/decisions/2026-08-21-heic-to-jpeg-conversion-for-downloads.md.
 # ---------------------------------------------------------------------------
-
-
-def _write_heic(abs_path: Path, size: tuple[int, int] = (80, 40)) -> None:
-    """Writes a real HEIC file to `abs_path` using pillow-heif."""
-    from PIL import Image
-
-    abs_path.parent.mkdir(parents=True, exist_ok=True)
-    img = Image.new("RGB", size, color=(10, 20, 30))
-    img.save(abs_path, format="HEIF")
-
-
-async def _make_photo_with_heic_original(
-    db: AsyncSession, event: Event, filename: str = "IMG_4521.HEIC"
-) -> Photo:
-    import os
-
-    storage_dir = Path(os.environ["STORAGE_PATH"]) / f"events/{event.id}"
-    storage_filename = f"{uuid.uuid4()}.heic"
-    storage_path = f"events/{event.id}/{storage_filename}"
-    _write_heic(storage_dir / storage_filename)
-
-    photo = Photo(
-        id=uuid.uuid4(),
-        event_id=event.id,
-        filename=filename,
-        storage_path=storage_path,
-        file_size=(storage_dir / storage_filename).stat().st_size,
-        processing_status="complete",
-    )
-    db.add(photo)
-    await db.commit()
-    await db.refresh(photo)
-    return photo
 
 
 @pytest.mark.asyncio
 async def test_download_serves_jpeg_original_unchanged(
     client: AsyncClient, db: AsyncSession, regular_user: User
 ):
-    """An already-JPEG original must be served as-is — no re-encode, same
-    bytes, same filename."""
+    """An already-JPEG original must be served as-is — no re-encode, no
+    cached conversion object written, same storage key used for the
+    presigned URL, same filename."""
     event = await _make_event(db, regular_user)
-    photo = await _make_photo_with_original(db, event, size=(60, 30))
+    photo = await _make_photo_row(db, event, filename="test.jpg")
+    jpeg_header = _real_jpeg_bytes()[:16]
+    signed_url = "https://r2.example.com/signed-download"
 
-    from app.services import gallery as gallery_service
-
-    original_bytes = (
-        Path(gallery_service.settings.STORAGE_PATH) / photo.storage_path
-    ).read_bytes()
-
-    resp = await client.get(
-        f"/api/v1/events/{event.id}/photos/{photo.id}/download",
-        headers=_guest_headers(event.id),
+    with patch("app.services.gallery.r2.read_range", return_value=jpeg_header), \
+         patch("app.services.gallery.r2.put_object") as mock_put, \
+         patch("app.routers.gallery.r2.generate_get_url", return_value=signed_url) as mock_gen:
+        resp = await client.get(
+            f"/api/v1/events/{event.id}/photos/{photo.id}/download",
+            headers=_guest_headers(event.id),
+        )
+    assert resp.status_code == 302
+    assert resp.headers["location"] == signed_url
+    mock_put.assert_not_called()
+    mock_gen.assert_called_once_with(
+        photo.storage_path,
+        response_content_disposition='attachment; filename="test.jpg"',
     )
-    assert resp.status_code == 200
-    assert resp.content == original_bytes
-    assert resp.headers["content-disposition"].endswith('filename="test.jpg"')
 
 
 @pytest.mark.asyncio
 async def test_download_converts_heic_original_to_cached_jpeg(
     client: AsyncClient, db: AsyncSession, regular_user: User
 ):
-    import os
-
     from PIL import Image
 
     event = await _make_event(db, regular_user)
-    photo = await _make_photo_with_heic_original(db, event, filename="IMG_4521.HEIC")
+    photo = await _make_photo_row(db, event, filename="IMG_4521.HEIC")
+    heic_bytes = _real_heic_bytes(size=(80, 40))
+    heic_header = heic_bytes[:16]
 
-    expected_rel_path = f"events/{event.id}/downloads/{photo.id}.jpg"
-    expected_abs_path = Path(os.environ["STORAGE_PATH"]) / expected_rel_path
-    assert not expected_abs_path.exists()
+    captured: dict = {}
 
-    resp = await client.get(
-        f"/api/v1/events/{event.id}/photos/{photo.id}/download",
-        headers=_guest_headers(event.id),
-    )
-    assert resp.status_code == 200
-    assert resp.headers["content-disposition"].endswith('filename="IMG_4521.jpg"')
-    assert expected_abs_path.exists()
+    def fake_put_object(key, body, content_type):
+        captured["key"] = key
+        captured["body"] = body
+        captured["content_type"] = content_type
 
-    converted = Image.open(expected_abs_path)
+    expected_key = f"events/{event.id}/downloads/{photo.id}.jpg"
+    signed_url = "https://r2.example.com/signed-jpeg"
+
+    with patch("app.services.gallery.r2.read_range", return_value=heic_header), \
+         patch("app.services.gallery.r2.head_object", return_value=False), \
+         patch("app.services.gallery.r2.download_object", return_value=heic_bytes), \
+         patch("app.services.gallery.r2.put_object", side_effect=fake_put_object), \
+         patch("app.routers.gallery.r2.generate_get_url", return_value=signed_url) as mock_gen:
+        resp = await client.get(
+            f"/api/v1/events/{event.id}/photos/{photo.id}/download",
+            headers=_guest_headers(event.id),
+        )
+    assert resp.status_code == 302
+    assert resp.headers["location"] == signed_url
+    assert captured["key"] == expected_key
+    assert captured["content_type"] == "image/jpeg"
+
+    converted = Image.open(io.BytesIO(captured["body"]))
     assert converted.format == "JPEG"
     assert converted.size == (80, 40)
+
+    mock_gen.assert_called_once_with(
+        expected_key,
+        response_content_disposition='attachment; filename="IMG_4521.jpg"',
+    )
 
 
 @pytest.mark.asyncio
 async def test_download_second_request_reuses_cached_conversion(
     client: AsyncClient, db: AsyncSession, regular_user: User
 ):
-    from app.services import gallery as gallery_service
-
     event = await _make_event(db, regular_user)
-    photo = await _make_photo_with_heic_original(db, event)
+    photo = await _make_photo_row(db, event, filename="IMG_4521.HEIC")
+    heic_bytes = _real_heic_bytes()
+    heic_header = heic_bytes[:16]
 
-    resp1 = await client.get(
-        f"/api/v1/events/{event.id}/photos/{photo.id}/download",
-        headers=_guest_headers(event.id),
-    )
-    assert resp1.status_code == 200
+    with patch("app.services.gallery.r2.read_range", return_value=heic_header), \
+         patch("app.services.gallery.r2.head_object", return_value=False), \
+         patch("app.services.gallery.r2.download_object", return_value=heic_bytes), \
+         patch("app.services.gallery.r2.put_object"), \
+         patch("app.routers.gallery.r2.generate_get_url", return_value="https://r2.example.com/1"):
+        resp1 = await client.get(
+            f"/api/v1/events/{event.id}/photos/{photo.id}/download",
+            headers=_guest_headers(event.id),
+        )
+    assert resp1.status_code == 302
 
-    with patch.object(
-        gallery_service, "_convert_to_jpeg", wraps=gallery_service._convert_to_jpeg
-    ) as mock_convert:
+    with patch("app.services.gallery.r2.read_range", return_value=heic_header), \
+         patch("app.services.gallery.r2.head_object", return_value=True), \
+         patch.object(
+             gallery_service, "_convert_to_jpeg", wraps=gallery_service._convert_to_jpeg
+         ) as mock_convert, \
+         patch("app.routers.gallery.r2.generate_get_url", return_value="https://r2.example.com/2"):
         resp2 = await client.get(
             f"/api/v1/events/{event.id}/photos/{photo.id}/download",
             headers=_guest_headers(event.id),
         )
-        assert resp2.status_code == 200
+        assert resp2.status_code == 302
         mock_convert.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Test 14: ZIP download still converts HEIC entries to JPEG. `zip_streaming.py`
+# now fetches originals from R2 (like the rest of this module), so this test
+# mocks `app.services.zip_streaming.r2.*` the same way the single-download
+# tests above mock `app.services.gallery.r2.*`.
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -718,14 +803,30 @@ async def test_zip_download_converts_heic_entries_to_jpeg(
     import zipfile
 
     event = await _make_event(db, regular_user)
-    jpeg_photo = await _make_photo_with_original(db, event, size=(40, 20))
-    heic_photo = await _make_photo_with_heic_original(db, event, filename="IMG_9001.heic")
+    jpeg_photo = await _make_photo_row(db, event, filename="test.jpg")
+    heic_photo = await _make_photo_row(db, event, filename="IMG_9001.heic")
 
-    resp = await client.post(
-        f"/api/v1/events/{event.id}/photos/zip",
-        headers=_guest_headers(event.id),
-        json={"photo_ids": [str(jpeg_photo.id), str(heic_photo.id)]},
-    )
+    jpeg_bytes = _real_jpeg_bytes(size=(40, 20))
+    heic_bytes = _real_heic_bytes(size=(80, 40))
+    originals = {
+        jpeg_photo.storage_path: jpeg_bytes,
+        heic_photo.storage_path: heic_bytes,
+    }
+
+    with patch(
+        "app.services.zip_streaming.r2.read_range",
+        side_effect=lambda key, start, end: originals[key][:16],
+    ), patch(
+        "app.services.zip_streaming.r2.download_object",
+        side_effect=lambda key: originals[key],
+    ), patch(
+        "app.services.zip_streaming.r2.head_object", return_value=False
+    ), patch("app.services.zip_streaming.r2.put_object"):
+        resp = await client.post(
+            f"/api/v1/events/{event.id}/photos/zip",
+            headers=_guest_headers(event.id),
+            json={"photo_ids": [str(jpeg_photo.id), str(heic_photo.id)]},
+        )
     assert resp.status_code == 200
 
     with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:

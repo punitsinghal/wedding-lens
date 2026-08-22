@@ -1,9 +1,8 @@
 """Photo actions endpoint tests."""
 
-import os
+import io
 import uuid
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 from unittest.mock import patch
 
@@ -18,6 +17,7 @@ from app.models.analytics import DownloadEvent
 from app.models.event import Event
 from app.models.photo import Photo
 from app.models.user import User
+from app.services import r2
 from app.services.favourites_store import favourites_store
 from app.services.guest_auth import create_guest_token, create_share_token, decode_share_token
 from tests.conftest import TestSessionLocal
@@ -88,6 +88,14 @@ def _guest_sid(event_id: uuid.UUID) -> tuple[dict, str]:
     sid = str(uuid.uuid4())
     headers = _guest_headers(event_id, sid=sid)
     return headers, sid
+
+
+def _real_jpeg_bytes(size: tuple[int, int] = (10, 10), color=(200, 100, 50)) -> bytes:
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", size, color=color).save(buf, "JPEG")
+    return buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
@@ -259,6 +267,79 @@ async def test_favourites_add_remove_list(
 
 
 # ---------------------------------------------------------------------------
+# Test 6b: favourites list embeds a real presigned URL for thumbnail_url
+# (rather than a backend-relative path) — see
+# docs/decisions/2026-08-22-presigned-url-image-delivery.md.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_favourites_list_thumbnail_url_is_presigned(
+    client: AsyncClient, db: AsyncSession, regular_user: User
+):
+    event = await _make_event(db, regular_user)
+    photo = await _make_photo(db, event, thumbnail_path=f"events/{event.id}/thumbs/x.webp")
+    headers, _sid = _guest_sid(event.id)
+
+    await client.put(f"/api/v1/events/{event.id}/favourites/{photo.id}", headers=headers)
+
+    signed_url = "https://r2.example.com/signed-thumb?X-Amz-Signature=abc"
+    with patch(
+        "app.routers.photo_actions.r2.generate_get_url", return_value=signed_url
+    ) as mock_gen:
+        resp = await client.get(f"/api/v1/events/{event.id}/favourites", headers=headers)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["photos"][0]["thumbnail_url"] == signed_url
+    mock_gen.assert_called_once_with(photo.thumbnail_path)
+
+
+@pytest.mark.asyncio
+async def test_favourites_list_thumbnail_url_none_on_sign_failure(
+    client: AsyncClient, db: AsyncSession, regular_user: User
+):
+    """A signing failure for one photo's thumbnail must not 500 the whole
+    favourites batch — it degrades to thumbnail_url=None for that photo."""
+    event = await _make_event(db, regular_user)
+    photo = await _make_photo(db, event, thumbnail_path=f"events/{event.id}/thumbs/x.webp")
+    headers, _sid = _guest_sid(event.id)
+
+    await client.put(f"/api/v1/events/{event.id}/favourites/{photo.id}", headers=headers)
+
+    with patch(
+        "app.routers.photo_actions.r2.generate_get_url",
+        side_effect=r2.StorageUnavailableError("boom"),
+    ):
+        resp = await client.get(f"/api/v1/events/{event.id}/favourites", headers=headers)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["photos"][0]["thumbnail_url"] is None
+
+
+@pytest.mark.asyncio
+async def test_favourites_list_missing_thumbnail_path_is_none(
+    client: AsyncClient, db: AsyncSession, regular_user: User
+):
+    """A photo with no thumbnail yet (still processing) stays thumbnail_url=None
+    without ever calling r2.generate_get_url."""
+    event = await _make_event(db, regular_user)
+    photo = await _make_photo(db, event, thumbnail_path=None)
+    headers, _sid = _guest_sid(event.id)
+
+    await client.put(f"/api/v1/events/{event.id}/favourites/{photo.id}", headers=headers)
+
+    with patch("app.routers.photo_actions.r2.generate_get_url") as mock_gen:
+        resp = await client.get(f"/api/v1/events/{event.id}/favourites", headers=headers)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["photos"][0]["thumbnail_url"] is None
+    mock_gen.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # Test 7: favourites zip with no favourites → 400
 # ---------------------------------------------------------------------------
 
@@ -284,14 +365,10 @@ async def test_favourites_zip_writes_one_download_event(
     event = await _make_event(db, regular_user)
     headers, sid = _guest_sid(event.id)
 
-    storage_dir = Path(os.environ["STORAGE_PATH"]) / f"events/{event.id}"
-    storage_dir.mkdir(parents=True, exist_ok=True)
-
     photos = []
     for i in range(2):
         photo_filename = f"{uuid.uuid4()}.jpg"
         storage_path = f"events/{event.id}/{photo_filename}"
-        (storage_dir / photo_filename).write_bytes(b"fake-photo-data")
         photos.append(
             await _make_photo(db, event, storage_path=storage_path, filename=f"f{i}.jpg")
         )
@@ -302,10 +379,13 @@ async def test_favourites_zip_writes_one_download_event(
         )
         assert add_resp.status_code == 204
 
-    resp = await client.post(
-        f"/api/v1/events/{event.id}/favourites/zip",
-        headers=headers,
-    )
+    jpeg_bytes = _real_jpeg_bytes()
+    with patch("app.services.zip_streaming.r2.read_range", return_value=jpeg_bytes[:16]), \
+         patch("app.services.zip_streaming.r2.download_object", return_value=jpeg_bytes):
+        resp = await client.post(
+            f"/api/v1/events/{event.id}/favourites/zip",
+            headers=headers,
+        )
     assert resp.status_code == 200
     assert resp.content[:2] == b"PK"
 
@@ -431,20 +511,18 @@ async def test_bulk_zip_valid_photos(
 ):
     event = await _make_event(db, regular_user)
 
-    # Create a real file on disk
-    storage_dir = Path(os.environ["STORAGE_PATH"]) / f"events/{event.id}"
-    storage_dir.mkdir(parents=True, exist_ok=True)
     photo_filename = f"{uuid.uuid4()}.jpg"
     storage_path = f"events/{event.id}/{photo_filename}"
-    (storage_dir / photo_filename).write_bytes(b"fake-photo-data")
-
     photo = await _make_photo(db, event, storage_path=storage_path, filename="myphoto.jpg")
 
-    resp = await client.post(
-        f"/api/v1/events/{event.id}/photos/zip",
-        json={"photo_ids": [str(photo.id)]},
-        headers=_guest_headers(event.id),
-    )
+    jpeg_bytes = _real_jpeg_bytes()
+    with patch("app.services.zip_streaming.r2.read_range", return_value=jpeg_bytes[:16]), \
+         patch("app.services.zip_streaming.r2.download_object", return_value=jpeg_bytes):
+        resp = await client.post(
+            f"/api/v1/events/{event.id}/photos/zip",
+            json={"photo_ids": [str(photo.id)]},
+            headers=_guest_headers(event.id),
+        )
     assert resp.status_code == 200
     assert resp.headers["content-type"] == "application/zip"
     assert "attachment" in resp.headers["content-disposition"]
@@ -464,23 +542,22 @@ async def test_bulk_zip_writes_one_download_event_not_per_photo(
 ):
     event = await _make_event(db, regular_user)
 
-    storage_dir = Path(os.environ["STORAGE_PATH"]) / f"events/{event.id}"
-    storage_dir.mkdir(parents=True, exist_ok=True)
-
     photos = []
     for i in range(3):
         photo_filename = f"{uuid.uuid4()}.jpg"
         storage_path = f"events/{event.id}/{photo_filename}"
-        (storage_dir / photo_filename).write_bytes(b"fake-photo-data")
         photos.append(
             await _make_photo(db, event, storage_path=storage_path, filename=f"p{i}.jpg")
         )
 
-    resp = await client.post(
-        f"/api/v1/events/{event.id}/photos/zip",
-        json={"photo_ids": [str(p.id) for p in photos]},
-        headers=_guest_headers(event.id),
-    )
+    jpeg_bytes = _real_jpeg_bytes()
+    with patch("app.services.zip_streaming.r2.read_range", return_value=jpeg_bytes[:16]), \
+         patch("app.services.zip_streaming.r2.download_object", return_value=jpeg_bytes):
+        resp = await client.post(
+            f"/api/v1/events/{event.id}/photos/zip",
+            json={"photo_ids": [str(p.id) for p in photos]},
+            headers=_guest_headers(event.id),
+        )
     assert resp.status_code == 200
     assert resp.content[:2] == b"PK"
 
