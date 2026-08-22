@@ -19,7 +19,8 @@ from app.schemas.admin import (
 )
 from app.schemas.event import EventOut
 from app.schemas.privacy import RemovalRequestListOut, RemovalRequestOut
-from app.services import admin_stats, events as event_svc
+from app.services import admin_stats, events as event_svc, qdrant
+from app.services.purge import purge_event_files
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
@@ -205,19 +206,12 @@ async def admin_hard_delete_event(
     _admin: User = Depends(require_admin),
 ) -> Response:
     """Hard delete — same cascade as purge job, no grace period."""
-    import shutil
-    from pathlib import Path
-    from app.config import settings as app_settings
-    from app.services import qdrant
-
     event = await event_svc.get_event(db, event_id)
     if event is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
 
-    # 1. Delete files from storage
-    event_path = Path(app_settings.STORAGE_PATH) / "events" / str(event_id)
-    if event_path.exists():
-        shutil.rmtree(event_path)
+    # 1. Delete files from R2 (shared with the purge job — see app.services.purge)
+    await purge_event_files(event_id)
 
     # 2. Delete the event's Qdrant collection (idempotent — REQ-3a/D2)
     qdrant.delete_collection(event_id)

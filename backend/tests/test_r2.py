@@ -449,6 +449,113 @@ def test_list_parts_wraps_error(mock_settings):
 
 
 # ---------------------------------------------------------------------------
+# delete_prefix
+# ---------------------------------------------------------------------------
+
+
+@patch("app.services.r2.settings")
+def test_delete_prefix_deletes_all_keys_across_pages(mock_settings):
+    mock_settings.R2_BUCKET_NAME = BUCKET
+    mock_paginator = MagicMock()
+    mock_paginator.paginate.return_value = [
+        {"Contents": [{"Key": "events/e1/a.jpg"}, {"Key": "events/e1/b.jpg"}]},
+        {"Contents": [{"Key": "events/e1/c.jpg"}]},
+    ]
+    mock_client = MagicMock()
+    mock_client.get_paginator.return_value = mock_paginator
+    with patch("app.services.r2.get_r2_client", return_value=mock_client):
+        count = r2.delete_prefix("events/e1/")
+
+    assert count == 3
+    mock_client.get_paginator.assert_called_once_with("list_objects_v2")
+    mock_paginator.paginate.assert_called_once_with(Bucket=BUCKET, Prefix="events/e1/")
+    mock_client.delete_objects.assert_called_once_with(
+        Bucket=BUCKET,
+        Delete={
+            "Objects": [
+                {"Key": "events/e1/a.jpg"},
+                {"Key": "events/e1/b.jpg"},
+                {"Key": "events/e1/c.jpg"},
+            ]
+        },
+    )
+
+
+@patch("app.services.r2.settings")
+def test_delete_prefix_batches_in_groups_of_1000(mock_settings):
+    mock_settings.R2_BUCKET_NAME = BUCKET
+    keys = [{"Key": f"events/e1/{i}.jpg"} for i in range(1500)]
+    mock_paginator = MagicMock()
+    mock_paginator.paginate.return_value = [{"Contents": keys}]
+    mock_client = MagicMock()
+    mock_client.get_paginator.return_value = mock_paginator
+    with patch("app.services.r2.get_r2_client", return_value=mock_client):
+        count = r2.delete_prefix("events/e1/")
+
+    assert count == 1500
+    assert mock_client.delete_objects.call_count == 2
+    first_call_objects = mock_client.delete_objects.call_args_list[0].kwargs["Delete"]["Objects"]
+    second_call_objects = mock_client.delete_objects.call_args_list[1].kwargs["Delete"]["Objects"]
+    assert len(first_call_objects) == 1000
+    assert len(second_call_objects) == 500
+
+
+@patch("app.services.r2.settings")
+def test_delete_prefix_returns_zero_when_no_objects(mock_settings):
+    mock_settings.R2_BUCKET_NAME = BUCKET
+    mock_paginator = MagicMock()
+    mock_paginator.paginate.return_value = [{"Contents": []}]
+    mock_client = MagicMock()
+    mock_client.get_paginator.return_value = mock_paginator
+    with patch("app.services.r2.get_r2_client", return_value=mock_client):
+        count = r2.delete_prefix("events/missing/")
+
+    assert count == 0
+    mock_client.delete_objects.assert_not_called()
+
+
+@patch("app.services.r2.settings")
+def test_delete_prefix_wraps_error(mock_settings):
+    mock_settings.R2_BUCKET_NAME = BUCKET
+    mock_client = MagicMock()
+    mock_client.get_paginator.side_effect = _client_error(
+        "InternalError", 500, "ListObjectsV2"
+    )
+    with patch("app.services.r2.get_r2_client", return_value=mock_client):
+        with pytest.raises(r2.StorageUnavailableError):
+            r2.delete_prefix("events/e1/")
+
+
+# ---------------------------------------------------------------------------
+# abort_multipart_upload
+# ---------------------------------------------------------------------------
+
+
+@patch("app.services.r2.settings")
+def test_abort_multipart_upload_calls_client_correctly(mock_settings):
+    mock_settings.R2_BUCKET_NAME = BUCKET
+    mock_client = MagicMock()
+    with patch("app.services.r2.get_r2_client", return_value=mock_client):
+        r2.abort_multipart_upload("events/e1/photo.jpg", "upload-123")
+
+    mock_client.abort_multipart_upload.assert_called_once_with(
+        Bucket=BUCKET, Key="events/e1/photo.jpg", UploadId="upload-123"
+    )
+
+
+@patch("app.services.r2.settings")
+def test_abort_multipart_upload_wraps_client_error(mock_settings):
+    mock_settings.R2_BUCKET_NAME = BUCKET
+    mock_client = MagicMock()
+    mock_client.abort_multipart_upload.side_effect = _client_error(
+        "NoSuchUpload", 404, "AbortMultipartUpload"
+    )
+    with patch("app.services.r2.get_r2_client", return_value=mock_client):
+        with pytest.raises(r2.StorageUnavailableError):
+            r2.abort_multipart_upload("events/e1/photo.jpg", "upload-123")
+
+
+# ---------------------------------------------------------------------------
 # get_r2_client — lazy singleton
 # ---------------------------------------------------------------------------
 

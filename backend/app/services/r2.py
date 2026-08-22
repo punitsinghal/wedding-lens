@@ -222,6 +222,64 @@ def delete_object(key: str) -> None:
         raise StorageUnavailableError(f"Failed to delete key {key}") from exc
 
 
+def delete_prefix(prefix: str) -> int:
+    """Delete every object under a key prefix (e.g. `events/{event_id}/`).
+
+    Enumerates all matching keys via the `list_objects_v2` paginator (an
+    event's photos/thumbnails/previews can exceed the 1000-key page size),
+    then batch-deletes them in groups of up to 1000 keys per `DeleteObjects`
+    call (S3/R2's batch-delete limit). Returns the count of objects deleted.
+
+    Idempotent: a prefix with zero objects returns 0 without error, matching
+    the pre-migration local-disk behavior where deleting an already-gone
+    directory was a no-op.
+    """
+    client = get_r2_client()
+    deleted = 0
+    try:
+        paginator = client.get_paginator("list_objects_v2")
+        keys: list[str] = []
+        for page in paginator.paginate(
+            Bucket=settings.R2_BUCKET_NAME, Prefix=prefix
+        ):
+            for obj in page.get("Contents", []):
+                keys.append(obj["Key"])
+
+        for i in range(0, len(keys), 1000):
+            batch = keys[i : i + 1000]
+            client.delete_objects(
+                Bucket=settings.R2_BUCKET_NAME,
+                Delete={"Objects": [{"Key": k} for k in batch]},
+            )
+            deleted += len(batch)
+    except (ClientError, BotoCoreError) as exc:
+        raise StorageUnavailableError(
+            f"Failed to delete objects under prefix {prefix}"
+        ) from exc
+    return deleted
+
+
+def abort_multipart_upload(key: str, upload_id: str) -> None:
+    """Abort an in-progress multipart upload, discarding any uploaded parts.
+
+    Used by the abandoned-upload-session purge job so incomplete parts don't
+    accrue storage cost indefinitely (R2/S3, unlike a completed object,
+    doesn't get cleaned up on its own). Aborting an already-completed or
+    already-aborted upload is not treated specially — any boto3 failure,
+    including `NoSuchUpload`, is wrapped the same as other operations here;
+    the caller treats this as best-effort and logs rather than failing hard.
+    """
+    client = get_r2_client()
+    try:
+        client.abort_multipart_upload(
+            Bucket=settings.R2_BUCKET_NAME, Key=key, UploadId=upload_id
+        )
+    except (ClientError, BotoCoreError) as exc:
+        raise StorageUnavailableError(
+            f"Failed to abort multipart upload for key {key} upload {upload_id}"
+        ) from exc
+
+
 def list_parts(key: str, upload_id: str) -> list[dict]:
     """Return all currently-uploaded parts of an in-progress multipart upload,
     as [{"PartNumber": int, "ETag": str}, ...], sorted by part number.
