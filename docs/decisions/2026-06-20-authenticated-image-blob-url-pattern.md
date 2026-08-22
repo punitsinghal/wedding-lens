@@ -1,6 +1,14 @@
 # ADR: Authenticated image loading via fetch + blob URLs
 Date: 2026-06-20
-Status: accepted
+Status: superseded — see `2026-08-22-presigned-url-image-delivery.md`
+
+> Once photo storage moves to Cloudflare R2 (`2026-08-22-cloudflare-r2-photo-storage.md`),
+> image URLs become self-authenticating presigned R2 URLs, which are meant to be used
+> directly in `<img src>` — the fetch+blob workaround this ADR introduced was solving
+> for `<img>`'s inability to carry a Bearer header, a problem that no longer exists
+> once the URL itself carries its own scoped authorization. Bulk ZIP download is the
+> one surface where this ADR's underlying reasoning (backend-mediated auth) still
+> applies, since ZIP has no presigned-URL equivalent.
 
 ## Context
 

@@ -1,6 +1,13 @@
 # ADR: Chunked Upload — 2 MB Chunks, 3 Concurrent Files
 Date: 2026-06-19
-Status: accepted
+Status: superseded (chunk size only) — see `docs/features/photo-storage-migration/design.md`
+
+> Chunk size is raised from 2 MiB to 8 MiB as part of the R2 storage migration,
+> because S3-compatible multipart upload requires every part except the last
+> to be ≥5 MiB — this ADR's 2 MB chunks map each app-level chunk onto local
+> disk, not an R2 multipart part. The 3-concurrent-files reasoning below
+> (protecting the face pipeline from CPU starvation on shared VM/instance
+> resources) is unaffected and still holds.
 
 ## Context
 

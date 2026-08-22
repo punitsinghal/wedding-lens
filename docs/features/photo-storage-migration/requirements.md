@@ -91,6 +91,13 @@ Migrate PicsLeLo's photo file storage — originals, thumbnails, previews, and t
 - `docs/architecture/constraints.md` rule 4 ("Frontend talks only to the backend REST API — never directly to Qdrant, PostgreSQL, or storage") requires an explicit documented carve-out for backend-issued, short-lived, single-object signed URLs — decided in the ADR, to be written alongside implementation.
 - Guest session tokens have a 24-hour idle expiry (`photo-actions` Context) — relevant context for sizing signed read URL validity (REQ-10) in `/design`.
 
+## Addendum (added during /design impact analysis, 2026-08-22)
+Impact analysis (`docs/wip/analysis-photo-storage-migration-r2-2026-08-22.md`) surfaced two live features not covered by the scenarios above, neither documented in any existing `docs/features/*/requirements.md`. Both follow the same storage pattern already specified for Scenarios 1/2/9 — no new user-facing behavior or acceptance criteria, just additional storage touch points folded into this migration's implementation scope:
+- **Guest photo uploads** (`guest_uploads_enabled` toggle, `guest_uploads.py`, `GuestUploadModal.tsx`): a single-request (non-chunked) upload path guests can use when the event owner enables it. Must write to R2 the same way the photographer upload path does (REQ-1/REQ-2 apply equivalently).
+- **Event cover photo storage** (`events.py` — public cover + owner-authenticated cover-thumbnail): must migrate to R2 the same way originals/thumbnails do (REQ-4/REQ-5 apply equivalently). Lower risk — already served as a direct, unauthenticated URL, unaffected by the read-path architecture decision made in `/design`.
+
+Also found and resolved during analysis (not scope changes, just findings): the non-chunked photographer upload endpoint (`photos.py:91-152` / `uploadPhoto` in `lib/api.ts`) is dead code — never called by the frontend — and is excluded from migration; it should be deleted as unrelated cleanup, not migrated. Event-deletion disk cleanup exists in two independent, duplicated implementations (`purge.py` and `admin.py`) — see `design.md` for the unification approach.
+
 ## Out of scope
 - Choosing the specific delivery mechanism for reads/writes (presigned-URL redirect vs. backend-proxied streaming) for any given scenario — this is a `/design` decision within the direction the ADR already set.
 - Replacing FastAPI `BackgroundTasks` with a real job queue to enable true multi-instance horizontal scaling of face processing — a separate, deferred concern noted in the ADR.
