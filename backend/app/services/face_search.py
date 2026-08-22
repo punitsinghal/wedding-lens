@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.album import Album
 from app.models.photo import Photo
+from app.services import r2
 from app.services.face_pipeline import _detect_faces
 from app.services.qdrant import search_faces
 from app.services.search_cache import search_cache
@@ -95,7 +96,24 @@ async def run_search(
         photo = photos.get(pid)
         if photo is None:
             continue
-        thumbnail_url = f"/api/v1/events/{event_id}/photos/{photo.id}/thumbnail"
+        # A photo with no thumbnail yet (e.g. still processing) has nothing
+        # to sign a URL for — skip it rather than embedding a presigned URL
+        # for an object we know doesn't exist (SearchResult.thumbnail_url is
+        # non-optional; see 2026-08-22-presigned-url-image-delivery.md
+        # amendment for why the alternative, making it Optional, was not
+        # taken here).
+        if photo.thumbnail_path is None:
+            continue
+        try:
+            thumbnail_url = r2.generate_get_url(photo.thumbnail_path)
+        except r2.StorageUnavailableError as exc:
+            logger.warning(
+                '{"event": "thumbnail_url_sign_error", "photo_id": "%s", "exc_type": "%s", "detail": "%s"}',
+                photo.id,
+                type(exc).__name__,
+                str(exc),
+            )
+            continue
         results.append(SearchResult(photo_id=str(photo.id), thumbnail_url=thumbnail_url))
 
     search_cache.set(sid, selfie_hash, results)
