@@ -1,6 +1,5 @@
 """Tests for photographer assignment endpoints."""
 import uuid
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -199,10 +198,8 @@ async def test_assigned_photographer_can_initiate_upload(
     client: AsyncClient,
     photographer_headers: dict,
     assigned_event: Event,
-    tmp_path: Path,
 ):
-    with patch("app.routers.uploads.settings") as mock_settings:
-        mock_settings.STORAGE_PATH = str(tmp_path)
+    with patch("app.routers.uploads.r2.create_multipart_upload", return_value="up-assign-1"):
         resp = await client.post(
             f"/api/v1/events/{assigned_event.id}/uploads",
             headers=photographer_headers,
@@ -279,10 +276,8 @@ async def test_non_assigned_user_cannot_initiate_upload(
     client: AsyncClient,
     third_headers: dict,
     event: Event,
-    tmp_path: Path,
 ):
-    with patch("app.routers.uploads.settings") as mock_settings:
-        mock_settings.STORAGE_PATH = str(tmp_path)
+    with patch("app.routers.uploads.r2.create_multipart_upload", return_value="up-assign-2"):
         resp = await client.post(
             f"/api/v1/events/{event.id}/uploads",
             headers=third_headers,

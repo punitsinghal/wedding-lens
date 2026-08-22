@@ -78,6 +78,15 @@ class UploadSession(Base):
     total_chunks: Mapped[int] = mapped_column(Integer, nullable=False)
     received_chunks: Mapped[list] = mapped_column(IntListType, nullable=False, default=list)
     status: Mapped[str] = mapped_column(Text, nullable=False, default="in_progress")
+    # Pre-generated Photo.id, chosen at initiate-time so the R2 object key
+    # (events/{event_id}/{photo_id}{ext}) is fixed for the lifetime of the
+    # multipart upload. Nullable: added after the R2 migration; pre-existing
+    # in-progress sessions predate this column and are not resumable under
+    # the new scheme.
+    photo_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    # R2/S3 multipart UploadId returned by CreateMultipartUpload. Nullable
+    # for the same reason as photo_id above.
+    r2_upload_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
