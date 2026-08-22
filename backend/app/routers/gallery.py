@@ -1,10 +1,10 @@
 """Gallery endpoints — photo browsing, thumbnails, downloads, photographer choice."""
 
-import mimetypes
+import logging
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
-from fastapi.responses import FileResponse
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +20,9 @@ from app.schemas.gallery import (
 )
 from app.services import analytics as analytics_service
 from app.services import gallery as gallery_service
+from app.services import r2
+
+logger = logging.getLogger("weddinglens.gallery_router")
 
 router = APIRouter(prefix="/api/v1/events/{event_id}", tags=["gallery"])
 
@@ -27,7 +30,16 @@ router = APIRouter(prefix="/api/v1/events/{event_id}", tags=["gallery"])
 def _photo_to_out(photo: Photo, event_id: uuid.UUID) -> GalleryPhotoOut:
     thumbnail_url: str | None = None
     if photo.thumbnail_path is not None:
-        thumbnail_url = f"/api/v1/events/{event_id}/photos/{photo.id}/thumbnail"
+        try:
+            thumbnail_url = r2.generate_get_url(photo.thumbnail_path)
+        except r2.StorageUnavailableError as exc:
+            logger.warning(
+                '{"event": "thumbnail_url_sign_error", "photo_id": "%s", "exc_type": "%s", "detail": "%s"}',
+                photo.id,
+                type(exc).__name__,
+                str(exc),
+            )
+            thumbnail_url = None
     return GalleryPhotoOut(
         id=photo.id,
         thumbnail_url=thumbnail_url,
@@ -85,22 +97,25 @@ async def get_thumbnail(
     response: Response,
     guest_event: tuple = Depends(get_validated_guest_event),
     db: AsyncSession = Depends(get_db),
-) -> FileResponse:
+) -> RedirectResponse:
     _event, refreshed_token, _sid = guest_event
     response.headers["X-Guest-Token"] = refreshed_token
 
-    abs_path = await gallery_service.get_thumbnail_path(db, event_id, photo_id)
-    if abs_path is None:
+    key = await gallery_service.get_thumbnail_key(db, event_id, photo_id)
+    if key is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Thumbnail not available"
         )
 
-    media_type = mimetypes.guess_type(str(abs_path))[0] or "image/webp"
-    return FileResponse(
-        str(abs_path),
-        media_type=media_type,
-        headers={"Cache-Control": "public, max-age=31536000, immutable"},
-    )
+    try:
+        url = r2.generate_get_url(key)
+    except r2.StorageUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Storage service is temporarily unavailable. Please try again.",
+        ) from exc
+
+    return RedirectResponse(url, status_code=status.HTTP_302_FOUND)
 
 
 @router.get("/photos/{photo_id}/lightbox")
@@ -110,9 +125,9 @@ async def get_lightbox_preview(
     response: Response,
     guest_event: tuple = Depends(get_validated_guest_event),
     db: AsyncSession = Depends(get_db),
-) -> FileResponse:
+) -> RedirectResponse:
     """Medium-resolution (<=2000px) preview for the lightbox — generated
-    lazily from the original on first request and cached to disk on subsequent
+    lazily from the original on first request and cached in R2 on subsequent
     requests. See docs/decisions/2026-08-21-lazy-generated-photo-preview-tier.md.
 
     Named `/lightbox` rather than `/preview` because
@@ -128,18 +143,21 @@ async def get_lightbox_preview(
     _event, refreshed_token, _sid = guest_event
     response.headers["X-Guest-Token"] = refreshed_token
 
-    abs_path = await gallery_service.get_or_generate_preview_path(db, event_id, photo_id)
-    if abs_path is None:
+    key = await gallery_service.get_or_generate_preview_key(db, event_id, photo_id)
+    if key is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Preview not available"
         )
 
-    media_type = mimetypes.guess_type(str(abs_path))[0] or "image/webp"
-    return FileResponse(
-        str(abs_path),
-        media_type=media_type,
-        headers={"Cache-Control": "public, max-age=31536000, immutable"},
-    )
+    try:
+        url = r2.generate_get_url(key)
+    except r2.StorageUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Storage service is temporarily unavailable. Please try again.",
+        ) from exc
+
+    return RedirectResponse(url, status_code=status.HTTP_302_FOUND)
 
 
 @router.get("/photos/{photo_id}/download")
@@ -150,7 +168,7 @@ async def download_photo(
     background_tasks: BackgroundTasks,
     guest_event: tuple = Depends(get_validated_guest_event),
     db: AsyncSession = Depends(get_db),
-) -> FileResponse:
+) -> RedirectResponse:
     _event, refreshed_token, _sid = guest_event
     response.headers["X-Guest-Token"] = refreshed_token
 
@@ -161,15 +179,15 @@ async def download_photo(
     if photo is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found")
 
-    # Resolves to a guaranteed-non-HEIC file: the original as-is if it's
+    # Resolves to a guaranteed-non-HEIC key: the original as-is if it's
     # already JPEG/PNG, or a lazily-generated/cached JPEG conversion
     # otherwise — see docs/decisions/2026-08-21-heic-to-jpeg-conversion-for-downloads.md.
-    resolved = await gallery_service.get_downloadable_path(db, event_id, photo_id)
+    resolved = await gallery_service.get_downloadable_key(db, event_id, photo_id)
     if resolved is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Photo file not found"
         )
-    abs_path, download_filename = resolved
+    key, download_filename = resolved
 
     # Atomically increment download count — only after confirming file exists
     await db.execute(
@@ -184,11 +202,18 @@ async def download_photo(
     # unrelated purpose — see design D5's explicit note not to conflate them).
     background_tasks.add_task(analytics_service.record_download_event, event_id)
 
-    return FileResponse(
-        str(abs_path),
-        media_type="application/octet-stream",
-        filename=download_filename,
-    )
+    try:
+        url = r2.generate_get_url(
+            key,
+            response_content_disposition=f'attachment; filename="{download_filename}"',
+        )
+    except r2.StorageUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Storage service is temporarily unavailable. Please try again.",
+        ) from exc
+
+    return RedirectResponse(url, status_code=status.HTTP_302_FOUND)
 
 
 @router.post("/photos/{photo_id}/view", status_code=status.HTTP_204_NO_CONTENT)

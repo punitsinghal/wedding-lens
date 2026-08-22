@@ -314,6 +314,67 @@ def test_read_range_wraps_error(mock_settings):
 
 
 # ---------------------------------------------------------------------------
+# download_object
+# ---------------------------------------------------------------------------
+
+
+@patch("app.services.r2.settings")
+def test_download_object_returns_body_bytes(mock_settings):
+    mock_settings.R2_BUCKET_NAME = BUCKET
+    mock_body = MagicMock()
+    mock_body.read.return_value = b"the-full-object-bytes"
+    mock_client = MagicMock()
+    mock_client.get_object.return_value = {"Body": mock_body}
+    with patch("app.services.r2.get_r2_client", return_value=mock_client):
+        result = r2.download_object("events/e1/photo.jpg")
+
+    assert result == b"the-full-object-bytes"
+    mock_client.get_object.assert_called_once_with(
+        Bucket=BUCKET, Key="events/e1/photo.jpg"
+    )
+
+
+@patch("app.services.r2.settings")
+def test_download_object_wraps_error(mock_settings):
+    mock_settings.R2_BUCKET_NAME = BUCKET
+    mock_client = MagicMock()
+    mock_client.get_object.side_effect = _client_error("AccessDenied", 403, "GetObject")
+    with patch("app.services.r2.get_r2_client", return_value=mock_client):
+        with pytest.raises(r2.StorageUnavailableError):
+            r2.download_object("events/e1/photo.jpg")
+
+
+# ---------------------------------------------------------------------------
+# put_object
+# ---------------------------------------------------------------------------
+
+
+@patch("app.services.r2.settings")
+def test_put_object_calls_client_correctly(mock_settings):
+    mock_settings.R2_BUCKET_NAME = BUCKET
+    mock_client = MagicMock()
+    with patch("app.services.r2.get_r2_client", return_value=mock_client):
+        r2.put_object("events/e1/thumbs/p1.webp", b"webp-bytes", "image/webp")
+
+    mock_client.put_object.assert_called_once_with(
+        Bucket=BUCKET,
+        Key="events/e1/thumbs/p1.webp",
+        Body=b"webp-bytes",
+        ContentType="image/webp",
+    )
+
+
+@patch("app.services.r2.settings")
+def test_put_object_wraps_error(mock_settings):
+    mock_settings.R2_BUCKET_NAME = BUCKET
+    mock_client = MagicMock()
+    mock_client.put_object.side_effect = _client_error("InternalError", 500, "PutObject")
+    with patch("app.services.r2.get_r2_client", return_value=mock_client):
+        with pytest.raises(r2.StorageUnavailableError):
+            r2.put_object("events/e1/thumbs/p1.webp", b"webp-bytes", "image/webp")
+
+
+# ---------------------------------------------------------------------------
 # delete_object
 # ---------------------------------------------------------------------------
 

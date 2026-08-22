@@ -1,10 +1,9 @@
 """Event CRUD and guest slug-resolution endpoints."""
 
-import mimetypes
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import (
@@ -21,6 +20,7 @@ from app.services import analytics as analytics_service
 from app.services import events as event_svc
 from app.services import gallery as gallery_service
 from app.services import qr as qr_svc
+from app.services import r2
 
 router = APIRouter(prefix="/api/v1/events", tags=["events"])
 
@@ -79,7 +79,7 @@ async def get_event_by_slug(
 async def get_event_cover_by_slug(
     slug: str,
     db: AsyncSession = Depends(get_db),
-) -> FileResponse:
+) -> RedirectResponse:
     """Public, unauthenticated cover-photo image for the guest access-code
     screen (shown before any guest JWT exists). Only ever serves the single
     photo the photographer explicitly chose as cover_photo_id, and only once
@@ -92,16 +92,19 @@ async def get_event_cover_by_slug(
     if event.status != "published" or event.cover_photo_id is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cover photo not available")
 
-    abs_path = await gallery_service.get_thumbnail_path(db, event.id, event.cover_photo_id)
-    if abs_path is None:
+    key = await gallery_service.get_thumbnail_key(db, event.id, event.cover_photo_id)
+    if key is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cover photo not available")
 
-    media_type = mimetypes.guess_type(str(abs_path))[0] or "image/webp"
-    return FileResponse(
-        str(abs_path),
-        media_type=media_type,
-        headers={"Cache-Control": "public, max-age=300"},
-    )
+    try:
+        url = r2.generate_get_url(key)
+    except r2.StorageUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Storage service is temporarily unavailable. Please try again.",
+        ) from exc
+
+    return RedirectResponse(url, status_code=status.HTTP_302_FOUND)
 
 
 # ---------------------------------------------------------------------------
@@ -148,23 +151,26 @@ async def get_event_cover_thumbnail(
     event_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     event: Event = Depends(get_event_owner_only),
-) -> FileResponse:
+) -> RedirectResponse:
     """Owner-authenticated cover-photo thumbnail, unlike the public by-slug
     variant this is not gated on the event being published — the dashboard
     needs to show a Draft event's chosen cover too."""
     if event.cover_photo_id is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cover photo not available")
 
-    abs_path = await gallery_service.get_thumbnail_path(db, event.id, event.cover_photo_id)
-    if abs_path is None:
+    key = await gallery_service.get_thumbnail_key(db, event.id, event.cover_photo_id)
+    if key is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cover photo not available")
 
-    media_type = mimetypes.guess_type(str(abs_path))[0] or "image/webp"
-    return FileResponse(
-        str(abs_path),
-        media_type=media_type,
-        headers={"Cache-Control": "private, max-age=300"},
-    )
+    try:
+        url = r2.generate_get_url(key)
+    except r2.StorageUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Storage service is temporarily unavailable. Please try again.",
+        ) from exc
+
+    return RedirectResponse(url, status_code=status.HTTP_302_FOUND)
 
 
 @router.put("/{event_id}", response_model=EventOut)

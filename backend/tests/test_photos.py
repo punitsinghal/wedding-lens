@@ -1,7 +1,6 @@
 """Tests for photo list, album-patch, and preview endpoints."""
 import io
 import uuid
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -336,13 +335,8 @@ async def test_preview_no_thumbnail(
 
 @pytest.mark.asyncio
 async def test_preview_returns_file(
-    client: AsyncClient, owner_headers: dict, event: Event, db: AsyncSession, tmp_path: Path
+    client: AsyncClient, owner_headers: dict, event: Event, db: AsyncSession
 ):
-    # Write a real thumbnail file
-    thumb_file = tmp_path / "thumb.webp"
-    thumb_file.write_bytes(b"FAKE_WEBP_DATA")
-
-    # Store a relative path under tmp_path
     rel = "thumb.webp"
     p = Photo(
         id=uuid.uuid4(),
@@ -357,14 +351,45 @@ async def test_preview_returns_file(
     await db.commit()
     await db.refresh(p)
 
-    with patch("app.routers.photos.settings") as mock_settings:
-        mock_settings.STORAGE_PATH = str(tmp_path)
+    signed_url = "https://r2.example.com/signed-preview"
+    with patch("app.routers.photos.r2.generate_get_url", return_value=signed_url) as mock_gen:
         resp = await client.get(
             f"/api/v1/events/{event.id}/photos/{p.id}/preview",
             headers=owner_headers,
         )
-    assert resp.status_code == 200
-    assert resp.content == b"FAKE_WEBP_DATA"
+    assert resp.status_code == 302
+    assert resp.headers["location"] == signed_url
+    mock_gen.assert_called_once_with(rel)
+
+
+@pytest.mark.asyncio
+async def test_preview_503_when_storage_unavailable(
+    client: AsyncClient, owner_headers: dict, event: Event, db: AsyncSession
+):
+    from app.services import r2
+
+    p = Photo(
+        id=uuid.uuid4(),
+        event_id=event.id,
+        filename="main.jpg",
+        storage_path=f"events/{event.id}/main.jpg",
+        thumbnail_path="thumb.webp",
+        file_size=1024,
+        processing_status="complete",
+    )
+    db.add(p)
+    await db.commit()
+    await db.refresh(p)
+
+    with patch(
+        "app.routers.photos.r2.generate_get_url",
+        side_effect=r2.StorageUnavailableError("boom"),
+    ):
+        resp = await client.get(
+            f"/api/v1/events/{event.id}/photos/{p.id}/preview",
+            headers=owner_headers,
+        )
+    assert resp.status_code == 503
 
 
 @pytest.mark.asyncio

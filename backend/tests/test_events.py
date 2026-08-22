@@ -1,14 +1,14 @@
 """Event endpoint tests."""
 
-import os
 import uuid
-from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.photo import Photo
+from app.services import r2
 
 
 
@@ -204,11 +204,7 @@ async def test_cover_by_slug_success(
 ):
     event_id = (await create_event(client, auth_headers)).json()["id"]
 
-    storage_dir = Path(os.environ["STORAGE_PATH"]) / f"events/{event_id}/thumbs"
-    storage_dir.mkdir(parents=True, exist_ok=True)
-    thumb_filename = f"{uuid.uuid4()}.webp"
-    (storage_dir / thumb_filename).write_bytes(b"fake-thumbnail-bytes")
-    thumbnail_path = f"events/{event_id}/thumbs/{thumb_filename}"
+    thumbnail_path = f"events/{event_id}/thumbs/{uuid.uuid4()}.webp"
 
     photo = Photo(
         id=uuid.uuid4(),
@@ -230,9 +226,47 @@ async def test_cover_by_slug_success(
     publish_resp = await client.post(f"/api/v1/events/{event_id}/publish", headers=auth_headers)
     slug = publish_resp.json()["slug"]
 
-    resp = await client.get(f"/api/v1/events/by-slug/{slug}/cover")
-    assert resp.status_code == 200
-    assert resp.content == b"fake-thumbnail-bytes"
+    signed_url = "https://r2.example.com/signed-cover"
+    with patch("app.routers.events.r2.generate_get_url", return_value=signed_url) as mock_gen:
+        resp = await client.get(f"/api/v1/events/by-slug/{slug}/cover")
+    assert resp.status_code == 302
+    assert resp.headers["location"] == signed_url
+    mock_gen.assert_called_once_with(thumbnail_path)
+
+
+@pytest.mark.asyncio
+async def test_cover_by_slug_503_when_storage_unavailable(
+    client: AsyncClient, db: AsyncSession, auth_headers: dict
+):
+    event_id = (await create_event(client, auth_headers)).json()["id"]
+
+    thumbnail_path = f"events/{event_id}/thumbs/{uuid.uuid4()}.webp"
+    photo = Photo(
+        id=uuid.uuid4(),
+        event_id=uuid.UUID(event_id),
+        filename="cover.jpg",
+        storage_path=f"events/{event_id}/{uuid.uuid4()}.jpg",
+        file_size=1024,
+        processing_status="complete",
+        thumbnail_path=thumbnail_path,
+    )
+    db.add(photo)
+    await db.commit()
+
+    await client.put(
+        f"/api/v1/events/{event_id}",
+        json={"cover_photo_id": str(photo.id)},
+        headers=auth_headers,
+    )
+    publish_resp = await client.post(f"/api/v1/events/{event_id}/publish", headers=auth_headers)
+    slug = publish_resp.json()["slug"]
+
+    with patch(
+        "app.routers.events.r2.generate_get_url",
+        side_effect=r2.StorageUnavailableError("boom"),
+    ):
+        resp = await client.get(f"/api/v1/events/by-slug/{slug}/cover")
+    assert resp.status_code == 503
 
 
 # ---------------------------------------------------------------------------
@@ -258,11 +292,7 @@ async def test_owner_cover_thumbnail_success_while_draft(
     # must serve the cover thumbnail even before the event is published.
     event_id = (await create_event(client, auth_headers)).json()["id"]
 
-    storage_dir = Path(os.environ["STORAGE_PATH"]) / f"events/{event_id}/thumbs"
-    storage_dir.mkdir(parents=True, exist_ok=True)
-    thumb_filename = f"{uuid.uuid4()}.webp"
-    (storage_dir / thumb_filename).write_bytes(b"fake-thumbnail-bytes")
-    thumbnail_path = f"events/{event_id}/thumbs/{thumb_filename}"
+    thumbnail_path = f"events/{event_id}/thumbs/{uuid.uuid4()}.webp"
 
     photo = Photo(
         id=uuid.uuid4(),
@@ -282,11 +312,14 @@ async def test_owner_cover_thumbnail_success_while_draft(
         headers=auth_headers,
     )
 
-    resp = await client.get(
-        f"/api/v1/events/{event_id}/cover-thumbnail", headers=auth_headers
-    )
-    assert resp.status_code == 200
-    assert resp.content == b"fake-thumbnail-bytes"
+    signed_url = "https://r2.example.com/signed-cover-thumb"
+    with patch("app.routers.events.r2.generate_get_url", return_value=signed_url) as mock_gen:
+        resp = await client.get(
+            f"/api/v1/events/{event_id}/cover-thumbnail", headers=auth_headers
+        )
+    assert resp.status_code == 302
+    assert resp.headers["location"] == signed_url
+    mock_gen.assert_called_once_with(thumbnail_path)
 
 
 @pytest.mark.asyncio

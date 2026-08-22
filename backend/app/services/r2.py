@@ -189,6 +189,30 @@ def read_range(key: str, start: int, end: int) -> bytes:
         raise StorageUnavailableError(f"Failed to read range for key {key}") from exc
 
 
+def download_object(key: str) -> bytes:
+    """Full object GET — read the entire object into memory."""
+    client = get_r2_client()
+    try:
+        resp = client.get_object(Bucket=settings.R2_BUCKET_NAME, Key=key)
+        return resp["Body"].read()
+    except (ClientError, BotoCoreError) as exc:
+        raise StorageUnavailableError(f"Failed to download key {key}") from exc
+
+
+def put_object(key: str, body: bytes, content_type: str) -> None:
+    """Direct server-side write of `body` to `key` with the given content type."""
+    client = get_r2_client()
+    try:
+        client.put_object(
+            Bucket=settings.R2_BUCKET_NAME,
+            Key=key,
+            Body=body,
+            ContentType=content_type,
+        )
+    except (ClientError, BotoCoreError) as exc:
+        raise StorageUnavailableError(f"Failed to put object for key {key}") from exc
+
+
 def delete_object(key: str) -> None:
     """Delete a single object. Idempotent — deleting a missing key is not an error."""
     client = get_r2_client()

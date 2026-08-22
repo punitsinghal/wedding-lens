@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 import logging
-import mimetypes
 import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
@@ -27,6 +26,7 @@ from app.schemas.photo import (
     PhotoUploadResponse,
     ProcessingStatusCounts,
 )
+from app.services import r2
 from app.services.face_pipeline import process_photo
 from app.services.image_format import is_allowed_upload_format
 
@@ -335,7 +335,7 @@ async def get_photo_preview(
     photo_id: uuid.UUID,
     event: Event = Depends(get_event_with_photographer_access),
     db: AsyncSession = Depends(get_db),
-) -> FileResponse:
+) -> RedirectResponse:
     result = await db.execute(
         select(Photo).where(Photo.id == photo_id, Photo.event_id == event_id)
     )
@@ -345,19 +345,15 @@ async def get_photo_preview(
     if photo.thumbnail_path is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thumbnail not available")
 
-    storage_root = Path(settings.STORAGE_PATH).resolve()
-    abs_path = (storage_root / photo.thumbnail_path).resolve()
-    if not abs_path.is_relative_to(storage_root):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    if not abs_path.exists():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thumbnail file not found")
+    try:
+        url = r2.generate_get_url(photo.thumbnail_path)
+    except r2.StorageUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Storage service is temporarily unavailable. Please try again.",
+        ) from exc
 
-    media_type = mimetypes.guess_type(str(abs_path))[0] or "image/webp"
-    return FileResponse(
-        str(abs_path),
-        media_type=media_type,
-        headers={"Cache-Control": "public, max-age=31536000, immutable"},
-    )
+    return RedirectResponse(url, status_code=status.HTTP_302_FOUND)
 
 
 # ---------------------------------------------------------------------------
